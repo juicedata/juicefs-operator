@@ -1,0 +1,27 @@
+# permissions for end users to edit cachegroups.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: juicefs-cache-group-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: cachegroup-editor-role
+rules:
+- apiGroups:
+  - juicefs.io
+  resources:
+  - cachegroups
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - juicefs.io
+  resources:
+  - cachegroups/status
+  verbs:
+  - get

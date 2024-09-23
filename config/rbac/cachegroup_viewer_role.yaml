@@ -1,0 +1,23 @@
+# permissions for end users to view cachegroups.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: juicefs-cache-group-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: cachegroup-viewer-role
+rules:
+- apiGroups:
+  - juicefs.io
+  resources:
+  - cachegroups
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - juicefs.io
+  resources:
+  - cachegroups/status
+  verbs:
+  - get

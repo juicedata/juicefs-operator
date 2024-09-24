@@ -6,4 +6,29 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: cachegroup-sample
 spec:
-  # TODO(user): Add fields here
+  secretRef:
+    name: juicefs-test-secret
+  cleanCache: false
+  updateStrategy:
+    type: RollingUpdate
+  worker:
+    template:
+      nodeSelector:
+        juicefs.io/cg-worker: "true"
+      image: juicedata/mount:ee-5.1.1-1faf43b
+      resources:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          cpu: 150m
+          memory: 1Gi
+      cacheDevices:
+        deviceFilter: "sd[a-z]" # 对找到的 device 进行过滤
+        deviceMinSize: 1Gi
+        deviceMaxSize: 10Gi
+    overwrite:
+      - nodes:
+          - k8s-03
+        opts:
+        - group-weight=200

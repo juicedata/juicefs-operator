@@ -4,6 +4,17 @@ kind: ClusterRole
 metadata:
   name: manager-role
 rules:
+- resources:
+  - nodes
+  verbs:
+  - get
+  - list
+  - watch
+- resources:
+  - pods
+  verbs:
+  - get
+  - list
 - apiGroups:
   - juicefs.io
   resources:

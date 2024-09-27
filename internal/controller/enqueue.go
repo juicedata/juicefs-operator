@@ -10,6 +10,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -24,6 +25,7 @@ func (r *CacheGroupReconciler) ListAllCgs(ctx context.Context) ([]juicefsiov1.Ca
 func (r *CacheGroupReconciler) enqueueRequestForNode() handler.EventHandler {
 	return &handler.Funcs{
 		CreateFunc: func(ctx context.Context, e event.TypedCreateEvent[client.Object], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+			log.FromContext(ctx).Info("enqueueRequestForNode: watching node created, enqueue all cache groups")
 			cgs, err := r.ListAllCgs(ctx)
 			if err == nil {
 				for _, cg := range cgs {
@@ -34,6 +36,7 @@ func (r *CacheGroupReconciler) enqueueRequestForNode() handler.EventHandler {
 		UpdateFunc: func(ctx context.Context, e event.TypedUpdateEvent[client.Object], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 			old, new := e.ObjectOld, e.ObjectNew
 			if !reflect.DeepEqual(old.GetLabels(), new.GetLabels()) {
+				log.FromContext(ctx).Info("enqueueRequestForNode: watching node labels change, enqueue all cache groups")
 				cgs, err := r.ListAllCgs(ctx)
 				if err == nil {
 					for _, cg := range cgs {
@@ -46,6 +49,7 @@ func (r *CacheGroupReconciler) enqueueRequestForNode() handler.EventHandler {
 			cgs, err := r.ListAllCgs(ctx)
 			if err == nil {
 				for _, cg := range cgs {
+					log.FromContext(ctx).Info("enqueueRequestForNode: watching node deleted, enqueue all cache groups")
 					w.Add(reconcile.Request{NamespacedName: types.NamespacedName{Name: cg.Name, Namespace: cg.Namespace}})
 				}
 			}

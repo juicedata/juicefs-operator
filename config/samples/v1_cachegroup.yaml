@@ -16,6 +16,7 @@ spec:
       nodeSelector:
         juicefs.io/cg-worker: "true"
       image: juicedata/mount:ee-5.1.1-1faf43b
+      hostNetwork: true
       resources:
         requests:
           cpu: 100m

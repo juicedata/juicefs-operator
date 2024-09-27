@@ -155,8 +155,6 @@ func genComands(cg *juicefsiov1.CacheGroup, spec juicefsiov1.CacheGroupWorkerTem
 
 func NewCacheGroupWorker(cg *juicefsiov1.CacheGroup, nodeName string, spec juicefsiov1.CacheGroupWorkerTemplate) *corev1.Pod {
 	worker := newBasicPod(cg, nodeName)
-	hash := utils.GenHash(spec)
-	worker.Annotations[common.LabelWorkerHash] = hash
 	worker.Spec.Affinity = spec.Affinity
 	worker.Spec.HostNetwork = spec.HostNetwork
 	worker.Spec.Tolerations = spec.Tolerations
@@ -167,8 +165,13 @@ func NewCacheGroupWorker(cg *juicefsiov1.CacheGroup, nodeName string, spec juice
 	worker.Spec.Containers[0].LivenessProbe = spec.LivenessProbe
 	worker.Spec.Containers[0].ReadinessProbe = spec.ReadinessProbe
 	worker.Spec.Containers[0].StartupProbe = spec.StartupProbe
-
-	worker.Spec.Containers[0].SecurityContext = spec.SecurityContext
+	if spec.SecurityContext != nil {
+		worker.Spec.Containers[0].SecurityContext = spec.SecurityContext
+	} else {
+		worker.Spec.Containers[0].SecurityContext = &corev1.SecurityContext{
+			Privileged: utils.ToPtr(true),
+		}
+	}
 	worker.Spec.Containers[0].Resources = spec.Resources
 	worker.Spec.Containers[0].Env = genEnvs(cg, spec)
 

@@ -53,8 +53,12 @@ func newBasicPod(cg *juicefsiov1.CacheGroup, nodeName string) *corev1.Pod {
 			},
 		},
 		Spec: corev1.PodSpec{
-			Containers: []corev1.Container{{}},
-			NodeName:   nodeName,
+			Containers: []corev1.Container{{
+				SecurityContext: &corev1.SecurityContext{
+					Privileged: utils.ToPtr(true),
+				},
+			}},
+			NodeName: nodeName,
 		},
 	}
 	return worker
@@ -163,13 +167,7 @@ func NewCacheGroupWorker(cg *juicefsiov1.CacheGroup, nodeName string, spec juice
 	worker.Spec.Containers[0].LivenessProbe = spec.LivenessProbe
 	worker.Spec.Containers[0].ReadinessProbe = spec.ReadinessProbe
 	worker.Spec.Containers[0].StartupProbe = spec.StartupProbe
-	if spec.SecurityContext != nil {
-		worker.Spec.Containers[0].SecurityContext = spec.SecurityContext
-	} else {
-		worker.Spec.Containers[0].SecurityContext = &corev1.SecurityContext{
-			Privileged: utils.ToPtr(true),
-		}
-	}
+
 	worker.Spec.Containers[0].SecurityContext = spec.SecurityContext
 	worker.Spec.Containers[0].Resources = spec.Resources
 	worker.Spec.Containers[0].Env = genEnvs(cg, spec)

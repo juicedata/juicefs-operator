@@ -19,7 +19,6 @@ package controller
 import (
 	"context"
 	"fmt"
-	"sync"
 	"time"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -106,35 +105,36 @@ func (r *CacheGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 func (r *CacheGroupReconciler) sync(ctx context.Context, cg *juicefsiov1.CacheGroup, expectStates map[string]juicefsiov1.CacheGroupWorkerTemplate) error {
 	log := log.FromContext(ctx)
 	// TODO: follow the update strategy
-	wg := sync.WaitGroup{}
-	wg.Add(len(expectStates))
 	for node, expectState := range expectStates {
-		go func(node string, expectState juicefsiov1.CacheGroupWorkerTemplate) {
-			defer wg.Done()
-			actualState, err := r.getActualState(ctx, cg, node)
-			if err != nil && !apierrors.IsNotFound(err) {
-				log.Error(err, "failed to get actual state", "node", node)
-				return
-			}
+		actualState, err := r.getActualState(ctx, cg, node)
+		if err != nil && !apierrors.IsNotFound(err) {
+			log.Error(err, "failed to get actual state", "node", node)
+			continue
+		}
 
-			if apierrors.IsNotFound(err) {
-				log.Info("cache group worker not found, create it", "node", node)
-				if err := r.createCacheGroupWorker(ctx, cg, node, expectState); err != nil {
-					log.Error(err, "failed to create cache group worker", "node", node)
-				}
-				return
+		if apierrors.IsNotFound(err) {
+			log.Info("cache group worker not found, create it", "node", node)
+			if err := r.createCacheGroupWorker(ctx, cg, node, expectState); err != nil {
+				log.Error(err, "failed to create cache group worker", "node", node)
 			}
-			if r.compare(expectState, actualState) {
-				log.Info("cache group worker need to be updated", "node", node)
-				if err := r.updateCacheGroupWorker(ctx, cg, node, expectState); err != nil {
-					log.Error(err, "failed to update cache group worker", "node", node)
-				}
-				return
+			// Wait for the worker to be ready
+			if err := r.waitForWorkerReady(ctx, cg, node); err != nil {
+				log.Error(err, "failed to wait for worker to be ready", "node", node)
 			}
-			// TODO: update status
-		}(node, expectState)
+			continue
+		}
+		if r.compare(expectState, actualState) {
+			log.Info("cache group worker need to be updated", "node", node)
+			if err := r.updateCacheGroupWorker(ctx, cg, node, expectState); err != nil {
+				log.Error(err, "failed to update cache group worker", "node", node)
+			}
+			// Wait for the worker to be ready
+			if err := r.waitForWorkerReady(ctx, cg, node); err != nil {
+				log.Error(err, "failed to wait for worker to be ready", "node", node)
+			}
+			continue
+		}
 	}
-	wg.Wait()
 
 	// list all cache group workers and delete the redundant ones
 	actualWorks, err := r.listActualWorkerNodes(ctx, cg)
@@ -269,6 +269,33 @@ func (r *CacheGroupReconciler) listActualWorkerNodes(ctx context.Context, cg *ju
 		nodes = append(nodes, worker.Spec.NodeName)
 	}
 	return nodes, nil
+}
+
+func (r *CacheGroupReconciler) waitForWorkerReady(ctx context.Context, cg *juicefsiov1.CacheGroup, node string) error {
+	log := log.FromContext(ctx)
+	workerName := common.GenWorkerName(cg.Name, node)
+	ctx, cancel := context.WithTimeout(ctx, time.Minute)
+	defer cancel()
+	for {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("timeout waiting for worker to be ready")
+		default:
+			worker := corev1.Pod{}
+			if err := r.Get(ctx, client.ObjectKey{Namespace: cg.Namespace, Name: workerName}, &worker); err != nil {
+				if apierrors.IsNotFound(err) {
+					time.Sleep(time.Second)
+					continue
+				}
+				return err
+			}
+			if worker.Status.Phase == corev1.PodRunning {
+				log.Info("worker is ready", "worker", workerName)
+				return nil
+			}
+			time.Sleep(time.Second)
+		}
+	}
 }
 
 func (r *CacheGroupReconciler) HandleFinalizer(ctx context.Context, cg *juicefsiov1.CacheGroup) error {

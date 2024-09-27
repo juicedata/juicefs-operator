@@ -7,7 +7,7 @@ metadata:
   name: cachegroup-sample
 spec:
   secretRef:
-    name: juicefs-test-secret
+    name: juicefs-zxh-test-secret
   cleanCache: false
   updateStrategy:
     type: RollingUpdate

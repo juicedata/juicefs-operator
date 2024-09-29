@@ -25,6 +25,7 @@ func (r *CacheGroupReconciler) ListAllCgs(ctx context.Context) ([]juicefsiov1.Ca
 func (r *CacheGroupReconciler) enqueueRequestForNode() handler.EventHandler {
 	return &handler.Funcs{
 		CreateFunc: func(ctx context.Context, e event.TypedCreateEvent[client.Object], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+			// FIXME: do not enqueue when first run
 			log.FromContext(ctx).Info("enqueueRequestForNode: watching node created, enqueue all cache groups")
 			cgs, err := r.ListAllCgs(ctx)
 			if err == nil {

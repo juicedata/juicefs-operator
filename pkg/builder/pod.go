@@ -15,6 +15,7 @@
 package builder
 
 import (
+	"context"
 	"strings"
 
 	juicefsiov1 "github.com/juicedata/juicefs-cache-group-operator/api/v1"
@@ -22,6 +23,7 @@ import (
 	"github.com/juicedata/juicefs-cache-group-operator/pkg/utils"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 func GenCacheGroupName(cg *juicefsiov1.CacheGroup) string {
@@ -115,7 +117,7 @@ func genEnvs(cg *juicefsiov1.CacheGroup, spec juicefsiov1.CacheGroupWorkerTempla
 	return envs
 }
 
-func genComands(cg *juicefsiov1.CacheGroup, spec juicefsiov1.CacheGroupWorkerTemplate) []string {
+func genComands(ctx context.Context, cg *juicefsiov1.CacheGroup, spec juicefsiov1.CacheGroupWorkerTemplate) []string {
 	authCmds := []string{
 		common.JuiceFSBinary,
 		"auth",
@@ -128,23 +130,36 @@ func genComands(cg *juicefsiov1.CacheGroup, spec juicefsiov1.CacheGroupWorkerTem
 		"${SECRET_KEY}",
 	}
 
-	cacheDirs := []string{"/data/jfsCache"}
 	cacheGroup := GenCacheGroupName(cg)
 	mountCmds := []string{
 		"exec",
 		common.JuiceFSBinary,
 		"mount",
 		"${VOL_NAME}",
-		"/mnt/jfs",
+		common.MountPoint,
 		"--foreground",
-		"--cache-dir",
-		strings.Join(cacheDirs, ","),
 		"--cache-group",
 		cacheGroup,
 	}
-	if len(spec.Opts) > 0 {
-		mountCmds = append(mountCmds, "-o", strings.Join(spec.Opts, ","))
+
+	cacheDirs := []string{}
+	for _, opt := range spec.Opts {
+		pair := strings.Split(opt, "=")
+		if len(pair) != 2 {
+			log.FromContext(ctx).Info("invalid opt", "opt", opt, "cg", cg.Name)
+			continue
+		}
+		// TODO: validate cache-dir
+		if pair[0] == "cache-dir" {
+			cacheDirs = strings.Split(pair[1], ":")
+			continue
+		}
+		mountCmds = append(mountCmds, "--"+pair[0], pair[1])
 	}
+	if len(cacheDirs) == 0 {
+		cacheDirs = append(cacheDirs, "/var/jfsCache")
+	}
+	mountCmds = append(mountCmds, "--cache-dir", strings.Join(cacheDirs, ":"))
 	cmds := []string{
 		"sh",
 		"-c",
@@ -153,18 +168,21 @@ func genComands(cg *juicefsiov1.CacheGroup, spec juicefsiov1.CacheGroupWorkerTem
 	return cmds
 }
 
-func NewCacheGroupWorker(cg *juicefsiov1.CacheGroup, nodeName string, spec juicefsiov1.CacheGroupWorkerTemplate) *corev1.Pod {
+func NewCacheGroupWorker(ctx context.Context, cg *juicefsiov1.CacheGroup, nodeName string, spec juicefsiov1.CacheGroupWorkerTemplate) *corev1.Pod {
 	worker := newBasicPod(cg, nodeName)
 	worker.Spec.Affinity = spec.Affinity
 	worker.Spec.HostNetwork = spec.HostNetwork
 	worker.Spec.Tolerations = spec.Tolerations
 	worker.Spec.SchedulerName = spec.SchedulerName
 	worker.Spec.ServiceAccountName = spec.ServiceAccountName
+	worker.Spec.Volumes = spec.Volumes
 	worker.Spec.Containers[0].Image = spec.Image
 	worker.Spec.Containers[0].Name = common.WorkerContainerName
 	worker.Spec.Containers[0].LivenessProbe = spec.LivenessProbe
 	worker.Spec.Containers[0].ReadinessProbe = spec.ReadinessProbe
 	worker.Spec.Containers[0].StartupProbe = spec.StartupProbe
+	worker.Spec.Containers[0].VolumeMounts = spec.VolumeMounts
+	worker.Spec.Containers[0].VolumeDevices = spec.VolumeDevices
 	if spec.SecurityContext != nil {
 		worker.Spec.Containers[0].SecurityContext = spec.SecurityContext
 	} else {
@@ -172,11 +190,23 @@ func NewCacheGroupWorker(cg *juicefsiov1.CacheGroup, nodeName string, spec juice
 			Privileged: utils.ToPtr(true),
 		}
 	}
+	if spec.Lifecycle != nil {
+		worker.Spec.Containers[0].Lifecycle = spec.Lifecycle
+	} else {
+		worker.Spec.Containers[0].Lifecycle = &corev1.Lifecycle{
+			PreStop: &corev1.LifecycleHandler{
+				Exec: &corev1.ExecAction{
+					Command: []string{
+						"sh",
+						"-c",
+						"umount " + common.MountPoint,
+					},
+				},
+			},
+		}
+	}
 	worker.Spec.Containers[0].Resources = spec.Resources
 	worker.Spec.Containers[0].Env = genEnvs(cg, spec)
-
-	// TODO: cacheDevices
-	// TODO: cache-dirs
-	worker.Spec.Containers[0].Command = genComands(cg, spec)
+	worker.Spec.Containers[0].Command = genComands(ctx, cg, spec)
 	return worker
 }

@@ -11,6 +11,7 @@ const (
 	Finalizer = "juicefs.io/finalizer"
 	// juicefs binary path
 	JuiceFSBinary = "/usr/bin/juicefs"
+	MountPoint    = "/mnt/jfs"
 
 	// label keys
 	LabelCacheGroup = "juicefs.io/cache-group"

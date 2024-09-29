@@ -79,8 +79,7 @@ type CacheGroupWorkerTemplate struct {
 	// +optional
 	Lifecycle *corev1.Lifecycle `json:"lifecycle,omitempty"`
 
-	Opts         []string          `json:"opts,omitempty"`
-	CacheDevices map[string]string `json:"cacheDevices,omitempty"`
+	Opts []string `json:"opts,omitempty"`
 }
 
 type CacheGroupWorkerOverwrite struct {

@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"time"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -46,7 +47,7 @@ type CacheGroupReconciler struct {
 // +kubebuilder:rbac:groups=juicefs.io,resources=cachegroups/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=juicefs.io,resources=cachegroups/finalizers,verbs=update
 // +kubebuilder:rbac:groups=,resources=nodes,verbs=get;list;watch
-// +kubebuilder:rbac:groups=,resources=pods,verbs=get;list
+// +kubebuilder:rbac:groups=,resources=pods,verbs=get;list;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -111,71 +112,49 @@ func (r *CacheGroupReconciler) sync(ctx context.Context, cg *juicefsiov1.CacheGr
 			log.Error(err, "failed to get actual state", "node", node)
 			continue
 		}
-		expectWorker := builder.NewCacheGroupWorker(cg, node, expectState)
+		expectWorker := builder.NewCacheGroupWorker(ctx, cg, node, expectState)
 		hash := utils.GenHash(expectWorker)
 		expectWorker.Annotations[common.LabelWorkerHash] = hash
-		if apierrors.IsNotFound(err) {
-			log.Info("cache group worker not found, create it", "worker", expectWorker.Name)
-			if err := r.createCacheGroupWorker(ctx, expectWorker); err != nil {
-				log.Error(err, "failed to create cache group worker", "worker", expectWorker.Name)
-			}
-			// Wait for the worker to be ready
-			if err := r.waitForWorkerReady(ctx, cg, expectWorker.Name); err != nil {
-				log.Error(err, "failed to wait for worker to be ready", "worker", expectWorker.Name)
-			}
-			continue
-		}
-		if r.compare(expectWorker, actualState) {
+
+		// TODO: if the current worker is not ready, block the next worker update
+		if apierrors.IsNotFound(err) || r.compare(expectWorker, actualState) {
 			log.Info("cache group worker need to be updated", "worker", expectWorker.Name)
-			if err := r.updateCacheGroupWorker(ctx, cg, node, expectWorker); err != nil {
-				log.Error(err, "failed to update cache group worker", "worker", expectWorker.Name)
+			if err := r.createOrUpdateWorker(ctx, actualState, expectWorker); err != nil {
+				log.Error(err, "failed to create or update cache group worker", "worker", expectWorker.Name)
+				return err
 			}
 			// Wait for the worker to be ready
 			if err := r.waitForWorkerReady(ctx, cg, expectWorker.Name); err != nil {
 				log.Error(err, "failed to wait for worker to be ready", "worker", expectWorker.Name)
 			}
-			continue
+			break
 		}
 	}
 
 	// list all cache group workers and delete the redundant ones
-	actualWorks, err := r.listActualWorkerNodes(ctx, cg)
+	actualWorks, err := r.listActualWorkers(ctx, cg)
 	if err != nil {
 		log.Error(err, "failed to list actual worker nodes")
 		return err
 	}
-	for _, node := range actualWorks {
-		if _, ok := expectStates[node]; !ok {
-			log.Info("found redundant cache group worker, delete it", "worker", common.GenWorkerName(cg.Name, node))
-			if err := r.deleteCacheGroupWorker(ctx, cg, node); err != nil {
-				if !apierrors.IsNotFound(err) {
-					log.Error(err, "failed to delete cache group worker", "worker", common.GenWorkerName(cg.Name, node))
-					return err
-				}
-			}
-		}
+	if err := r.removeRedundantWorkers(ctx, expectStates, actualWorks); err != nil {
+		log.Error(err, "failed to remove redundant")
+		return err
 	}
 
-	// update status
-	if len(expectStates) == 0 {
-		cg.Status.ReadyStr = "-"
-		cg.Status.Phase = juicefsiov1.CacheGroupPhaseWaiting
-		log.Info("no worker expected, waiting for spec update")
+	// calculate status
+	newStatus := r.calculateStatus(cg, expectStates, actualWorks)
+	if !reflect.DeepEqual(cg.Status, newStatus) {
+		cg.Status = newStatus
 		return utils.IgnoreConflict(r.Status().Update(ctx, cg))
 	}
-	cg.Status.ReadyWorker = int32(len(actualWorks))
-	cg.Status.ExpectWorker = int32(len(expectStates))
-	cg.Status.ReadyStr = fmt.Sprintf("%d/%d", cg.Status.ReadyWorker, cg.Status.ExpectWorker)
-	if cg.Status.ExpectWorker != int32(len(expectStates)) {
-		cg.Status.Phase = juicefsiov1.CacheGroupPhaseProgressing
-	} else {
-		cg.Status.Phase = juicefsiov1.CacheGroupPhaseReady
-	}
-	cg.Status.CacheGroup = builder.GenCacheGroupName(cg)
-	return utils.IgnoreConflict(r.Status().Update(ctx, cg))
+	return nil
 }
 
 func (r *CacheGroupReconciler) compare(expect, actual *corev1.Pod) bool {
+	if actual == nil {
+		return true
+	}
 	if expect.Annotations[common.LabelWorkerHash] != actual.Annotations[common.LabelWorkerHash] {
 		return true
 	}
@@ -208,9 +187,16 @@ func (r *CacheGroupReconciler) parseExpectState(ctx context.Context, cg *juicefs
 func (r *CacheGroupReconciler) getActualState(ctx context.Context, cg *juicefsiov1.CacheGroup, nodename string) (*corev1.Pod, error) {
 	worker := &corev1.Pod{}
 	if err := r.Get(ctx, client.ObjectKey{Namespace: cg.Namespace, Name: common.GenWorkerName(cg.Name, nodename)}, worker); err != nil {
-		return worker, err
+		return nil, err
 	}
 	return worker, nil
+}
+
+func (r *CacheGroupReconciler) createOrUpdateWorker(ctx context.Context, actual, expect *corev1.Pod) error {
+	if actual == nil {
+		return r.createCacheGroupWorker(ctx, expect)
+	}
+	return r.updateCacheGroupWorker(ctx, actual, expect)
 }
 
 func (r *CacheGroupReconciler) createCacheGroupWorker(ctx context.Context, expectWorker *corev1.Pod) error {
@@ -224,10 +210,10 @@ func (r *CacheGroupReconciler) createCacheGroupWorker(ctx context.Context, expec
 	return nil
 }
 
-func (r *CacheGroupReconciler) updateCacheGroupWorker(ctx context.Context, cg *juicefsiov1.CacheGroup, nodename string, expectWorker *corev1.Pod) error {
+func (r *CacheGroupReconciler) updateCacheGroupWorker(ctx context.Context, oldWorker, expectWorker *corev1.Pod) error {
 	log := log.FromContext(ctx)
 	worker := corev1.Pod{}
-	if err := r.Get(ctx, client.ObjectKey{Namespace: cg.Namespace, Name: common.GenWorkerName(cg.Name, nodename)}, &worker); err != nil && !apierrors.IsNotFound(err) {
+	if err := r.Get(ctx, client.ObjectKey{Namespace: oldWorker.Namespace, Name: oldWorker.Name}, &worker); err != nil && !apierrors.IsNotFound(err) {
 		return err
 	}
 	err := r.Delete(ctx, &worker)
@@ -241,7 +227,7 @@ func (r *CacheGroupReconciler) updateCacheGroupWorker(ctx context.Context, cg *j
 	ctx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
 	for {
-		err := r.Get(ctx, client.ObjectKey{Namespace: cg.Namespace, Name: common.GenWorkerName(cg.Name, nodename)}, &worker)
+		err := r.Get(ctx, client.ObjectKey{Namespace: oldWorker.Namespace, Name: oldWorker.Name}, &worker)
 		if apierrors.IsNotFound(err) {
 			break
 		}
@@ -254,24 +240,55 @@ func (r *CacheGroupReconciler) updateCacheGroupWorker(ctx context.Context, cg *j
 	return r.Create(ctx, expectWorker)
 }
 
-func (r *CacheGroupReconciler) deleteCacheGroupWorker(ctx context.Context, cg *juicefsiov1.CacheGroup, nodename string) error {
-	worker := corev1.Pod{}
-	if err := r.Get(ctx, client.ObjectKey{Namespace: cg.Namespace, Name: common.GenWorkerName(cg.Name, nodename)}, &worker); err != nil {
-		return client.IgnoreNotFound(err)
-	}
-	return r.Delete(ctx, &worker)
+func (r *CacheGroupReconciler) deleteCacheGroupWorker(ctx context.Context, worker *corev1.Pod) error {
+	return client.IgnoreNotFound(r.Delete(ctx, worker))
 }
 
-func (r *CacheGroupReconciler) listActualWorkerNodes(ctx context.Context, cg *juicefsiov1.CacheGroup) ([]string, error) {
+func (r *CacheGroupReconciler) listActualWorkers(ctx context.Context, cg *juicefsiov1.CacheGroup) ([]corev1.Pod, error) {
 	workers := corev1.PodList{}
 	if err := r.List(ctx, &workers, client.MatchingLabels(map[string]string{common.LabelCacheGroup: cg.Name})); err != nil {
 		return nil, err
 	}
-	nodes := []string{}
-	for _, worker := range workers.Items {
-		nodes = append(nodes, worker.Spec.NodeName)
+	return workers.Items, nil
+}
+
+func (r *CacheGroupReconciler) removeRedundantWorkers(
+	ctx context.Context,
+	expectStates map[string]juicefsiov1.CacheGroupWorkerTemplate,
+	actualWorks []corev1.Pod) error {
+	log := log.FromContext(ctx)
+	for _, worker := range actualWorks {
+		if _, ok := expectStates[worker.Spec.NodeName]; !ok {
+			log.Info("found redundant cache group worker, delete it", "worker", worker.Name)
+			if err := r.deleteCacheGroupWorker(ctx, &worker); err != nil {
+				log.Error(err, "failed to delete cache group worker", "worker", worker.Name)
+				return err
+			}
+		}
 	}
-	return nodes, nil
+	return nil
+}
+
+func (r *CacheGroupReconciler) calculateStatus(
+	cg *juicefsiov1.CacheGroup,
+	expectStates map[string]juicefsiov1.CacheGroupWorkerTemplate,
+	actualWorks []corev1.Pod) juicefsiov1.CacheGroupStatus {
+	newStatus := cg.Status
+	if len(expectStates) == 0 {
+		newStatus.ReadyStr = "-"
+		newStatus.Phase = juicefsiov1.CacheGroupPhaseWaiting
+		return newStatus
+	}
+	newStatus.ReadyWorker = int32(len(actualWorks))
+	newStatus.ExpectWorker = int32(len(expectStates))
+	newStatus.ReadyStr = fmt.Sprintf("%d/%d", newStatus.ReadyWorker, newStatus.ExpectWorker)
+	if newStatus.ExpectWorker != int32(len(expectStates)) {
+		newStatus.Phase = juicefsiov1.CacheGroupPhaseProgressing
+	} else {
+		newStatus.Phase = juicefsiov1.CacheGroupPhaseReady
+	}
+	newStatus.CacheGroup = builder.GenCacheGroupName(cg)
+	return newStatus
 }
 
 func (r *CacheGroupReconciler) waitForWorkerReady(ctx context.Context, cg *juicefsiov1.CacheGroup, workerName string) error {

@@ -17,9 +17,9 @@ limitations under the License.
 package v1
 
 import (
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -78,6 +78,17 @@ type CacheGroupWorkerTemplate struct {
 	// Cannot be updated.
 	// +optional
 	Lifecycle *corev1.Lifecycle `json:"lifecycle,omitempty"`
+	// Pod volumes to mount into the container's filesystem.
+	// Cannot be updated.
+	// +optional
+	VolumeMounts []corev1.VolumeMount `json:"volumeMounts,omitempty"`
+	// volumeDevices is the list of block devices to be used by the container.
+	// +optional
+	VolumeDevices []corev1.VolumeDevice `json:"volumeDevices,omitempty"`
+	// List of volumes that can be mounted by containers belonging to the pod.
+	// More info: https://kubernetes.io/docs/concepts/storage/volumes
+	// +optional
+	Volumes []corev1.Volume `json:"volumes,omitempty"`
 
 	Opts         []string          `json:"opts,omitempty"`
 	CacheDevices map[string]string `json:"cacheDevices,omitempty"`
@@ -94,15 +105,19 @@ type CacheGroupWorkerSpec struct {
 	Overwrite []CacheGroupWorkerOverwrite `json:"overwrite,omitempty"`
 }
 
+type CacheGroupWorkerUpdateStrategy struct {
+	MaxUnavailable *intstr.IntOrString `json:"maxUnavailable,omitempty" protobuf:"bytes,1,opt,name=maxUnavailable"`
+}
+
 // CacheGroupSpec defines the desired state of CacheGroup
 type CacheGroupSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
-	UpdateStrategy appsv1.DeploymentStrategy `json:"updateStrategy,omitempty"`
-	SecretRef      *corev1.SecretEnvSource   `json:"secretRef,omitempty"`
-	CleanCache     bool                      `json:"cleanCache,omitempty"`
-	CacheGroup     string                    `json:"cacheGroup,omitempty"`
-	Worker         CacheGroupWorkerSpec      `json:"worker,omitempty"`
+	UpdateStrategy CacheGroupWorkerUpdateStrategy `json:"updateStrategy,omitempty"`
+	SecretRef      *corev1.SecretEnvSource        `json:"secretRef,omitempty"`
+	CleanCache     bool                           `json:"cleanCache,omitempty"`
+	CacheGroup     string                         `json:"cacheGroup,omitempty"`
+	Worker         CacheGroupWorkerSpec           `json:"worker,omitempty"`
 }
 
 type CacheGroupPhase string

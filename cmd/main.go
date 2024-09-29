@@ -19,7 +19,11 @@ package main
 import (
 	"crypto/tls"
 	"flag"
+	"log"
 	"os"
+
+	"net/http"
+	_ "net/http/pprof"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -74,6 +78,10 @@ func main() {
 	}
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
+
+	go func() {
+		log.Println(http.ListenAndServe("localhost:6060", nil))
+	}()
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 

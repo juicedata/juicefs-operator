@@ -8,3 +8,10 @@ func IgnoreConflict(err error) error {
 	}
 	return err
 }
+
+func IgnoreAlreadyExists(err error) error {
+	if apierrors.IsAlreadyExists(err) {
+		return nil
+	}
+	return err
+}

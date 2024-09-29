@@ -30,16 +30,16 @@ import (
 	// +kubebuilder:scaffold:imports
 )
 
-var setupLog = ctrl.Log.WithName("cg-setup")
+var setupLog = ctrl.Log.WithName("setup")
 
-var CacheGroupCmd = &cobra.Command{
-	Use: "cache-group-controller",
+var ControllerCmd = &cobra.Command{
+	Use: "controller",
 	Run: func(cmd *cobra.Command, args []string) {
-		runCacheGroupController()
+		run()
 	},
 }
 
-func runCacheGroupController() {
+func run() {
 	opts := zap.Options{
 		Development: true,
 	}

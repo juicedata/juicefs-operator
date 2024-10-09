@@ -24,10 +24,6 @@ spec:
         limits:
           cpu: 200m
           memory: 1Gi
-      cacheDevices:
-        deviceFilter: "sd[a-z]" # 对找到的 device 进行过滤
-        deviceMinSize: 1Gi
-        deviceMaxSize: 10Gi
     overwrite:
       - nodes:
           - k8s-03

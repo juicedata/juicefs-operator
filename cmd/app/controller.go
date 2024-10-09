@@ -17,6 +17,7 @@
 package app
 
 import (
+	"flag"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -39,12 +40,18 @@ var ControllerCmd = &cobra.Command{
 	},
 }
 
-func run() {
-	opts := zap.Options{
-		Development: true,
-	}
-	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+var zapOpts = zap.Options{
+	Development: true,
+}
 
+func init() {
+	fs := flag.NewFlagSet("", flag.ExitOnError)
+	zapOpts.BindFlags(fs)
+	ControllerCmd.Flags().AddGoFlagSet(fs)
+}
+
+func run() {
+	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&zapOpts)))
 	mgr, err := NewManager()
 	if err != nil {
 		setupLog.Error(err, "unable to create manager")

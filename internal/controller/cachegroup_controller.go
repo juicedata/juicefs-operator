@@ -64,7 +64,7 @@ func (r *CacheGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	if err := r.Get(ctx, req.NamespacedName, cg); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
-	l.Info("Reconcile CacheGroup")
+	l.V(1).Info("Reconcile CacheGroup")
 	if cg.ObjectMeta.DeletionTimestamp.IsZero() {
 		if !controllerutil.ContainsFinalizer(cg, common.Finalizer) {
 			controllerutil.AddFinalizer(cg, common.Finalizer)
@@ -161,7 +161,6 @@ func (r *CacheGroupReconciler) compare(expect, actual *corev1.Pod) bool {
 	if !actual.DeletionTimestamp.IsZero() {
 		return true
 	}
-	// TODO: check pod status
 	return false
 }
 
@@ -173,13 +172,13 @@ func (r *CacheGroupReconciler) parseExpectState(ctx context.Context, cg *juicefs
 	}
 	expectStates := map[string]juicefsiov1.CacheGroupWorkerTemplate{}
 	for _, node := range expectAppliedNodes.Items {
-		expectStates[node.Name] = cg.Spec.Worker.Template
+		expectState := cg.Spec.Worker.Template.DeepCopy()
 		for _, overwrite := range cg.Spec.Worker.Overwrite {
 			if utils.SliceContains(overwrite.Nodes, node.Name) {
-				// TODO: merge and overwrite spec
-				break
+				builder.MergeCacheGrouopWorkerTemplate(expectState, overwrite)
 			}
 		}
+		expectStates[node.Name] = *expectState
 	}
 	return expectStates, nil
 }
@@ -282,7 +281,7 @@ func (r *CacheGroupReconciler) calculateStatus(
 	newStatus.ReadyWorker = int32(len(actualWorks))
 	newStatus.ExpectWorker = int32(len(expectStates))
 	newStatus.ReadyStr = fmt.Sprintf("%d/%d", newStatus.ReadyWorker, newStatus.ExpectWorker)
-	if newStatus.ExpectWorker != int32(len(expectStates)) {
+	if newStatus.ExpectWorker != newStatus.ReadyWorker {
 		newStatus.Phase = juicefsiov1.CacheGroupPhaseProgressing
 	} else {
 		newStatus.Phase = juicefsiov1.CacheGroupPhaseReady
@@ -308,8 +307,8 @@ func (r *CacheGroupReconciler) waitForWorkerReady(ctx context.Context, cg *juice
 				}
 				return err
 			}
-			if worker.Status.Phase == corev1.PodRunning {
-				log.Info("worker is ready", "worker", workerName)
+			if utils.IsPodReady(worker) {
+				log.Info("cache group worker is ready", "worker", worker.Name)
 				return nil
 			}
 			time.Sleep(time.Second)
@@ -318,6 +317,7 @@ func (r *CacheGroupReconciler) waitForWorkerReady(ctx context.Context, cg *juice
 }
 
 func (r *CacheGroupReconciler) HandleFinalizer(ctx context.Context, cg *juicefsiov1.CacheGroup) error {
+	// TODO: clean cache
 	return nil
 }
 

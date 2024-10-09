@@ -199,10 +199,10 @@ func (in *CacheGroupWorkerTemplate) DeepCopyInto(out *CacheGroupWorkerTemplate) 
 			(*out)[key] = val
 		}
 	}
-	if in.Affinity != nil {
-		in, out := &in.Affinity, &out.Affinity
-		*out = new(corev1.Affinity)
-		(*in).DeepCopyInto(*out)
+	if in.HostNetwork != nil {
+		in, out := &in.HostNetwork, &out.HostNetwork
+		*out = new(bool)
+		**out = **in
 	}
 	if in.Tolerations != nil {
 		in, out := &in.Tolerations, &out.Tolerations
@@ -218,7 +218,11 @@ func (in *CacheGroupWorkerTemplate) DeepCopyInto(out *CacheGroupWorkerTemplate) 
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
 	}
-	in.Resources.DeepCopyInto(&out.Resources)
+	if in.Resources != nil {
+		in, out := &in.Resources, &out.Resources
+		*out = new(corev1.ResourceRequirements)
+		(*in).DeepCopyInto(*out)
+	}
 	if in.LivenessProbe != nil {
 		in, out := &in.LivenessProbe, &out.LivenessProbe
 		*out = new(corev1.Probe)

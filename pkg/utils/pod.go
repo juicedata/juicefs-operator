@@ -14,18 +14,16 @@
 
 package utils
 
-import apierrors "k8s.io/apimachinery/pkg/api/errors"
+import (
+	corev1 "k8s.io/api/core/v1"
+)
 
-func IgnoreConflict(err error) error {
-	if apierrors.IsConflict(err) {
-		return nil
+func IsPodReady(pod corev1.Pod) bool {
+	conditionsTrue := 0
+	for _, cond := range pod.Status.Conditions {
+		if cond.Status == corev1.ConditionTrue && (cond.Type == corev1.ContainersReady || cond.Type == corev1.PodReady) {
+			conditionsTrue++
+		}
 	}
-	return err
-}
-
-func IgnoreAlreadyExists(err error) error {
-	if apierrors.IsAlreadyExists(err) {
-		return nil
-	}
-	return err
+	return conditionsTrue == 2
 }

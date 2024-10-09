@@ -29,8 +29,7 @@ import (
 type CacheGroupWorkerTemplate struct {
 	NodeSelector       map[string]string   `json:"nodeSelector,omitempty"`
 	ServiceAccountName string              `json:"serviceAccountName,omitempty"`
-	HostNetwork        bool                `json:"hostNetwork,omitempty"`
-	Affinity           *corev1.Affinity    `json:"affinity,omitempty"`
+	HostNetwork        *bool               `json:"hostNetwork,omitempty"`
 	SchedulerName      string              `json:"schedulerName,omitempty"`
 	Tolerations        []corev1.Toleration `json:"tolerations,omitempty"`
 
@@ -47,7 +46,7 @@ type CacheGroupWorkerTemplate struct {
 	// Cannot be updated.
 	// More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
 	// +optional
-	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
+	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
 	// Periodic probe of container liveness.
 	// Container will be restarted if the probe fails.
 	// Cannot be updated.
@@ -153,6 +152,7 @@ type CacheGroupStatus struct {
 // +kubebuilder:printcolumn:name="Cache Group",type="string",JSONPath=".status.cacheGroup"
 // +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase"
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.readyStr"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 // CacheGroup is the Schema for the cachegroups API
 type CacheGroup struct {
 	metav1.TypeMeta   `json:",inline"`

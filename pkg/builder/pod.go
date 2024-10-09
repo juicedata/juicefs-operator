@@ -170,8 +170,11 @@ func genComands(ctx context.Context, cg *juicefsiov1.CacheGroup, spec juicefsiov
 
 func NewCacheGroupWorker(ctx context.Context, cg *juicefsiov1.CacheGroup, nodeName string, spec juicefsiov1.CacheGroupWorkerTemplate) *corev1.Pod {
 	worker := newBasicPod(cg, nodeName)
-	worker.Spec.Affinity = spec.Affinity
-	worker.Spec.HostNetwork = spec.HostNetwork
+	if spec.HostNetwork != nil {
+		worker.Spec.HostNetwork = *spec.HostNetwork
+	} else {
+		worker.Spec.HostNetwork = true
+	}
 	worker.Spec.Tolerations = spec.Tolerations
 	worker.Spec.SchedulerName = spec.SchedulerName
 	worker.Spec.ServiceAccountName = spec.ServiceAccountName
@@ -205,8 +208,63 @@ func NewCacheGroupWorker(ctx context.Context, cg *juicefsiov1.CacheGroup, nodeNa
 			},
 		}
 	}
-	worker.Spec.Containers[0].Resources = spec.Resources
+	if spec.Resources != nil {
+		worker.Spec.Containers[0].Resources = *spec.Resources
+	} else {
+		worker.Spec.Containers[0].Resources = common.DefaultResources
+	}
 	worker.Spec.Containers[0].Env = genEnvs(cg, spec)
 	worker.Spec.Containers[0].Command = genComands(ctx, cg, spec)
 	return worker
+}
+
+func MergeCacheGrouopWorkerTemplate(template *juicefsiov1.CacheGroupWorkerTemplate, overwrite juicefsiov1.CacheGroupWorkerOverwrite) {
+	if overwrite.ServiceAccountName != "" {
+		template.ServiceAccountName = overwrite.ServiceAccountName
+	}
+	if overwrite.HostNetwork != nil {
+		template.HostNetwork = overwrite.HostNetwork
+	}
+	if overwrite.SchedulerName != "" {
+		template.SchedulerName = overwrite.SchedulerName
+	}
+	if overwrite.Tolerations != nil {
+		template.Tolerations = overwrite.Tolerations
+	}
+	if overwrite.Image != "" {
+		template.Image = overwrite.Image
+	}
+	if overwrite.Env != nil {
+		template.Env = overwrite.Env
+	}
+	if overwrite.Resources != nil {
+		template.Resources = overwrite.Resources
+	}
+	if overwrite.LivenessProbe != nil {
+		template.LivenessProbe = overwrite.LivenessProbe
+	}
+	if overwrite.ReadinessProbe != nil {
+		template.ReadinessProbe = overwrite.ReadinessProbe
+	}
+	if overwrite.StartupProbe != nil {
+		template.StartupProbe = overwrite.StartupProbe
+	}
+	if overwrite.SecurityContext != nil {
+		template.SecurityContext = overwrite.SecurityContext
+	}
+	if overwrite.Lifecycle != nil {
+		template.Lifecycle = overwrite.Lifecycle
+	}
+	if overwrite.VolumeMounts != nil {
+		template.VolumeMounts = overwrite.VolumeMounts
+	}
+	if overwrite.VolumeDevices != nil {
+		template.VolumeDevices = overwrite.VolumeDevices
+	}
+	if overwrite.Volumes != nil {
+		template.Volumes = overwrite.Volumes
+	}
+	if overwrite.Opts != nil {
+		template.Opts = overwrite.Opts
+	}
 }

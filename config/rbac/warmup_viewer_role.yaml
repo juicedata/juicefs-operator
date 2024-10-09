@@ -8,7 +8,7 @@ metadata:
   name: warmup-viewer-role
 rules:
 - apiGroups:
-  - juicefs.io.juicefs.io
+  - juicefs.io
   resources:
   - warmups
   verbs:
@@ -16,7 +16,7 @@ rules:
   - list
   - watch
 - apiGroups:
-  - juicefs.io.juicefs.io
+  - juicefs.io
   resources:
   - warmups/status
   verbs:

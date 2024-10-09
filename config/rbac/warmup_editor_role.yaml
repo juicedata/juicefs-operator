@@ -8,7 +8,7 @@ metadata:
   name: warmup-editor-role
 rules:
 - apiGroups:
-  - juicefs.io.juicefs.io
+  - juicefs.io
   resources:
   - warmups
   verbs:
@@ -20,7 +20,7 @@ rules:
   - update
   - watch
 - apiGroups:
-  - juicefs.io.juicefs.io
+  - juicefs.io
   resources:
   - warmups/status
   verbs:

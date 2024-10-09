@@ -46,8 +46,8 @@ type CacheGroupReconciler struct {
 // +kubebuilder:rbac:groups=juicefs.io,resources=cachegroups,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=juicefs.io,resources=cachegroups/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=juicefs.io,resources=cachegroups/finalizers,verbs=update
-// +kubebuilder:rbac:groups=,resources=nodes,verbs=get;list;watch
-// +kubebuilder:rbac:groups=,resources=pods,verbs=get;list;delete
+// +kubebuilder:rbac:groups="",resources=nodes,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.

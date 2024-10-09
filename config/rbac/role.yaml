@@ -4,13 +4,17 @@ kind: ClusterRole
 metadata:
   name: manager-role
 rules:
-- resources:
+- apiGroups:
+  - ""
+  resources:
   - nodes
   verbs:
   - get
   - list
   - watch
-- resources:
+- apiGroups:
+  - ""
+  resources:
   - pods
   verbs:
   - delete
@@ -20,6 +24,7 @@ rules:
   - juicefs.io
   resources:
   - cachegroups
+  - warmups
   verbs:
   - create
   - delete
@@ -32,37 +37,13 @@ rules:
   - juicefs.io
   resources:
   - cachegroups/finalizers
+  - warmups/finalizers
   verbs:
   - update
 - apiGroups:
   - juicefs.io
   resources:
   - cachegroups/status
-  verbs:
-  - get
-  - patch
-  - update
-- apiGroups:
-  - juicefs.io.juicefs.io
-  resources:
-  - warmups
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - juicefs.io.juicefs.io
-  resources:
-  - warmups/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - juicefs.io.juicefs.io
-  resources:
   - warmups/status
   verbs:
   - get

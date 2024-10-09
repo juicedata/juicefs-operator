@@ -1,4 +1,4 @@
-apiVersion: juicefs.io.juicefs.io/v1
+apiVersion: juicefs.io/v1
 kind: WarmUp
 metadata:
   labels:

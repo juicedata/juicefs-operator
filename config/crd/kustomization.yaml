@@ -3,7 +3,7 @@
 # It should be run by config/default
 resources:
 - bases/juicefs.io_cachegroups.yaml
-- bases/juicefs.io.juicefs.io_warmups.yaml
+- bases/juicefs.io_warmups.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:

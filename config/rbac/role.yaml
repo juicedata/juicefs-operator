@@ -42,3 +42,29 @@ rules:
   - get
   - patch
   - update
+- apiGroups:
+  - juicefs.io.juicefs.io
+  resources:
+  - warmups
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - juicefs.io.juicefs.io
+  resources:
+  - warmups/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - juicefs.io.juicefs.io
+  resources:
+  - warmups/status
+  verbs:
+  - get
+  - patch
+  - update

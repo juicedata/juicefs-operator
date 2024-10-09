@@ -90,8 +90,7 @@ type CacheGroupWorkerTemplate struct {
 	// +optional
 	Volumes []corev1.Volume `json:"volumes,omitempty"`
 
-	Opts         []string          `json:"opts,omitempty"`
-	CacheDevices map[string]string `json:"cacheDevices,omitempty"`
+	Opts []string `json:"opts,omitempty"`
 }
 
 type CacheGroupWorkerOverwrite struct {

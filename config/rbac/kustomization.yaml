@@ -22,6 +22,8 @@ resources:
 # default, aiding admins in cluster management. Those roles are
 # not used by the Project itself. You can comment the following lines
 # if you do not want those helpers be installed with your Project.
+- warmup_editor_role.yaml
+- warmup_viewer_role.yaml
 - cachegroup_editor_role.yaml
 - cachegroup_viewer_role.yaml
 

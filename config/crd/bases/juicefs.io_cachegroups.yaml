@@ -1026,10 +1026,6 @@ spec:
                                   x-kubernetes-list-type: atomic
                               type: object
                           type: object
-                        cacheDevices:
-                          additionalProperties:
-                            type: string
-                          type: object
                         env:
                           description: |-
                             List of environment variables to set in the container.
@@ -4989,10 +4985,6 @@ spec:
                                 type: array
                                 x-kubernetes-list-type: atomic
                             type: object
-                        type: object
-                      cacheDevices:
-                        additionalProperties:
-                          type: string
                         type: object
                       env:
                         description: |-

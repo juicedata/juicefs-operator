@@ -17,9 +17,9 @@ limitations under the License.
 package v1
 
 import (
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -103,15 +103,11 @@ type CacheGroupWorkerSpec struct {
 	Overwrite []CacheGroupWorkerOverwrite `json:"overwrite,omitempty"`
 }
 
-type CacheGroupWorkerUpdateStrategy struct {
-	MaxUnavailable *intstr.IntOrString `json:"maxUnavailable,omitempty" protobuf:"bytes,1,opt,name=maxUnavailable"`
-}
-
 // CacheGroupSpec defines the desired state of CacheGroup
 type CacheGroupSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
-	UpdateStrategy CacheGroupWorkerUpdateStrategy `json:"updateStrategy,omitempty"`
+	UpdateStrategy appsv1.DaemonSetUpdateStrategy `json:"updateStrategy,omitempty"`
 	SecretRef      *corev1.SecretEnvSource        `json:"secretRef,omitempty"`
 	CleanCache     bool                           `json:"cleanCache,omitempty"`
 	CacheGroup     string                         `json:"cacheGroup,omitempty"`

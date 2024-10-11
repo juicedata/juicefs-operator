@@ -55,11 +55,21 @@ spec:
                 x-kubernetes-map-type: atomic
               updateStrategy:
                 properties:
-                  maxUnavailable:
-                    anyOf:
-                    - type: integer
-                    - type: string
-                    x-kubernetes-int-or-string: true
+                  rollingUpdate:
+                    properties:
+                      maxSurge:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        x-kubernetes-int-or-string: true
+                      maxUnavailable:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        x-kubernetes-int-or-string: true
+                    type: object
+                  type:
+                    type: string
                 type: object
               worker:
                 properties:

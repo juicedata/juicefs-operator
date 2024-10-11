@@ -21,6 +21,12 @@ rules:
   - get
   - list
 - apiGroups:
+  - ""
+  resources:
+  - pods/exec
+  verbs:
+  - create
+- apiGroups:
   - juicefs.io
   resources:
   - cachegroups

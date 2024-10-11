@@ -123,7 +123,7 @@ build-installer: manifests generate kustomize ## Generate a consolidated YAML wi
 .PHONY: build-crd
 build-crd: manifests generate kustomize ## Generate YAML with CRDs.
 	mkdir -p dist
-	$(KUSTOMIZE) build config/crd >> dist/crd.yaml
+	$(KUSTOMIZE) build config/crd > dist/crd.yaml
 
 ##@ Deployment
 

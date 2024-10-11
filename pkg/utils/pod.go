@@ -42,7 +42,7 @@ func IsPodReady(pod corev1.Pod) bool {
 
 // IsMountPointReady checks if the mount point is ready in the given pod
 func IsMountPointReady(ctx context.Context, pod corev1.Pod, mountPoint string) bool {
-	log := log.FromContext(ctx).WithName("checkMountPoint")
+	log := log.FromContext(ctx).WithName("checkMountPoint").WithValues("worker", pod.Name)
 	config := ctrl.GetConfigOrDie()
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
@@ -89,6 +89,10 @@ func IsMountPointReady(ctx context.Context, pod corev1.Pod, mountPoint string) b
 	}
 	if stderr.Len() > 0 {
 		log.V(1).Info("mount point is not ready", "stderr", strings.Trim(stderr.String(), "\n"))
+		return false
+	}
+	if !strings.Contains(stdout.String(), "Inode: 1") {
+		log.V(1).Info("mount point is not ready")
 		return false
 	}
 	log.Info("mount point is ready")

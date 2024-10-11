@@ -6,4 +6,26 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: cachegroup-sample
 spec:
-  # TODO(user): Add fields here
+  secretRef:
+    name: juicefs-zxh-test-secret
+  cleanCache: false
+  updateStrategy:
+    maxUnavailable: 1
+  worker:
+    template:
+      nodeSelector:
+        juicefs.io/cg-worker: "true"
+      image: juicedata/mount:ee-5.1.1-1faf43b
+      hostNetwork: true
+      resources:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          cpu: 200m
+          memory: 1Gi
+    overwrite:
+      - nodes:
+          - k8s-03
+        opts:
+        - group-weight=200

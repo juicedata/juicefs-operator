@@ -5,9 +5,32 @@ metadata:
   name: manager-role
 rules:
 - apiGroups:
+  - ""
+  resources:
+  - nodes
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - delete
+  - get
+  - list
+- apiGroups:
+  - ""
+  resources:
+  - pods/exec
+  verbs:
+  - create
+- apiGroups:
   - juicefs.io
   resources:
   - cachegroups
+  - warmups
   verbs:
   - create
   - delete
@@ -20,12 +43,14 @@ rules:
   - juicefs.io
   resources:
   - cachegroups/finalizers
+  - warmups/finalizers
   verbs:
   - update
 - apiGroups:
   - juicefs.io
   resources:
   - cachegroups/status
+  - warmups/status
   verbs:
   - get
   - patch

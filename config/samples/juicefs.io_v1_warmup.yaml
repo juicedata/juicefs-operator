@@ -1,0 +1,9 @@
+apiVersion: juicefs.io/v1
+kind: WarmUp
+metadata:
+  labels:
+    app.kubernetes.io/name: juicefs-cache-group-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: warmup-sample
+spec:
+  # TODO(user): Add fields here

@@ -133,13 +133,14 @@ func genComands(ctx context.Context, cg *juicefsiov1.CacheGroup, spec juicefsiov
 	cacheGroup := GenCacheGroupName(cg)
 	mountCmds := []string{
 		"exec",
-		common.JuiceFSBinary,
-		"mount",
+		common.JuiceFsMountBinary,
 		"${VOL_NAME}",
 		common.MountPoint,
-		"--foreground",
-		"--cache-group",
-		cacheGroup,
+	}
+
+	opts := []string{
+		"foreground",
+		"cache-group=" + cacheGroup,
 	}
 
 	cacheDirs := []string{}
@@ -154,12 +155,13 @@ func genComands(ctx context.Context, cg *juicefsiov1.CacheGroup, spec juicefsiov
 			cacheDirs = strings.Split(pair[1], ":")
 			continue
 		}
-		mountCmds = append(mountCmds, "--"+pair[0], pair[1])
+		opts = append(opts, strings.TrimSpace(pair[0])+"="+strings.TrimSpace(pair[1]))
 	}
 	if len(cacheDirs) == 0 {
 		cacheDirs = append(cacheDirs, "/var/jfsCache")
 	}
-	mountCmds = append(mountCmds, "--cache-dir", strings.Join(cacheDirs, ":"))
+	opts = append(opts, "cache-dir="+strings.Join(cacheDirs, ":"))
+	mountCmds = append(mountCmds, "-o", strings.Join(opts, ","))
 	cmds := []string{
 		"sh",
 		"-c",

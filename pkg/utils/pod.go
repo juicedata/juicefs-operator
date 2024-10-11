@@ -15,7 +15,19 @@
 package utils
 
 import (
+	"bytes"
+	"context"
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/juicedata/juicefs-cache-group-operator/pkg/common"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/remotecommand"
+	"k8s.io/kubectl/pkg/scheme"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 func IsPodReady(pod corev1.Pod) bool {
@@ -26,4 +38,59 @@ func IsPodReady(pod corev1.Pod) bool {
 		}
 	}
 	return conditionsTrue == 2
+}
+
+// IsMountPointReady checks if the mount point is ready in the given pod
+func IsMountPointReady(ctx context.Context, pod corev1.Pod, mountPoint string) bool {
+	log := log.FromContext(ctx).WithName("checkMountPoint")
+	config := ctrl.GetConfigOrDie()
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+
+	clientset, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		log.Error(err, "failed to create Kubernetes client")
+		return false
+	}
+
+	cmd := []string{"sh", "-c", fmt.Sprintf("stat %s", mountPoint)}
+	req := clientset.CoreV1().RESTClient().
+		Post().
+		Resource("pods").
+		Name(pod.Name).
+		Namespace(pod.Namespace).
+		SubResource("exec")
+
+	req.VersionedParams(&corev1.PodExecOptions{
+		Container: common.WorkerContainerName,
+		Command:   cmd,
+		Stdin:     false,
+		Stdout:    true,
+		Stderr:    true,
+		TTY:       false,
+	}, scheme.ParameterCodec)
+
+	exec, err := remotecommand.NewSPDYExecutor(config, "POST", req.URL())
+	if err != nil {
+		log.Error(err, "failed to create SPDY executor")
+		return false
+	}
+
+	var stdout, stderr bytes.Buffer
+	err = exec.StreamWithContext(ctx, remotecommand.StreamOptions{
+		Stdin:  nil,
+		Stdout: &stdout,
+		Stderr: &stderr,
+		Tty:    false,
+	})
+	if err != nil && stderr.Len() == 0 {
+		log.Error(err, "failed to execute command")
+		return false
+	}
+	if stderr.Len() > 0 {
+		log.V(1).Info("mount point is not ready", "stderr", strings.Trim(stderr.String(), "\n"))
+		return false
+	}
+	log.Info("mount point is ready")
+	return true
 }

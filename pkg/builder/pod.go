@@ -42,7 +42,7 @@ func newBasicPod(cg *juicefsiov1.CacheGroup, nodeName string) *corev1.Pod {
 			Annotations: map[string]string{},
 			Labels: map[string]string{
 				common.LabelCacheGroup: cg.Name,
-				common.LabelWorker:     workerName,
+				common.LabelWorker:     common.LabelWorkerValue,
 			},
 			OwnerReferences: []metav1.OwnerReference{
 				{

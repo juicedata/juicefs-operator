@@ -34,9 +34,10 @@ const (
 	MountPoint         = "/mnt/jfs"
 
 	// label keys
-	LabelCacheGroup = "juicefs.io/cache-group"
-	LabelWorker     = "juicefs.io/worker"
-	LabelWorkerHash = "juicefs.io/worker-hash"
+	LabelCacheGroup  = "juicefs.io/cache-group"
+	LabelWorkerHash  = "juicefs.io/worker-hash"
+	LabelWorker      = "app.kubernetes.io/name"
+	LabelWorkerValue = "juicefs-cache-group-worker"
 )
 
 var (

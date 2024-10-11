@@ -125,7 +125,8 @@ func (r *CacheGroupReconciler) sync(ctx context.Context, cg *juicefsiov1.CacheGr
 			}
 			// Wait for the worker to be ready
 			if err := r.waitForWorkerReady(ctx, cg, expectWorker.Name); err != nil {
-				log.Error(err, "failed to wait for worker to be ready", "worker", expectWorker.Name)
+				log.Error(err, "failed to wait for worker to be ready, delete it and recreate", "worker", expectWorker.Name)
+				return r.deleteCacheGroupWorker(ctx, expectWorker)
 			}
 			break
 		}
@@ -307,7 +308,7 @@ func (r *CacheGroupReconciler) waitForWorkerReady(ctx context.Context, cg *juice
 				}
 				return err
 			}
-			if utils.IsPodReady(worker) {
+			if utils.IsPodReady(worker) && utils.IsMountPointReady(ctx, worker, common.MountPoint) {
 				log.Info("cache group worker is ready", "worker", worker.Name)
 				return nil
 			}

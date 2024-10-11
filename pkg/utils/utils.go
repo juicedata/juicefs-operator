@@ -33,6 +33,15 @@ func SliceContains[T comparable](arr []T, v T) bool {
 	return false
 }
 
+func NodeSelectorContains(expect, target map[string]string) bool {
+	for k, v := range expect {
+		if target[k] != v {
+			return false
+		}
+	}
+	return true
+}
+
 // GenHash generates a hash string for the object, using sha256
 func GenHash(object interface{}) string {
 	data, _ := json.Marshal(object)

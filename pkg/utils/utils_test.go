@@ -49,3 +49,50 @@ func TestGenHash(t *testing.T) {
 		})
 	}
 }
+func TestContainsNodeSelector(t *testing.T) {
+	tests := []struct {
+		name   string
+		expect map[string]string
+		target map[string]string
+		want   bool
+	}{
+		{
+			name:   "Test with matching selectors",
+			expect: map[string]string{"key1": "value1", "key2": "value2"},
+			target: map[string]string{"key1": "value1", "key2": "value2", "key3": "value3"},
+			want:   true,
+		},
+		{
+			name:   "Test with non-matching selectors",
+			expect: map[string]string{"key1": "value1", "key2": "value2"},
+			target: map[string]string{"key1": "value1", "key2": "different_value"},
+			want:   false,
+		},
+		{
+			name:   "Test with empty expect map",
+			expect: map[string]string{},
+			target: map[string]string{"key1": "value1"},
+			want:   true,
+		},
+		{
+			name:   "Test with empty target map",
+			expect: map[string]string{"key1": "value1"},
+			target: map[string]string{},
+			want:   false,
+		},
+		{
+			name:   "Test with both maps empty",
+			expect: map[string]string{},
+			target: map[string]string{},
+			want:   true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := NodeSelectorContains(tt.expect, tt.target); got != tt.want {
+				t.Errorf("ContainsNodeSelector() = %v, want = %v", got, tt.want)
+			}
+		})
+	}
+}

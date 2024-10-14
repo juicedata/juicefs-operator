@@ -107,11 +107,11 @@ type CacheGroupWorkerSpec struct {
 type CacheGroupSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
-	UpdateStrategy appsv1.DaemonSetUpdateStrategy `json:"updateStrategy,omitempty"`
-	SecretRef      *corev1.SecretEnvSource        `json:"secretRef,omitempty"`
-	CleanCache     bool                           `json:"cleanCache,omitempty"`
-	CacheGroup     string                         `json:"cacheGroup,omitempty"`
-	Worker         CacheGroupWorkerSpec           `json:"worker,omitempty"`
+	UpdateStrategy *appsv1.DaemonSetUpdateStrategy `json:"updateStrategy,omitempty"`
+	SecretRef      *corev1.SecretEnvSource         `json:"secretRef,omitempty"`
+	CleanCache     bool                            `json:"cleanCache,omitempty"`
+	CacheGroup     string                          `json:"cacheGroup,omitempty"`
+	Worker         CacheGroupWorkerSpec            `json:"worker,omitempty"`
 }
 
 type CacheGroupPhase string

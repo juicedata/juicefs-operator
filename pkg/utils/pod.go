@@ -22,7 +22,9 @@ import (
 	"time"
 
 	"github.com/juicedata/juicefs-cache-group-operator/pkg/common"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/remotecommand"
 	"k8s.io/kubectl/pkg/scheme"
@@ -97,4 +99,27 @@ func IsMountPointReady(ctx context.Context, pod corev1.Pod, mountPoint string) b
 	}
 	log.Info("mount point is ready")
 	return true
+}
+
+func ParseUpdateStrategy(strategy *appsv1.DaemonSetUpdateStrategy, total int) (appsv1.DaemonSetUpdateStrategyType, int) {
+	if strategy == nil {
+		return appsv1.RollingUpdateDaemonSetStrategyType, 1
+	}
+
+	if strategy.Type == appsv1.OnDeleteDaemonSetStrategyType {
+		return appsv1.OnDeleteDaemonSetStrategyType, 1
+	}
+
+	if strategy.Type == appsv1.RollingUpdateDaemonSetStrategyType {
+		if strategy.RollingUpdate != nil && strategy.RollingUpdate.MaxUnavailable != nil {
+			maxUnavailable, err := intstr.GetScaledValueFromIntOrPercent(strategy.RollingUpdate.MaxUnavailable, total, false)
+			if err != nil {
+				return appsv1.RollingUpdateDaemonSetStrategyType, 1
+			}
+			return appsv1.RollingUpdateDaemonSetStrategyType, maxUnavailable
+		}
+		return appsv1.RollingUpdateDaemonSetStrategyType, 1
+	}
+
+	return appsv1.RollingUpdateDaemonSetStrategyType, 1
 }

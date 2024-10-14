@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"sync"
 	"time"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -33,8 +34,10 @@ import (
 	"github.com/juicedata/juicefs-cache-group-operator/pkg/common"
 	"github.com/juicedata/juicefs-cache-group-operator/pkg/utils"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 )
 
 // CacheGroupReconciler reconciles a CacheGroup object
@@ -106,7 +109,11 @@ func (r *CacheGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 // sync synchronizes the cache group workers with the expect states
 func (r *CacheGroupReconciler) sync(ctx context.Context, cg *juicefsiov1.CacheGroup, expectStates map[string]juicefsiov1.CacheGroupWorkerTemplate) error {
 	log := log.FromContext(ctx)
-	// TODO: follow the update strategy
+	updateStrategyType, maxUnavailable := utils.ParseUpdateStrategy(cg.Spec.UpdateStrategy, len(expectStates))
+	wg := sync.WaitGroup{}
+	errCh := make(chan error, 2*maxUnavailable)
+	numUnavailable := 0
+	log.V(1).Info("start to sync cache group workers", "updateStrategy", updateStrategyType, "maxUnavailable", maxUnavailable)
 	for node, expectState := range expectStates {
 		actualState, err := r.getActualState(ctx, cg, node)
 		if err != nil && !apierrors.IsNotFound(err) {
@@ -117,20 +124,40 @@ func (r *CacheGroupReconciler) sync(ctx context.Context, cg *juicefsiov1.CacheGr
 		hash := utils.GenHash(expectWorker)
 		expectWorker.Annotations[common.LabelWorkerHash] = hash
 
-		// TODO: if the current worker is not ready, block the next worker update
-		if apierrors.IsNotFound(err) || r.compare(expectWorker, actualState) {
-			log.Info("cache group worker need to be updated", "worker", expectWorker.Name)
-			if err := r.createOrUpdateWorker(ctx, actualState, expectWorker); err != nil {
-				log.Error(err, "failed to create or update cache group worker", "worker", expectWorker.Name)
-				return err
+		if r.actualShouldbeUpdate(updateStrategyType, expectWorker, actualState) {
+			if numUnavailable >= maxUnavailable {
+				log.V(1).Info("maxUnavailable reached, skip updating cache group worker, waiting for next reconciler", "worker", expectWorker.Name)
+				break
 			}
-			// Wait for the worker to be ready
-			if err := r.waitForWorkerReady(ctx, cg, expectWorker.Name); err != nil {
-				log.Error(err, "failed to wait for worker to be ready, delete it and recreate", "worker", expectWorker.Name)
-				return r.deleteCacheGroupWorker(ctx, expectWorker)
-			}
-			break
+			wg.Add(1)
+			numUnavailable++
+			go func() {
+				defer wg.Done()
+				log.Info("cache group worker need to be updated", "worker", expectWorker.Name)
+				if err := r.createOrUpdateWorker(ctx, actualState, expectWorker); err != nil {
+					log.Error(err, "failed to create or update cache group worker", "worker", expectWorker.Name)
+					errCh <- err
+					return
+				}
+				// Wait for the worker to be ready
+				if err := r.waitForWorkerReady(ctx, cg, expectWorker.Name); err != nil {
+					log.Error(err, "failed to wait for worker to be ready", "worker", expectWorker.Name)
+					errCh <- err
+					return
+				}
+			}()
 		}
+	}
+	wg.Wait()
+
+	close(errCh)
+	// collect errors if any for proper reporting/retry logic in the controller
+	errors := []error{}
+	for err := range errCh {
+		errors = append(errors, err)
+	}
+	if len(errors) > 0 {
+		return utilerrors.NewAggregate(errors)
 	}
 
 	// list all cache group workers and delete the redundant ones
@@ -153,9 +180,12 @@ func (r *CacheGroupReconciler) sync(ctx context.Context, cg *juicefsiov1.CacheGr
 	return nil
 }
 
-func (r *CacheGroupReconciler) compare(expect, actual *corev1.Pod) bool {
+func (r *CacheGroupReconciler) actualShouldbeUpdate(updateStrategyType appsv1.DaemonSetUpdateStrategyType, expect, actual *corev1.Pod) bool {
 	if actual == nil {
 		return true
+	}
+	if updateStrategyType == appsv1.OnDeleteDaemonSetStrategyType {
+		return false
 	}
 	if expect.Annotations[common.LabelWorkerHash] != actual.Annotations[common.LabelWorkerHash] {
 		return true

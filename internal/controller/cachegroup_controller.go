@@ -137,11 +137,12 @@ func (r *CacheGroupReconciler) sync(ctx context.Context, cg *juicefsiov1.CacheGr
 				if err := r.createOrUpdateWorker(ctx, actualState, expectWorker); err != nil {
 					log.Error(err, "failed to create or update cache group worker", "worker", expectWorker.Name)
 					errCh <- err
+					return
 				}
 				// Wait for the worker to be ready
 				if err := r.waitForWorkerReady(ctx, cg, expectWorker.Name); err != nil {
-					log.Error(err, "failed to wait for worker to be ready, delete it and recreate", "worker", expectWorker.Name)
-					errCh <- r.deleteCacheGroupWorker(ctx, expectWorker)
+					log.Error(err, "failed to wait for worker to be ready", "worker", expectWorker.Name)
+					return
 				}
 			}()
 		}

@@ -142,6 +142,7 @@ func (r *CacheGroupReconciler) sync(ctx context.Context, cg *juicefsiov1.CacheGr
 				// Wait for the worker to be ready
 				if err := r.waitForWorkerReady(ctx, cg, expectWorker.Name); err != nil {
 					log.Error(err, "failed to wait for worker to be ready", "worker", expectWorker.Name)
+					errCh <- err
 					return
 				}
 			}()

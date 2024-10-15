@@ -43,8 +43,11 @@ jobs:
 
     - name: Set up kind
       uses: helm/kind-action@v1
+      with:
+        config: test/e2e/config/kind-config.yaml
+        cluster_name: e2e
 
     - name: Run e2e tests
       env:
-        KIND_CLUSTER: chart-testing
+        KIND_CLUSTER: e2e
       run: make test-e2e

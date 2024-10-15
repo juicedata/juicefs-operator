@@ -29,3 +29,7 @@ func IgnoreAlreadyExists(err error) error {
 	}
 	return err
 }
+
+func IsNotFound(err error) bool {
+	return apierrors.IsNotFound(err)
+}

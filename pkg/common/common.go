@@ -24,8 +24,10 @@ import (
 const (
 	// CacheGroupContainerName is the name of cache group worker container
 	WorkerContainerName = "juicefs-cg-worker"
+	WarmupContainerName = "juicefs-warmup"
 	// WorkerNamePrefix is the prefix of worker name
 	WorkerNamePrefix = "juicefs-cg-worker"
+	WarmUpNamePrefix = "juicefs-warmup"
 	// Finalizer is the finalizer for CacheGroup
 	Finalizer = "juicefs.io/finalizer"
 	// juicefs binary path
@@ -38,6 +40,8 @@ const (
 	LabelWorkerHash  = "juicefs.io/worker-hash"
 	LabelWorker      = "app.kubernetes.io/name"
 	LabelWorkerValue = "juicefs-cache-group-worker"
+	LabelAppType     = "app.kubernetes.io/name"
+	LabelJobValue    = "juicefs-warmup-job"
 )
 
 var (
@@ -55,4 +59,8 @@ var (
 
 func GenWorkerName(cgName string, nodeName string) string {
 	return fmt.Sprintf("%s-%s-%s", WorkerNamePrefix, cgName, nodeName)
+}
+
+func GenJobName(wuName string) string {
+	return fmt.Sprintf("%s-%s", WarmUpNamePrefix, wuName)
 }

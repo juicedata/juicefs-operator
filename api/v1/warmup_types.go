@@ -30,8 +30,8 @@ type WarmUpSpec struct {
 	BackoffLimit            *int32                      `json:"backoffLimit,omitempty"`
 	TtlSecondsAfterFinished *int32                      `json:"ttlSecondsAfterFinished,omitempty"`
 	Metadata                Metadata                    `json:"metadata,omitempty"`
-	Tolerations             corev1.Toleration           `json:"tolerations,omitempty"`
-	NodeSelector            corev1.NodeSelector         `json:"nodeSelector,omitempty"`
+	Tolerations             []corev1.Toleration         `json:"tolerations,omitempty"`
+	NodeSelector            map[string]string           `json:"nodeSelector,omitempty"`
 	Targets                 []string                    `json:"targets,omitempty"`
 	Options                 []string                    `json:"options,omitempty"`
 	Policy                  Policy                      `json:"policy,omitempty"`
@@ -72,14 +72,23 @@ type Cron struct {
 
 // WarmUpStatus defines the observed state of WarmUp
 type WarmUpStatus struct {
-	Phase      string      `json:"phase"`
-	Duration   string      `json:"duration"`
-	Conditions []Condition `json:"conditions"`
+	Phase      WarmUpPhase `json:"phase"`
+	Duration   string      `json:"duration,omitempty"`
+	Conditions []Condition `json:"conditions,omitempty"`
 
 	LastScheduleTime *metav1.Time `json:"lastScheduleTime,omitempty"`
 	LastCompleteTime *metav1.Time `json:"lastCompleteTime,omitempty"`
 	LastCompleteNode string       `json:"LastCompleteNode,omitempty"`
 }
+
+type WarmUpPhase string
+
+const (
+	WarmUpPhasePending  WarmUpPhase = "Pending"
+	WarmUpPhaseRunning  WarmUpPhase = "Running"
+	WarmUpPhaseFailed   WarmUpPhase = "Failed"
+	WarmUpPhaseComplete WarmUpPhase = "Complete"
+)
 
 type Condition struct {
 	Type               string      `json:"type,omitempty"`

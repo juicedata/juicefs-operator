@@ -432,8 +432,20 @@ func (in *WarmUpSpec) DeepCopyInto(out *WarmUpSpec) {
 		**out = **in
 	}
 	in.Metadata.DeepCopyInto(&out.Metadata)
-	in.Tolerations.DeepCopyInto(&out.Tolerations)
-	in.NodeSelector.DeepCopyInto(&out.NodeSelector)
+	if in.Tolerations != nil {
+		in, out := &in.Tolerations, &out.Tolerations
+		*out = make([]corev1.Toleration, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
+	}
+	if in.NodeSelector != nil {
+		in, out := &in.NodeSelector, &out.NodeSelector
+		*out = make(map[string]string, len(*in))
+		for key, val := range *in {
+			(*out)[key] = val
+		}
+	}
 	if in.Targets != nil {
 		in, out := &in.Targets, &out.Targets
 		*out = make([]string, len(*in))

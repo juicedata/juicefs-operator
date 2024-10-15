@@ -52,6 +52,7 @@ type CacheGroupReconciler struct {
 // +kubebuilder:rbac:groups="",resources=nodes,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;delete
 // +kubebuilder:rbac:groups="",resources=pods/exec,verbs=create
+// +kubebuilder:rbac:groups="",resources=secrets,verbs=get
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -114,13 +115,19 @@ func (r *CacheGroupReconciler) sync(ctx context.Context, cg *juicefsiov1.CacheGr
 	errCh := make(chan error, 2*maxUnavailable)
 	numUnavailable := 0
 	log.V(1).Info("start to sync cache group workers", "updateStrategy", updateStrategyType, "maxUnavailable", maxUnavailable)
+	// TODO: add a webook to validate the cache group worker template
+	secret := &corev1.Secret{}
+	if err := r.Get(ctx, client.ObjectKey{Namespace: cg.Namespace, Name: cg.Spec.SecretRef.Name}, secret); err != nil {
+		log.Error(err, "failed to get secret", "secret", cg.Spec.SecretRef.Name)
+		return err
+	}
 	for node, expectState := range expectStates {
 		actualState, err := r.getActualState(ctx, cg, node)
 		if err != nil && !apierrors.IsNotFound(err) {
 			log.Error(err, "failed to get actual state", "node", node)
 			continue
 		}
-		expectWorker := builder.NewCacheGroupWorker(ctx, cg, node, expectState)
+		expectWorker := builder.NewCacheGroupWorker(ctx, cg, secret, node, expectState)
 		hash := utils.GenHash(expectWorker)
 		expectWorker.Annotations[common.LabelWorkerHash] = hash
 

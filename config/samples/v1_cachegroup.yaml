@@ -10,7 +10,9 @@ spec:
     name: juicefs-zxh-test-secret
   cleanCache: false
   updateStrategy:
-    maxUnavailable: 1
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
   worker:
     template:
       nodeSelector:

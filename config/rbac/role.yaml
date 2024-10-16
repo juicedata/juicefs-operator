@@ -27,6 +27,12 @@ rules:
   verbs:
   - create
 - apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - get
+- apiGroups:
   - juicefs.io
   resources:
   - cachegroups

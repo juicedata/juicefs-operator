@@ -8,6 +8,7 @@ rules:
   - ""
   resources:
   - nodes
+  - secrets
   verbs:
   - get
   - list
@@ -17,21 +18,17 @@ rules:
   resources:
   - pods
   verbs:
+  - create
   - delete
   - get
   - list
+  - watch
 - apiGroups:
   - ""
   resources:
   - pods/exec
   verbs:
   - create
-- apiGroups:
-  - ""
-  resources:
-  - secrets
-  verbs:
-  - get
 - apiGroups:
   - juicefs.io
   resources:

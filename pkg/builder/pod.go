@@ -35,7 +35,7 @@ var (
 		"bucket2",
 		"subdir",
 		"secret-key",
-		"secret-key-2",
+		"secret-key2",
 	}
 
 	secretStrippedEnvs = []string{
@@ -112,12 +112,9 @@ func genEnvs(cg *juicefsiov1.CacheGroup, spec juicefsiov1.CacheGroupWorkerTempla
 	return envs
 }
 
-func genComands(ctx context.Context, cg *juicefsiov1.CacheGroup, secrets *corev1.Secret, spec juicefsiov1.CacheGroupWorkerTemplate) []string {
-	secretData := make(map[string]string)
-	for k, v := range secrets.Data {
-		secretData[k] = string(v) // decode base64?
-	}
-	authCmds := GenAuthCmdWithSecret(secretData)
+func genCommands(ctx context.Context, cg *juicefsiov1.CacheGroup, secrets *corev1.Secret, spec juicefsiov1.CacheGroupWorkerTemplate) []string {
+	secretData := utils.ParseSecret(secrets)
+	authCmds := genAuthCmdWithSecret(ctx, secretData)
 	cacheGroup := GenCacheGroupName(cg)
 	mountCmds := []string{
 		"exec",
@@ -132,19 +129,23 @@ func genComands(ctx context.Context, cg *juicefsiov1.CacheGroup, secrets *corev1
 	}
 
 	cacheDirs := []string{}
-	for _, opt := range spec.Opts {
-		pair := strings.Split(opt, "=")
-		if len(pair) != 2 {
-			log.FromContext(ctx).Info("invalid opt", "opt", opt, "cg", cg.Name)
+	parsedOpts := utils.ParseOptions(ctx, spec.Opts)
+	for _, opt := range parsedOpts {
+		if opt[0] == "cache-dir" {
+			if opt[1] == "" {
+				log.FromContext(ctx).Info("invalid cache-dir option", "option", opt)
+				continue
+			}
+			cacheDirs = strings.Split(opt[1], ":")
 			continue
 		}
-		// TODO: validate cache-dir
-		if pair[0] == "cache-dir" {
-			cacheDirs = strings.Split(pair[1], ":")
-			continue
+		if opt[1] != "" {
+			opts = append(opts, strings.TrimSpace(opt[0])+"="+strings.TrimSpace(opt[1]))
+		} else {
+			opts = append(opts, strings.TrimSpace(opt[0]))
 		}
-		opts = append(opts, strings.TrimSpace(pair[0])+"="+strings.TrimSpace(pair[1]))
 	}
+
 	if len(cacheDirs) == 0 {
 		cacheDirs = append(cacheDirs, "/var/jfsCache")
 	}
@@ -204,7 +205,7 @@ func NewCacheGroupWorker(ctx context.Context, cg *juicefsiov1.CacheGroup, secret
 		worker.Spec.Containers[0].Resources = common.DefaultResources
 	}
 	worker.Spec.Containers[0].Env = genEnvs(cg, spec)
-	worker.Spec.Containers[0].Command = genComands(ctx, cg, secret, spec)
+	worker.Spec.Containers[0].Command = genCommands(ctx, cg, secret, spec)
 	return worker
 }
 
@@ -259,25 +260,11 @@ func MergeCacheGrouopWorkerTemplate(template *juicefsiov1.CacheGroupWorkerTempla
 	}
 }
 
-func GenAuthCmdWithSecret(secrets map[string]string) []string {
+func genAuthCmdWithSecret(ctx context.Context, secrets map[string]string) []string {
 	authCmds := []string{
 		common.JuiceFSBinary,
 		"auth",
 		secrets["name"],
-	}
-
-	keysCompatible := map[string]string{
-		"accesskey":  "access-key",
-		"accesskey2": "access-key2",
-		"secretkey":  "secret-key",
-		"secretkey2": "secret-key2",
-	}
-	// compatible
-	for compatibleKey, realKey := range keysCompatible {
-		if value, ok := secrets[compatibleKey]; ok {
-			secrets[realKey] = value
-			delete(secrets, compatibleKey)
-		}
 	}
 
 	for _, key := range secretKeys {
@@ -286,6 +273,18 @@ func GenAuthCmdWithSecret(secrets map[string]string) []string {
 				authCmds = append(authCmds, "--"+key, "${"+strippedKey+"}")
 			} else {
 				authCmds = append(authCmds, "--"+key, value)
+			}
+		}
+	}
+
+	// add more options with key `format-options`
+	if value, ok := secrets["format-options"]; ok {
+		formatOptions := utils.ParseOptions(ctx, strings.Split(value, ","))
+		for _, opt := range formatOptions {
+			if opt[1] != "" {
+				authCmds = append(authCmds, "--"+opt[0], opt[1])
+			} else {
+				authCmds = append(authCmds, "--"+opt[0])
 			}
 		}
 	}

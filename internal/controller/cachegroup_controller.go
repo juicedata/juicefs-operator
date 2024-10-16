@@ -121,6 +121,10 @@ func (r *CacheGroupReconciler) sync(ctx context.Context, cg *juicefsiov1.CacheGr
 		log.Error(err, "failed to get secret", "secret", cg.Spec.SecretRef.Name)
 		return err
 	}
+	if err := utils.ValidateSecret(secret); err != nil {
+		log.Error(err, "failed to validate secret")
+		return err
+	}
 	for node, expectState := range expectStates {
 		actualState, err := r.getActualState(ctx, cg, node)
 		if err != nil && !apierrors.IsNotFound(err) {

@@ -26,6 +26,31 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
+var (
+	secretKeys = []string{
+		"token",
+		"access-key",
+		"access-key2",
+		"bucket",
+		"bucket2",
+		"subdir",
+		"secret-key",
+		"secret-key2",
+	}
+
+	secretStrippedEnvs = []string{
+		"token", "secret-key", "secret-key2",
+	}
+	secretStrippedEnvMap = map[string]string{
+		"token":       "TOKEN",
+		"secret-key":  "SECRET_KEY",
+		"secret-key2": "SECRET_KEY_2",
+	}
+	secretStrippedEnvOptional = map[string]bool{
+		"secret-key2": true,
+	}
+)
+
 func GenCacheGroupName(cg *juicefsiov1.CacheGroup) string {
 	if cg.Spec.CacheGroup != "" {
 		return cg.Spec.CacheGroup
@@ -67,74 +92,34 @@ func newBasicPod(cg *juicefsiov1.CacheGroup, nodeName string) *corev1.Pod {
 }
 
 func genEnvs(cg *juicefsiov1.CacheGroup, spec juicefsiov1.CacheGroupWorkerTemplate) []corev1.EnvVar {
-	envs := []corev1.EnvVar{
-		{
-			Name: "TOKEN",
+	envs := []corev1.EnvVar{}
+	for _, k := range secretStrippedEnvs {
+		_, isOptional := secretStrippedEnvOptional[k]
+		envs = append(envs, corev1.EnvVar{
+			Name: secretStrippedEnvMap[k],
 			ValueFrom: &corev1.EnvVarSource{
 				SecretKeyRef: &corev1.SecretKeySelector{
-					Key: "token",
+					Key:      k,
+					Optional: &isOptional,
 					LocalObjectReference: corev1.LocalObjectReference{
 						Name: cg.Spec.SecretRef.Name,
 					},
 				},
 			},
-		},
-		{
-			Name: "ACCESS_KEY",
-			ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					Key: "access-key",
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: cg.Spec.SecretRef.Name,
-					},
-				},
-			},
-		},
-		{
-			Name: "SECRET_KEY",
-			ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					Key: "secret-key",
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: cg.Spec.SecretRef.Name,
-					},
-				},
-			},
-		},
-		{
-			Name: "VOL_NAME",
-			ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					Key: "name",
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: cg.Spec.SecretRef.Name,
-					},
-				},
-			},
-		},
+		})
 	}
 	envs = append(envs, spec.Env...)
 	return envs
 }
 
-func genComands(ctx context.Context, cg *juicefsiov1.CacheGroup, spec juicefsiov1.CacheGroupWorkerTemplate) []string {
-	authCmds := []string{
-		common.JuiceFSBinary,
-		"auth",
-		"${VOL_NAME}",
-		"--token",
-		"${TOKEN}",
-		"--access-key",
-		"${ACCESS_KEY}",
-		"--secret-key",
-		"${SECRET_KEY}",
-	}
-
+func genCommands(ctx context.Context, cg *juicefsiov1.CacheGroup, secrets *corev1.Secret, spec juicefsiov1.CacheGroupWorkerTemplate) []string {
+	secretData := utils.ParseSecret(secrets)
+	authCmds := genAuthCmdWithSecret(ctx, secretData)
 	cacheGroup := GenCacheGroupName(cg)
 	mountCmds := []string{
 		"exec",
 		common.JuiceFsMountBinary,
-		"${VOL_NAME}",
+		secretData["name"],
 		common.MountPoint,
 	}
 
@@ -144,19 +129,23 @@ func genComands(ctx context.Context, cg *juicefsiov1.CacheGroup, spec juicefsiov
 	}
 
 	cacheDirs := []string{}
-	for _, opt := range spec.Opts {
-		pair := strings.Split(opt, "=")
-		if len(pair) != 2 {
-			log.FromContext(ctx).Info("invalid opt", "opt", opt, "cg", cg.Name)
+	parsedOpts := utils.ParseOptions(ctx, spec.Opts)
+	for _, opt := range parsedOpts {
+		if opt[0] == "cache-dir" {
+			if opt[1] == "" {
+				log.FromContext(ctx).Info("invalid cache-dir option", "option", opt)
+				continue
+			}
+			cacheDirs = strings.Split(opt[1], ":")
 			continue
 		}
-		// TODO: validate cache-dir
-		if pair[0] == "cache-dir" {
-			cacheDirs = strings.Split(pair[1], ":")
-			continue
+		if opt[1] != "" {
+			opts = append(opts, strings.TrimSpace(opt[0])+"="+strings.TrimSpace(opt[1]))
+		} else {
+			opts = append(opts, strings.TrimSpace(opt[0]))
 		}
-		opts = append(opts, strings.TrimSpace(pair[0])+"="+strings.TrimSpace(pair[1]))
 	}
+
 	if len(cacheDirs) == 0 {
 		cacheDirs = append(cacheDirs, "/var/jfsCache")
 	}
@@ -170,7 +159,7 @@ func genComands(ctx context.Context, cg *juicefsiov1.CacheGroup, spec juicefsiov
 	return cmds
 }
 
-func NewCacheGroupWorker(ctx context.Context, cg *juicefsiov1.CacheGroup, nodeName string, spec juicefsiov1.CacheGroupWorkerTemplate) *corev1.Pod {
+func NewCacheGroupWorker(ctx context.Context, cg *juicefsiov1.CacheGroup, secret *corev1.Secret, nodeName string, spec juicefsiov1.CacheGroupWorkerTemplate) *corev1.Pod {
 	worker := newBasicPod(cg, nodeName)
 	if spec.HostNetwork != nil {
 		worker.Spec.HostNetwork = *spec.HostNetwork
@@ -216,7 +205,7 @@ func NewCacheGroupWorker(ctx context.Context, cg *juicefsiov1.CacheGroup, nodeNa
 		worker.Spec.Containers[0].Resources = common.DefaultResources
 	}
 	worker.Spec.Containers[0].Env = genEnvs(cg, spec)
-	worker.Spec.Containers[0].Command = genComands(ctx, cg, spec)
+	worker.Spec.Containers[0].Command = genCommands(ctx, cg, secret, spec)
 	return worker
 }
 
@@ -269,4 +258,36 @@ func MergeCacheGrouopWorkerTemplate(template *juicefsiov1.CacheGroupWorkerTempla
 	if overwrite.Opts != nil {
 		template.Opts = overwrite.Opts
 	}
+}
+
+func genAuthCmdWithSecret(ctx context.Context, secrets map[string]string) []string {
+	authCmds := []string{
+		common.JuiceFSBinary,
+		"auth",
+		secrets["name"],
+	}
+
+	for _, key := range secretKeys {
+		if value, ok := secrets[key]; ok {
+			if strippedKey, ok := secretStrippedEnvMap[key]; ok {
+				authCmds = append(authCmds, "--"+key, "${"+strippedKey+"}")
+			} else {
+				authCmds = append(authCmds, "--"+key, value)
+			}
+		}
+	}
+
+	// add more options with key `format-options`
+	if value, ok := secrets["format-options"]; ok {
+		formatOptions := utils.ParseOptions(ctx, strings.Split(value, ","))
+		for _, opt := range formatOptions {
+			if opt[1] != "" {
+				authCmds = append(authCmds, "--"+opt[0], opt[1])
+			} else {
+				authCmds = append(authCmds, "--"+opt[0])
+			}
+		}
+	}
+
+	return authCmds
 }

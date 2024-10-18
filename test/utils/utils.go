@@ -32,7 +32,26 @@ const (
 
 	certmanagerVersion = "v1.14.4"
 	certmanagerURLTmpl = "https://github.com/jetstack/cert-manager/releases/download/%s/cert-manager.yaml"
+
+	minioURLTmpl = "test/e2e/config/minio.yaml"
+
+	minioEndpoint = "http://test-bucket.minio.default.svc.cluster.local:9000"
+
+	SecretName = "juicefs-secret"
+
+	minioAk = "minioadmin"
+	minioSk = "minioadmin"
 )
+
+var (
+	kindCluster = "kind"
+)
+
+func init() {
+	if v, ok := os.LookupEnv("KIND_CLUSTER"); ok {
+		kindCluster = v
+	}
+}
 
 func warnError(err error) {
 	_, _ = fmt.Fprintf(GinkgoWriter, "warning: %v\n", err)
@@ -105,14 +124,14 @@ func InstallCertManager() error {
 
 // LoadImageToKindClusterWithName loads a local docker image to the kind cluster
 func LoadImageToKindClusterWithName(name string) error {
-	cluster := "kind"
-	if v, ok := os.LookupEnv("KIND_CLUSTER"); ok {
-		cluster = v
-	}
-	kindOptions := []string{"load", "docker-image", name, "--name", cluster}
+	kindOptions := []string{"load", "docker-image", name, "--name", kindCluster}
 	cmd := exec.Command("kind", kindOptions...)
 	_, err := Run(cmd)
 	return err
+}
+
+func GetKindNodeName(suffix string) string {
+	return kindCluster + "-" + suffix
 }
 
 // GetNonEmptyLines converts given command output string into individual objects
@@ -137,4 +156,54 @@ func GetProjectDir() (string, error) {
 	}
 	wd = strings.Replace(wd, "/test/e2e", "", -1)
 	return wd, nil
+}
+
+func InstallMinio() error {
+	cmd := exec.Command("kubectl", "apply", "-f", minioURLTmpl)
+	_, err := Run(cmd)
+	if err != nil {
+		return err
+	}
+	cmd = exec.Command("kubectl", "wait", "pod/minio",
+		"--for", "jsonpath={.status.conditions[?(@.type==\"Ready\")].status}=True",
+		"--namespace", "default",
+		"--timeout", "5m",
+		"-n", "default",
+	)
+	_, err = Run(cmd)
+	return err
+}
+
+func UninstallMinio() {
+	cmd := exec.Command("kubectl", "delete", "-f", minioURLTmpl)
+	if _, err := Run(cmd); err != nil {
+		warnError(err)
+	}
+}
+
+func CreateSecret(ns string) error {
+	volName := os.Getenv("JUICEFS_NAME")
+	if volName == "" {
+		volName = "csi-ci"
+	}
+	token := os.Getenv("JUICEFS_TOKEN")
+	cmd := exec.Command("kubectl", "create", "secret", "generic",
+		SecretName,
+		"--from-literal=name="+volName,
+		"--from-literal=token="+token,
+		"--from-literal=access-key="+minioAk,
+		"--from-literal=secret-key="+minioSk,
+		"--from-literal=storage=s3",
+		"--from-literal=bucket="+minioEndpoint,
+		"-n", ns,
+	)
+	_, err := Run(cmd)
+	return err
+}
+
+func DeleteSecret(ns string) {
+	cmd := exec.Command("kubectl", "delete", "secret", SecretName, "-n", ns)
+	if _, err := Run(cmd); err != nil {
+		warnError(err)
+	}
 }

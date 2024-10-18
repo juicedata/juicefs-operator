@@ -166,6 +166,9 @@ func NewCacheGroupWorker(ctx context.Context, cg *juicefsiov1.CacheGroup, secret
 	} else {
 		worker.Spec.HostNetwork = true
 	}
+	if spec.DNSPolicy != nil {
+		worker.Spec.DNSPolicy = *spec.DNSPolicy
+	}
 	worker.Spec.Tolerations = spec.Tolerations
 	worker.Spec.SchedulerName = spec.SchedulerName
 	worker.Spec.ServiceAccountName = spec.ServiceAccountName
@@ -257,6 +260,9 @@ func MergeCacheGrouopWorkerTemplate(template *juicefsiov1.CacheGroupWorkerTempla
 	}
 	if overwrite.Opts != nil {
 		template.Opts = overwrite.Opts
+	}
+	if overwrite.DNSPolicy != nil {
+		template.DNSPolicy = overwrite.DNSPolicy
 	}
 }
 

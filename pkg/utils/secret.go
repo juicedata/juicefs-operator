@@ -54,6 +54,6 @@ func ValidateSecret(secrets *corev1.Secret) error {
 		return fmt.Errorf("token is missing")
 	}
 
-	// TOOD: validate other fields, like ak/sk, bucket, etc.
+	// TODO: validate other fields, like ak/sk, bucket, etc.
 	return nil
 }

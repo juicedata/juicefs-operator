@@ -77,6 +77,8 @@ spec:
                   overwrite:
                     items:
                       properties:
+                        dnsPolicy:
+                          type: string
                         env:
                           items:
                             properties:
@@ -1469,6 +1471,8 @@ spec:
                     type: array
                   template:
                     properties:
+                      dnsPolicy:
+                        type: string
                       env:
                         items:
                           properties:

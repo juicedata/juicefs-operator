@@ -271,6 +271,11 @@ func (in *CacheGroupWorkerTemplate) DeepCopyInto(out *CacheGroupWorkerTemplate) 
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
 	}
+	if in.DNSPolicy != nil {
+		in, out := &in.DNSPolicy, &out.DNSPolicy
+		*out = new(corev1.DNSPolicy)
+		**out = **in
+	}
 	if in.Opts != nil {
 		in, out := &in.Opts, &out.Opts
 		*out = make([]string, len(*in))

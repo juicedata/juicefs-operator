@@ -1,0 +1,42 @@
+
+apiVersion: juicefs.io/v1
+kind: CacheGroup
+metadata:
+  name: e2e-test-cachegroup
+spec:
+  secretRef:
+    name: juicefs-secret
+  worker:
+    template:
+      nodeSelector:
+        juicefs.io/cg-worker: "true"
+      image: juicedata/mount:ee-5.1.1-1faf43b
+      dnsPolicy: ClusterFirstWithHostNet
+      hostNetwork: true
+      tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+      resources:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          cpu: 1
+          memory: 1Gi
+      opts:
+        - free-space-ratio=0.1
+        - group-weight=200
+    overwrite:
+    - nodes:
+        - e2e-worker2
+      resources:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          cpu: 2
+          memory: 2Gi
+      opts:
+        - free-space-ratio=0.01
+        - group-weight=100

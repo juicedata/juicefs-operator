@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.22'
+
+    - name: Build
+      run: make
+
+    - name: Lint
+      run: make lint
+
+    # - name: Test
+    #   run: make test
+
+  e2e:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.22'
+
+    - name: Set up kind
+      uses: helm/kind-action@v1
+      with:
+        config: test/e2e/config/kind-config.yaml
+        cluster_name: e2e
+
+    - name: Run e2e tests
+      env:
+        KIND_CLUSTER: e2e
+      run: make test-e2e

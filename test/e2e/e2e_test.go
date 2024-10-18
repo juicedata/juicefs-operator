@@ -17,6 +17,7 @@ limitations under the License.
 package e2e
 
 import (
+	"encoding/json"
 	"fmt"
 	"os/exec"
 	"time"
@@ -24,7 +25,10 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/juicedata/juicefs-cache-group-operator/pkg/common"
 	"github.com/juicedata/juicefs-cache-group-operator/test/utils"
+
+	corev1 "k8s.io/api/core/v1"
 )
 
 const namespace = "juicefs-cache-group-operator-system"
@@ -37,9 +41,15 @@ var _ = Describe("controller", Ordered, func() {
 		// By("installing the cert-manager")
 		// Expect(utils.InstallCertManager()).To(Succeed())
 
+		By("installing the minio")
+		Expect(utils.InstallMinio()).To(Succeed())
+
 		By("creating manager namespace")
 		cmd := exec.Command("kubectl", "create", "ns", namespace)
 		_, _ = utils.Run(cmd)
+
+		By("creating the secret")
+		Expect(utils.CreateSecret(namespace)).To(Succeed())
 	})
 
 	AfterAll(func() {
@@ -48,6 +58,12 @@ var _ = Describe("controller", Ordered, func() {
 
 		// By("uninstalling the cert-manager bundle")
 		// utils.UninstallCertManager()
+
+		By("uninstalling the minio")
+		utils.UninstallMinio()
+
+		By("deleting the secret")
+		utils.DeleteSecret(namespace)
 
 		By("removing manager namespace")
 		cmd := exec.Command("kubectl", "delete", "ns", namespace)
@@ -116,7 +132,256 @@ var _ = Describe("controller", Ordered, func() {
 				return nil
 			}
 			EventuallyWithOffset(1, verifyControllerUp, time.Minute, time.Second).Should(Succeed())
+		})
+	})
 
+	Context("CacheGroup Controller", func() {
+		cgName := "e2e-test-cachegroup"
+
+		BeforeEach(func() {
+			cmd := exec.Command("kubectl", "label", "nodes", "--all", "juicefs.io/cg-worker-", "--overwrite")
+			_, err := utils.Run(cmd)
+			ExpectWithOffset(1, err).NotTo(HaveOccurred())
+
+			cmd = exec.Command("kubectl", "apply", "-f", "test/e2e/config/e2e-test-cachegroup.yaml", "-n", namespace)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		AfterEach(func() {
+			cmd := exec.Command("kubectl", "delete", "cachegroups.juicefs.io", cgName, "-n", namespace)
+			_, err := utils.Run(cmd)
+			ExpectWithOffset(1, err).NotTo(HaveOccurred())
+
+			// vetify workers is deleted
+			verifyWorkerDeleted := func() error {
+				cmd := exec.Command("kubectl", "get", "pods", "-l", "juicefs.io/cache-group="+cgName, "-n", namespace, "--no-headers", "--ignore-not-found=true")
+				result, err := utils.Run(cmd)
+				if err != nil {
+					return fmt.Errorf("check worker pods failed, %+v", err)
+				}
+				if len(utils.GetNonEmptyLines(string(result))) != 0 {
+					return fmt.Errorf("worker pods still exists")
+				}
+				return nil
+			}
+			Eventually(verifyWorkerDeleted, time.Minute, time.Second).Should(Succeed())
+		})
+
+		RegisterFailHandler(func(message string, callerSkip ...int) {
+			// print logs
+			cmd := exec.Command("kubectl", "logs", "-l", "control-plane=controller-manager", "-n", namespace)
+			log, _ := utils.Run(cmd)
+			fmt.Println(string(log))
+			Fail(message, callerSkip...)
+		})
+
+		It("should reconcile the CacheGroup", func() {
+			By("validating that the CacheGroup resource is reconciled")
+			verifyCacheGroupReconciled := func() error {
+				cmd := exec.Command("kubectl", "get", "cachegroups.juicefs.io", cgName, "-o", "jsonpath={.status.phase}", "-n", namespace)
+				status, err := utils.Run(cmd)
+				ExpectWithOffset(1, err).NotTo(HaveOccurred())
+
+				if string(status) != "Waiting" {
+					return fmt.Errorf("CacheGroup resource in %s status", status)
+				}
+				return nil
+			}
+			Eventually(verifyCacheGroupReconciled, time.Minute, time.Second).Should(Succeed())
+
+			// validatting workers is created
+			By("validating cache group workers created")
+			cmd := exec.Command("kubectl", "label", "nodes", "--all", "juicefs.io/cg-worker=true", "--overwrite")
+			_, err := utils.Run(cmd)
+			ExpectWithOffset(1, err).NotTo(HaveOccurred())
+			verifyWorkerCreated := func() error {
+				cmd = exec.Command("kubectl", "get", "pods", "-l", "juicefs.io/cache-group="+cgName, "-n", namespace, "--no-headers")
+				result, err := utils.Run(cmd)
+				if err != nil {
+					return fmt.Errorf("worker pods not created")
+				}
+				if len(utils.GetNonEmptyLines(string(result))) != 3 {
+					return fmt.Errorf("expect 3 worker pods created, but got %d", len(utils.GetNonEmptyLines(string(result))))
+				}
+				return nil
+			}
+			Eventually(verifyWorkerCreated, 5*time.Minute, 3*time.Second).Should(Succeed())
+
+			By("validating that the CacheGroup worker spec")
+			verifyWorkerSpec := func() error {
+				cmd := exec.Command("kubectl", "get", "pods", "-l", "juicefs.io/cache-group="+cgName, "-n", namespace, "-o", "json")
+				result, err := utils.Run(cmd)
+				if err != nil {
+					return fmt.Errorf("get worker pods failed, %+v", err)
+				}
+				expectCmds := "/usr/bin/juicefs auth csi-ci --token ${TOKEN} --access-key minioadmin --bucket http://test-bucket.minio.default.svc.cluster.local:9000 --secret-key ${SECRET_KEY}\nexec /sbin/mount.juicefs csi-ci /mnt/jfs -o foreground,cache-group=juicefs-cache-group-operator-system-e2e-test-cachegroup,cache-dir=/var/jfsCache"
+				nodes := corev1.PodList{}
+				err = json.Unmarshal(result, &nodes)
+				ExpectWithOffset(1, err).NotTo(HaveOccurred())
+				for _, node := range nodes.Items {
+					ExpectWithOffset(1, node.Spec.HostNetwork).Should(BeTrue())
+					ExpectWithOffset(1, node.Spec.Containers[0].Image).Should(Equal("juicedata/mount:ee-5.1.1-1faf43b"))
+					ExpectWithOffset(1, node.Spec.Containers[0].Resources.Requests.Cpu().String()).Should(Equal("100m"))
+					ExpectWithOffset(1, node.Spec.Containers[0].Resources.Requests.Memory().String()).Should(Equal("128Mi"))
+					ExpectWithOffset(1, node.Spec.Containers[0].Resources.Limits.Cpu().String()).Should(Equal("1"))
+					ExpectWithOffset(1, node.Spec.Containers[0].Resources.Limits.Memory().String()).Should(Equal("1Gi"))
+					ExpectWithOffset(1, node.Spec.Containers[0].Command).Should(Equal([]string{"sh", "-c", expectCmds}))
+				}
+				return nil
+			}
+			Eventually(verifyWorkerSpec, time.Minute, time.Second).Should(Succeed())
+
+			By("validating cg status is up to date")
+			verifyCgStatusUpToDate := func() error {
+				// Validate pod status
+				cmd := exec.Command("kubectl", "get",
+					"cachegroups.juicefs.io", cgName, "-o", "jsonpath={.status.phase}",
+					"-n", namespace,
+				)
+				status, err := utils.Run(cmd)
+				ExpectWithOffset(1, err).NotTo(HaveOccurred())
+				if string(status) != "Ready" {
+					return fmt.Errorf("cg expect Ready status, but got %s", status)
+				}
+
+				cmd = exec.Command("kubectl", "get",
+					"cachegroups.juicefs.io", cgName, "-o", "jsonpath={.status.readyWorker}",
+					"-n", namespace,
+				)
+				readyWorker, err := utils.Run(cmd)
+				ExpectWithOffset(1, err).NotTo(HaveOccurred())
+				if string(readyWorker) != "3" {
+					return fmt.Errorf("cg expect has 3 readyWorker status, but got %s", readyWorker)
+				}
+				cmd = exec.Command("kubectl", "get",
+					"cachegroups.juicefs.io", cgName, "-o", "jsonpath={.status.expectWorker}",
+					"-n", namespace,
+				)
+				expectWorker, err := utils.Run(cmd)
+				ExpectWithOffset(1, err).NotTo(HaveOccurred())
+				if string(expectWorker) != "3" {
+					return fmt.Errorf("cg expect has 3 expectWorker status, but got %s", expectWorker)
+				}
+				return nil
+			}
+			Eventually(verifyCgStatusUpToDate, time.Minute, time.Second).Should(Succeed())
+		})
+
+		It("should reconcile the worker with node labels update", func() {
+			nodeName := utils.GetKindNodeName("worker")
+			cmd := exec.Command("kubectl", "label", "nodes", nodeName, "juicefs.io/cg-worker=true", "--overwrite")
+			_, err := utils.Run(cmd)
+			ExpectWithOffset(1, err).NotTo(HaveOccurred())
+
+			By("validating worker created")
+			verifyWorkerCreated := func() error {
+				expectWorkerName := common.GenWorkerName(cgName, nodeName)
+				cmd = exec.Command("kubectl", "wait", "pod/"+expectWorkerName,
+					"--for", "condition=Ready",
+					"--namespace", namespace,
+					"--timeout", "2m",
+				)
+				_, err = utils.Run(cmd)
+				ExpectWithOffset(1, err).NotTo(HaveOccurred())
+
+				return nil
+			}
+			Eventually(verifyWorkerCreated, time.Minute, time.Second).Should(Succeed())
+
+			By("validating worker nodename")
+			verifyWorkerNodeName := func() error {
+				expectWorkerName := common.GenWorkerName(cgName, nodeName)
+
+				// Validate pod nodeName
+				cmd = exec.Command("kubectl", "get",
+					"pods", expectWorkerName, "-o", "jsonpath={.spec.nodeName}",
+					"-n", namespace,
+				)
+				expectNodeName, err := utils.Run(cmd)
+				ExpectWithOffset(1, err).NotTo(HaveOccurred())
+				ExpectWithOffset(1, string(expectNodeName)).Should(Equal(nodeName))
+				return nil
+			}
+			Eventually(verifyWorkerNodeName, time.Minute, 3*time.Second).Should(Succeed())
+
+			By("validating that the clean redundant worker")
+			verifyCleanRedundantWorker := func() error {
+				cmd := exec.Command("kubectl", "label", "nodes", nodeName, "juicefs.io/cg-worker-", "--overwrite")
+				_, err := utils.Run(cmd)
+				ExpectWithOffset(1, err).NotTo(HaveOccurred())
+				expectWorkerName := common.GenWorkerName(cgName, nodeName)
+				// Validate pod deleted
+				cmd = exec.Command("kubectl", "get",
+					"pods", expectWorkerName,
+					"-n", namespace,
+					"--ignore-not-found=true",
+				)
+				output, err := utils.Run(cmd)
+				if err != nil {
+					return fmt.Errorf("check worker pods failed, %+v", err)
+				}
+				if len(utils.GetNonEmptyLines(string(output))) != 0 {
+					return fmt.Errorf("worker pod still exists, worker: %s, output: %s", expectWorkerName, string(output))
+				}
+				return nil
+			}
+			Eventually(verifyCleanRedundantWorker, 2*time.Minute, 3*time.Second).Should(Succeed())
+
+		})
+
+		It("should apply overwrite spec", func() {
+			cmd := exec.Command("kubectl", "apply", "-f", "test/e2e/config/e2e-test-cachegroup.overwrite.yaml", "-n", namespace)
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("validating cache group workers created")
+			cmd = exec.Command("kubectl", "label", "nodes", "--all", "juicefs.io/cg-worker=true", "--overwrite")
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+			verifyWorkerCreated := func() error {
+				cmd = exec.Command("kubectl", "get", "pods", "-l", "juicefs.io/cache-group="+cgName, "-n", namespace, "--no-headers")
+				result, err := utils.Run(cmd)
+				if err != nil {
+					return fmt.Errorf("worker pods not created")
+				}
+				if len(utils.GetNonEmptyLines(string(result))) != 3 {
+					return fmt.Errorf("expect 3 worker pods created, but got %d", len(utils.GetNonEmptyLines(string(result))))
+				}
+				return nil
+			}
+			Eventually(verifyWorkerCreated, 5*time.Minute, 3*time.Second).Should(Succeed())
+
+			By("validating that the CacheGroup worker spec")
+			verifyWorkerSpec := func() error {
+				cmd := exec.Command("kubectl", "get", "pods", "-l", "juicefs.io/cache-group="+cgName, "-n", namespace, "-o", "json")
+				result, err := utils.Run(cmd)
+				if err != nil {
+					return fmt.Errorf("get worker pods failed, %+v", err)
+				}
+				normalCmds := "/usr/bin/juicefs auth csi-ci --token ${TOKEN} --access-key minioadmin --bucket http://test-bucket.minio.default.svc.cluster.local:9000 --secret-key ${SECRET_KEY}\nexec /sbin/mount.juicefs csi-ci /mnt/jfs -o foreground,cache-group=juicefs-cache-group-operator-system-e2e-test-cachegroup,free-space-ratio=0.1,group-weight=200,cache-dir=/var/jfsCache"
+				worker2Cmds := "/usr/bin/juicefs auth csi-ci --token ${TOKEN} --access-key minioadmin --bucket http://test-bucket.minio.default.svc.cluster.local:9000 --secret-key ${SECRET_KEY}\nexec /sbin/mount.juicefs csi-ci /mnt/jfs -o foreground,cache-group=juicefs-cache-group-operator-system-e2e-test-cachegroup,free-space-ratio=0.01,group-weight=100,cache-dir=/var/jfsCache"
+				nodes := corev1.PodList{}
+				err = json.Unmarshal(result, &nodes)
+				ExpectWithOffset(1, err).NotTo(HaveOccurred())
+				for _, node := range nodes.Items {
+					ExpectWithOffset(1, node.Spec.HostNetwork).Should(BeTrue())
+					ExpectWithOffset(1, node.Spec.Containers[0].Image).Should(Equal("juicedata/mount:ee-5.1.1-1faf43b"))
+					ExpectWithOffset(1, node.Spec.Containers[0].Resources.Requests.Cpu().String()).Should(Equal("100m"))
+					ExpectWithOffset(1, node.Spec.Containers[0].Resources.Requests.Memory().String()).Should(Equal("128Mi"))
+					if node.Spec.NodeName == utils.GetKindNodeName("worker2") {
+						ExpectWithOffset(1, node.Spec.Containers[0].Command).Should(Equal([]string{"sh", "-c", worker2Cmds}))
+						ExpectWithOffset(1, node.Spec.Containers[0].Resources.Limits.Cpu().String()).Should(Equal("2"))
+						ExpectWithOffset(1, node.Spec.Containers[0].Resources.Limits.Memory().String()).Should(Equal("2Gi"))
+					} else {
+						ExpectWithOffset(1, node.Spec.Containers[0].Resources.Limits.Cpu().String()).Should(Equal("1"))
+						ExpectWithOffset(1, node.Spec.Containers[0].Resources.Limits.Memory().String()).Should(Equal("1Gi"))
+						ExpectWithOffset(1, node.Spec.Containers[0].Command).Should(Equal([]string{"sh", "-c", normalCmds}))
+					}
+				}
+				return nil
+			}
+			Eventually(verifyWorkerSpec, time.Minute, time.Second).Should(Succeed())
 		})
 	})
 })

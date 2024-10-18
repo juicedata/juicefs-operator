@@ -150,6 +150,7 @@ var _ = Describe("WarmUp Controller", func() {
 			By("Checking the status of the resource")
 			job := &batchv1.Job{}
 			err = k8sClient.Get(ctx, typeNamespacedName, job)
+			Expect(err).NotTo(HaveOccurred())
 			err = k8sClient.Get(ctx, types.NamespacedName{
 				Namespace: namespace,
 				Name:      common.GenJobName(warmup.Name),

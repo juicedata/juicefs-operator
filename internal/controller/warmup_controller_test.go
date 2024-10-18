@@ -47,8 +47,24 @@ var _ = Describe("WarmUp Controller", func() {
 		warmup := &juicefsiov1.WarmUp{}
 
 		BeforeEach(func() {
-			By("creating working pod")
+			By("creating cache group")
 			err := k8sClient.Get(ctx, types.NamespacedName{
+				Namespace: namespace,
+				Name:      cgName,
+			}, &juicefsiov1.CacheGroup{})
+			if err != nil && errors.IsNotFound(err) {
+				cg := &juicefsiov1.CacheGroup{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      cgName,
+						Namespace: namespace,
+					},
+					Spec: juicefsiov1.CacheGroupSpec{},
+				}
+				Expect(k8sClient.Create(ctx, cg)).To(Succeed())
+			}
+
+			By("creating working pod")
+			err = k8sClient.Get(ctx, types.NamespacedName{
 				Namespace: namespace,
 				Name:      common.GenWorkerName(cgName, "test"),
 			}, &corev1.Pod{})
@@ -108,6 +124,12 @@ var _ = Describe("WarmUp Controller", func() {
 				Name:      common.GenWorkerName(cgName, "test"),
 				Namespace: namespace,
 			}, worker)
+			Expect(err).NotTo(HaveOccurred())
+			cg := &juicefsiov1.CacheGroup{}
+			err = k8sClient.Get(ctx, types.NamespacedName{
+				Name:      cgName,
+				Namespace: namespace,
+			}, cg)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Cleanup worker pod")

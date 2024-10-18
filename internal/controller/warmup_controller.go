@@ -167,7 +167,10 @@ func (o *onceHandler) sync(ctx context.Context, wu *juicefsiov1.WarmUp) (err err
 func (o *onceHandler) prepareRBACForWarmUp(ctx context.Context, wu *juicefsiov1.WarmUp) error {
 	l := log.FromContext(ctx)
 	role := &rbacv1.Role{}
-	if err := o.Get(ctx, client.ObjectKey{Name: common.GenRoleName(wu.Name)}, role); err != nil {
+	if err := o.Get(ctx, client.ObjectKey{
+		Name:      common.GenRoleName(wu.Name),
+		Namespace: wu.Namespace,
+	}, role); err != nil {
 		if utils.IsNotFound(err) {
 			if err := o.Create(ctx, builder.GenRoleForWarmup(wu)); err != nil {
 				l.Error(err, "create role error", "role", role.Name)
@@ -179,7 +182,10 @@ func (o *onceHandler) prepareRBACForWarmUp(ctx context.Context, wu *juicefsiov1.
 		}
 	}
 	rbinding := &rbacv1.RoleBinding{}
-	if err := o.Get(ctx, client.ObjectKey{Name: common.GenRoleBindingName(wu.Name)}, rbinding); err != nil {
+	if err := o.Get(ctx, client.ObjectKey{
+		Name:      common.GenRoleBindingName(wu.Name),
+		Namespace: wu.Namespace,
+	}, rbinding); err != nil {
 		if utils.IsNotFound(err) {
 			if err := o.Create(ctx, builder.GenRoleBindingForWarmup(wu)); err != nil {
 				l.Error(err, "create roleBinding error", "roleBinding", rbinding.Name)

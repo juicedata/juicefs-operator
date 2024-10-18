@@ -42,15 +42,15 @@ func NewJobBuilder(wu *juicefsiov1.WarmUp, worker *corev1.Pod) *JobBuilder {
 	}
 }
 
-func (j *JobBuilder) NewWarmupJob() *batchv1.Job {
+func (j *JobBuilder) NewWarmUpJob() *batchv1.Job {
 	job := j.genBaseJob()
 	job.Spec.Template.Spec.RestartPolicy = corev1.RestartPolicyNever
 	job.Spec.Template.Spec.Tolerations = j.wu.Spec.Tolerations
 	job.Spec.Template.Spec.NodeSelector = j.wu.Spec.NodeSelector
 	job.Spec.Template.Spec.Containers = []corev1.Container{{
-		Name:    common.WarmupContainerName,
+		Name:    common.WarmUpContainerName,
 		Image:   j.worker.Spec.Containers[0].Image,
-		Command: j.getWarmupCommand(),
+		Command: j.getWarmUpCommand(),
 	}}
 	job.Spec.Template.Spec.ServiceAccountName = common.GenSaName(j.wu.Name)
 	return job
@@ -80,7 +80,7 @@ func (j *JobBuilder) genBaseJob() *batchv1.Job {
 	}
 }
 
-func (j *JobBuilder) getWarmupCommand() []string {
+func (j *JobBuilder) getWarmUpCommand() []string {
 	cmds := []string{
 		"/usr/local/bin/kubectl",
 		"-n",

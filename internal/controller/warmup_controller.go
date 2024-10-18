@@ -76,7 +76,7 @@ func (r *WarmUpReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, err
 	}
 
-	handler := r.getWarmupHandler(wu.Spec.Policy.Type)
+	handler := r.getWarmUpHandler(wu.Spec.Policy.Type)
 	if handler == nil {
 		logger.Error(fmt.Errorf("unsupported policy type %s", wu.Spec.Policy.Type), "unable to get WarmUp handler")
 		return ctrl.Result{}, nil
@@ -94,7 +94,7 @@ func (r *WarmUpReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	return ctrl.Result{}, nil
 }
 
-func (r *WarmUpReconciler) getWarmupHandler(policyType juicefsiov1.PolicyType) warmUpHandler {
+func (r *WarmUpReconciler) getWarmUpHandler(policyType juicefsiov1.PolicyType) warmUpHandler {
 	switch policyType {
 	case "":
 		fallthrough
@@ -141,7 +141,7 @@ func (o *onceHandler) sync(ctx context.Context, wu *juicefsiov1.WarmUp) (err err
 			}
 
 			jobBuilder := builder.NewJobBuilder(wu, &podList.Items[0])
-			newJob := jobBuilder.NewWarmupJob()
+			newJob := jobBuilder.NewWarmUpJob()
 			l.Info("create warmup job", "job", newJob.Name)
 			err = o.Create(ctx, newJob)
 			if err != nil {
@@ -172,7 +172,7 @@ func (o *onceHandler) prepareRBACForWarmUp(ctx context.Context, wu *juicefsiov1.
 		Namespace: wu.Namespace,
 	}, role); err != nil {
 		if utils.IsNotFound(err) {
-			if err := o.Create(ctx, builder.GenRoleForWarmup(wu)); err != nil {
+			if err := o.Create(ctx, builder.GenRoleForWarmUp(wu)); err != nil {
 				l.Error(err, "create role error", "role", role.Name)
 				return err
 			}
@@ -187,7 +187,7 @@ func (o *onceHandler) prepareRBACForWarmUp(ctx context.Context, wu *juicefsiov1.
 		Namespace: wu.Namespace,
 	}, rbinding); err != nil {
 		if utils.IsNotFound(err) {
-			if err := o.Create(ctx, builder.GenRoleBindingForWarmup(wu)); err != nil {
+			if err := o.Create(ctx, builder.GenRoleBindingForWarmUp(wu)); err != nil {
 				l.Error(err, "create roleBinding error", "roleBinding", rbinding.Name)
 				return err
 			}

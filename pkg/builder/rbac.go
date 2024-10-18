@@ -25,7 +25,7 @@ import (
 	"github.com/juicedata/juicefs-cache-group-operator/pkg/common"
 )
 
-func GenRoleBindingForWarmup(wu *juicefsiov1.WarmUp) *rbacv1.RoleBinding {
+func GenRoleBindingForWarmUp(wu *juicefsiov1.WarmUp) *rbacv1.RoleBinding {
 	return &rbacv1.RoleBinding{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            common.GenRoleBindingName(wu.Name),
@@ -45,7 +45,7 @@ func GenRoleBindingForWarmup(wu *juicefsiov1.WarmUp) *rbacv1.RoleBinding {
 	}
 }
 
-func GenRoleForWarmup(wu *juicefsiov1.WarmUp) *rbacv1.Role {
+func GenRoleForWarmUp(wu *juicefsiov1.WarmUp) *rbacv1.Role {
 	return &rbacv1.Role{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            common.GenRoleName(wu.Name),

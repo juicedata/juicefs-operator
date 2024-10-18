@@ -70,7 +70,7 @@ func run() {
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create warmup controller", "controller", "Warmup")
+		setupLog.Error(err, "unable to create warmup controller", "controller", "WarmUp")
 		os.Exit(1)
 	}
 

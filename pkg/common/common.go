@@ -24,7 +24,7 @@ import (
 const (
 	// CacheGroupContainerName is the name of cache group worker container
 	WorkerContainerName = "juicefs-cg-worker"
-	WarmupContainerName = "juicefs-warmup"
+	WarmUpContainerName = "juicefs-warmup"
 	// WorkerNamePrefix is the prefix of worker name
 	WorkerNamePrefix = "juicefs-cg-worker"
 	WarmUpNamePrefix = "juicefs-warmup"

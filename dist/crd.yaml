@@ -2908,10 +2908,25 @@ spec:
     kind: WarmUp
     listKind: WarmUpList
     plural: warmups
+    shortNames:
+    - wu
     singular: warmup
   scope: Namespaced
   versions:
-  - name: v1
+  - additionalPrinterColumns:
+    - jsonPath: .spec.cacheGroupName
+      name: CacheGroup
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    - jsonPath: .status.duration
+      name: Duration
+      type: string
+    name: v1
     schema:
       openAPIV3Schema:
         properties:
@@ -2940,54 +2955,9 @@ spec:
                     type: object
                 type: object
               nodeSelector:
-                properties:
-                  nodeSelectorTerms:
-                    items:
-                      properties:
-                        matchExpressions:
-                          items:
-                            properties:
-                              key:
-                                type: string
-                              operator:
-                                type: string
-                              values:
-                                items:
-                                  type: string
-                                type: array
-                                x-kubernetes-list-type: atomic
-                            required:
-                            - key
-                            - operator
-                            type: object
-                          type: array
-                          x-kubernetes-list-type: atomic
-                        matchFields:
-                          items:
-                            properties:
-                              key:
-                                type: string
-                              operator:
-                                type: string
-                              values:
-                                items:
-                                  type: string
-                                type: array
-                                x-kubernetes-list-type: atomic
-                            required:
-                            - key
-                            - operator
-                            type: object
-                          type: array
-                          x-kubernetes-list-type: atomic
-                      type: object
-                      x-kubernetes-map-type: atomic
-                    type: array
-                    x-kubernetes-list-type: atomic
-                required:
-                - nodeSelectorTerms
+                additionalProperties:
+                  type: string
                 type: object
-                x-kubernetes-map-type: atomic
               options:
                 items:
                   type: string
@@ -3040,19 +3010,21 @@ spec:
                   type: string
                 type: array
               tolerations:
-                properties:
-                  effect:
-                    type: string
-                  key:
-                    type: string
-                  operator:
-                    type: string
-                  tolerationSeconds:
-                    format: int64
-                    type: integer
-                  value:
-                    type: string
-                type: object
+                items:
+                  properties:
+                    effect:
+                      type: string
+                    key:
+                      type: string
+                    operator:
+                      type: string
+                    tolerationSeconds:
+                      format: int64
+                      type: integer
+                    value:
+                      type: string
+                  type: object
+                type: array
               ttlSecondsAfterFinished:
                 format: int32
                 type: integer
@@ -3086,8 +3058,6 @@ spec:
               phase:
                 type: string
             required:
-            - conditions
-            - duration
             - phase
             type: object
         type: object

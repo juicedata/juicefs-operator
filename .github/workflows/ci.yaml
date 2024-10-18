@@ -27,8 +27,8 @@ jobs:
     - name: Lint
       run: make lint
 
-    # - name: Test
-    #   run: make test
+    - name: Test
+      run: make test
 
   e2e:
     runs-on: ubuntu-latest

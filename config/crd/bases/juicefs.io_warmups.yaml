@@ -11,10 +11,25 @@ spec:
     kind: WarmUp
     listKind: WarmUpList
     plural: warmups
+    shortNames:
+    - wu
     singular: warmup
   scope: Namespaced
   versions:
-  - name: v1
+  - additionalPrinterColumns:
+    - jsonPath: .spec.cacheGroupName
+      name: CacheGroup
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    - jsonPath: .status.duration
+      name: Duration
+      type: string
+    name: v1
     schema:
       openAPIV3Schema:
         properties:

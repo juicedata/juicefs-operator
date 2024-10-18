@@ -98,6 +98,12 @@ type Condition struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:resource:scope=Namespaced
+// +kubebuilder:resource:shortName=wu
+// +kubebuilder:printcolumn:name="CacheGroup",type="string",JSONPath=`.spec.cacheGroupName`
+// +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=`.status.phase`
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=`.metadata.creationTimestamp`
+// +kubebuilder:printcolumn:name="Duration",type="string",JSONPath=`.status.duration`
 
 // WarmUp is the Schema for the warmups API
 type WarmUp struct {

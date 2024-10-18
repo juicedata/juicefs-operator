@@ -18,6 +18,7 @@ package builder
 
 import (
 	"fmt"
+	"path"
 	"strings"
 
 	batchv1 "k8s.io/api/batch/v1"
@@ -51,6 +52,7 @@ func (j *JobBuilder) NewWarmupJob() *batchv1.Job {
 		Image:   j.worker.Spec.Containers[0].Image,
 		Command: j.getWarmupCommand(),
 	}}
+	job.Spec.Template.Spec.ServiceAccountName = common.GenSaName(j.wu.Name)
 	return job
 }
 
@@ -59,7 +61,7 @@ func (j *JobBuilder) genBaseJob() *batchv1.Job {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            common.GenJobName(j.wu.Name),
 			Namespace:       j.wu.Namespace,
-			OwnerReferences: getOwnerReference(j.wu),
+			OwnerReferences: GetWarmUpOwnerReference(j.wu),
 			Labels: map[string]string{
 				common.LabelAppType: common.LabelJobValue,
 			},
@@ -79,11 +81,7 @@ func (j *JobBuilder) genBaseJob() *batchv1.Job {
 }
 
 func (j *JobBuilder) getWarmupCommand() []string {
-	targetsCmd := fmt.Sprintf("echo '%s' > /tmp/filelist.txt", strings.Join(j.wu.Spec.Targets, "\n"))
-
 	cmds := []string{
-		targetsCmd,
-		"&&",
 		"/usr/local/bin/kubectl",
 		"-n",
 		j.wu.Namespace,
@@ -91,11 +89,30 @@ func (j *JobBuilder) getWarmupCommand() []string {
 		"-it",
 		j.worker.Name,
 		"--",
-		common.JuiceFSBinary,
-		"warmup",
-		"-f",
-		"/tmp/filelist.txt",
 	}
+
+	if len(j.wu.Spec.Targets) != 0 {
+		targets := []string{}
+		for _, t := range j.wu.Spec.Targets {
+			targets = append(targets, path.Join(common.MountPoint, t))
+		}
+		targetsCmd := fmt.Sprintf("echo '%s' > /tmp/filelist.txt", strings.Join(targets, "\n"))
+		cmds = append(cmds, []string{
+			targetsCmd,
+			"&&",
+			common.JuiceFSBinary,
+			"warmup",
+			"-f",
+			"/tmp/filelist.txt",
+		}...)
+	} else {
+		cmds = append(cmds, []string{
+			common.JuiceFSBinary,
+			"warmup",
+			"/mnt/jfs",
+		}...)
+	}
+
 	for _, opt := range j.wu.Spec.Options {
 		cmds = append(cmds, fmt.Sprintf("--%s", strings.TrimSpace(opt)))
 	}
@@ -106,7 +123,7 @@ func (j *JobBuilder) getWarmupCommand() []string {
 	}
 }
 
-func getOwnerReference(wu *juicefsiov1.WarmUp) []metav1.OwnerReference {
+func GetWarmUpOwnerReference(wu *juicefsiov1.WarmUp) []metav1.OwnerReference {
 	return []metav1.OwnerReference{{
 		APIVersion: "juicefs.io/v1",
 		Kind:       "WarmUp",

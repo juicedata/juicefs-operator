@@ -29,4 +29,4 @@ jobs:
       env:
         PASSWORD: ${{ secrets.DOCKERHUB_FUSE_ACCESS_TOKEN }}
     - name: Build and push Docker image
-      run: make docker-buildx IMG=juicedata/juicefs-cache-group-opeator:${{ env.IMAGE_TAG }}
+      run: make docker-buildx IMG=juicedata/juicefs-cache-group-operator:${{ env.IMAGE_TAG }}

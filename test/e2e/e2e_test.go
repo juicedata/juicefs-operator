@@ -398,6 +398,23 @@ var _ = Describe("controller", Ordered, func() {
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
+			// validating workers are created
+			cmd = exec.Command("kubectl", "label", "nodes", "--all", "juicefs.io/cg-worker=true", "--overwrite")
+			_, err = utils.Run(cmd)
+			ExpectWithOffset(1, err).NotTo(HaveOccurred())
+			verifyWorkerCreated := func() error {
+				cmd = exec.Command("kubectl", "get", "pods", "-l", "juicefs.io/cache-group="+cgName, "-n", namespace, "--no-headers")
+				result, err := utils.Run(cmd)
+				if err != nil {
+					return fmt.Errorf("worker pods not created")
+				}
+				if len(utils.GetNonEmptyLines(string(result))) != 3 {
+					return fmt.Errorf("expect 3 worker pods created, but got %d", len(utils.GetNonEmptyLines(string(result))))
+				}
+				return nil
+			}
+			Eventually(verifyWorkerCreated, 5*time.Minute, 3*time.Second).Should(Succeed())
+
 			cmd = exec.Command("kubectl", "apply", "-f", "test/e2e/config/e2e-test-warmup.yaml", "-n", namespace)
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
@@ -426,7 +443,7 @@ var _ = Describe("controller", Ordered, func() {
 			_, err = utils.Run(cmd)
 			ExpectWithOffset(1, err).NotTo(HaveOccurred())
 
-			// vetify workers is deleted
+			// verify workers is deleted
 			verifyWorkerDeleted := func() error {
 				cmd := exec.Command("kubectl", "get", "pods", "-l", "juicefs.io/cache-group="+cgName, "-n", namespace, "--no-headers", "--ignore-not-found=true")
 				result, err := utils.Run(cmd)

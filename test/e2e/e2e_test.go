@@ -384,4 +384,121 @@ var _ = Describe("controller", Ordered, func() {
 			Eventually(verifyWorkerSpec, time.Minute, time.Second).Should(Succeed())
 		})
 	})
+
+	Context("WarmUp Controller", func() {
+		wuName := "e2e-test-warmup"
+		cgName := "e2e-test-cachegroup"
+
+		BeforeEach(func() {
+			cmd := exec.Command("kubectl", "label", "nodes", "--all", "juicefs.io/cg-worker-", "--overwrite")
+			_, err := utils.Run(cmd)
+			ExpectWithOffset(1, err).NotTo(HaveOccurred())
+
+			cmd = exec.Command("kubectl", "apply", "-f", "test/e2e/config/e2e-test-cachegroup.yaml", "-n", namespace)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			cmd = exec.Command("kubectl", "apply", "-f", "test/e2e/config/e2e-test-warmup.yaml", "-n", namespace)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		AfterEach(func() {
+			cmd := exec.Command("kubectl", "delete", "warmup.juicefs.io", wuName, "-n", namespace)
+			_, err := utils.Run(cmd)
+			ExpectWithOffset(1, err).NotTo(HaveOccurred())
+
+			// verify jobs are deleted
+			verifyJobDeleted := func() error {
+				cmd := exec.Command("kubectl", "get", "job", "-l", "app.kubernetes.io/name=juicefs-warmup-job", "-n", namespace, "--no-headers", "--ignore-not-found=true")
+				result, err := utils.Run(cmd)
+				if err != nil {
+					return fmt.Errorf("check warmup job failed, %+v", err)
+				}
+				if len(utils.GetNonEmptyLines(string(result))) != 0 {
+					return fmt.Errorf("warmup job still exists")
+				}
+				return nil
+			}
+			Eventually(verifyJobDeleted(), time.Minute, time.Second).Should(Succeed())
+
+			cmd = exec.Command("kubectl", "delete", "cachegroups.juicefs.io", cgName, "-n", namespace)
+			_, err = utils.Run(cmd)
+			ExpectWithOffset(1, err).NotTo(HaveOccurred())
+
+			// vetify workers is deleted
+			verifyWorkerDeleted := func() error {
+				cmd := exec.Command("kubectl", "get", "pods", "-l", "juicefs.io/cache-group="+cgName, "-n", namespace, "--no-headers", "--ignore-not-found=true")
+				result, err := utils.Run(cmd)
+				if err != nil {
+					return fmt.Errorf("check worker pods failed, %+v", err)
+				}
+				if len(utils.GetNonEmptyLines(string(result))) != 0 {
+					return fmt.Errorf("worker pods still exists")
+				}
+				return nil
+			}
+			Eventually(verifyWorkerDeleted, time.Minute, time.Second).Should(Succeed())
+		})
+
+		RegisterFailHandler(func(message string, callerSkip ...int) {
+			// print logs
+			cmd := exec.Command("kubectl", "logs", "-l", "control-plane=controller-manager", "-n", namespace)
+			log, _ := utils.Run(cmd)
+			fmt.Println(string(log))
+			Fail(message, callerSkip...)
+		})
+
+		It("should reconcile the WarmUp", func() {
+			By("validating that the WarmUp resource is reconciled")
+			verifyWarmUpReconciled := func() error {
+				cmd := exec.Command("kubectl", "get", "warmups.juicefs.io", cgName, "-o", "jsonpath={.status.phase}", "-n", namespace)
+				status, err := utils.Run(cmd)
+				ExpectWithOffset(1, err).NotTo(HaveOccurred())
+
+				if string(status) != "Waiting" {
+					return fmt.Errorf("WarmUp resource in %s status", status)
+				}
+				return nil
+			}
+			Eventually(verifyWarmUpReconciled, time.Minute, time.Second).Should(Succeed())
+
+			By("validating that the WarmUp job is created")
+			verifyWarmUpJobCreated := func() error {
+				cmd := exec.Command("kubectl", "get", "job", "-l", "app.kubernetes.io/name=juicefs-warmup-job", "-n", namespace, "--no-headers")
+				result, err := utils.Run(cmd)
+				if err != nil {
+					return fmt.Errorf("get warmup job failed, %+v", err)
+				}
+				if len(utils.GetNonEmptyLines(string(result))) != 1 {
+					return fmt.Errorf("expect 1 warmup job created, but got %d", len(utils.GetNonEmptyLines(string(result))))
+				}
+				return nil
+			}
+			Eventually(verifyWarmUpJobCreated, 5*time.Minute, time.Second).Should(Succeed())
+
+			By("validating warmup job completed")
+			verifyWarmUpJobCompleted := func() error {
+				cmd := exec.Command("kubectl", "get", "job", common.GenJobName(wuName), "-n", namespace, "-o", "jsonpath={.status.succeeded}")
+				result, err := utils.Run(cmd)
+				if err != nil {
+					return fmt.Errorf("get warmup job failed, %+v", err)
+				}
+				if string(result) != "1" {
+					return fmt.Errorf("expect 1 warmup job completed, but got %s", string(result))
+				}
+				return nil
+			}
+			Eventually(verifyWarmUpJobCompleted, 5*time.Minute, time.Second).Should(Succeed())
+
+			By("validating that the WarmUp status is up to date")
+			verifyWarmUpStatus := func() {
+				cmd := exec.Command("kubectl", "get", "warmups.juicefs.io", wuName, "-o", "jsonpath={.status.phase}", "-n", namespace)
+				status, err := utils.Run(cmd)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(status).Should(Equal("Complete"))
+			}
+			Eventually(verifyWarmUpStatus, 5*time.Minute, time.Second).Should(Succeed())
+		})
+	})
 })

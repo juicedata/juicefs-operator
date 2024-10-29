@@ -420,7 +420,7 @@ var _ = Describe("controller", Ordered, func() {
 				}
 				return nil
 			}
-			Eventually(verifyJobDeleted(), time.Minute, time.Second).Should(Succeed())
+			Eventually(verifyJobDeleted, time.Minute, time.Second).Should(Succeed())
 
 			cmd = exec.Command("kubectl", "delete", "cachegroups.juicefs.io", cgName, "-n", namespace)
 			_, err = utils.Run(cmd)
@@ -496,7 +496,7 @@ var _ = Describe("controller", Ordered, func() {
 				cmd := exec.Command("kubectl", "get", "warmups.juicefs.io", wuName, "-o", "jsonpath={.status.phase}", "-n", namespace)
 				status, err := utils.Run(cmd)
 				Expect(err).NotTo(HaveOccurred())
-				Expect(status).Should(Equal("Complete"))
+				Expect(status).Should(BeEquivalentTo("Complete"))
 			}
 			Eventually(verifyWarmUpStatus, 5*time.Minute, time.Second).Should(Succeed())
 		})

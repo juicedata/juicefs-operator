@@ -469,7 +469,7 @@ var _ = Describe("controller", Ordered, func() {
 		It("should reconcile the WarmUp", func() {
 			By("validating that the WarmUp resource is reconciled")
 			verifyWarmUpReconciled := func() error {
-				cmd := exec.Command("kubectl", "get", "warmups.juicefs.io", cgName, "-o", "jsonpath={.status.phase}", "-n", namespace)
+				cmd := exec.Command("kubectl", "get", "warmups.juicefs.io", wuName, "-o", "jsonpath={.status.phase}", "-n", namespace)
 				status, err := utils.Run(cmd)
 				ExpectWithOffset(1, err).NotTo(HaveOccurred())
 

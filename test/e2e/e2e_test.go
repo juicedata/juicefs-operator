@@ -473,7 +473,7 @@ var _ = Describe("controller", Ordered, func() {
 				status, err := utils.Run(cmd)
 				ExpectWithOffset(1, err).NotTo(HaveOccurred())
 
-				if string(status) != "Waiting" {
+				if string(status) != "Running" {
 					return fmt.Errorf("WarmUp resource in %s status", status)
 				}
 				return nil

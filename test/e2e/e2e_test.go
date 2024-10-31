@@ -174,7 +174,22 @@ var _ = Describe("controller", Ordered, func() {
 			// print logs
 			cmd := exec.Command("kubectl", "logs", "-l", "control-plane=controller-manager", "-n", namespace)
 			log, _ := utils.Run(cmd)
+			fmt.Println("controller-manager logs:")
 			fmt.Println(string(log))
+
+			cmd = exec.Command("kubectl", "get", "pods", "-n", namespace)
+			result, _ := utils.Run(cmd)
+			fmt.Println("pods:")
+			fmt.Println(string(result))
+
+			cmd = exec.Command("kubectl", "get", "pods", "-l", "juicefs.io/cache-group="+cgName, "-n", namespace, "--no-headers", "-o", "jsonpath='{.items[*].metadata.name}'")
+			result, _ = utils.Run(cmd)
+			if len(utils.GetNonEmptyLines(string(result))) == 1 {
+				fmt.Println("worker pod describe:")
+				cmd = exec.Command("kubectl", "describe", "pod", string(result), "-n", namespace)
+				log, _ = utils.Run(cmd)
+				fmt.Println(string(log))
+			}
 			Fail(message, callerSkip...)
 		})
 
@@ -481,8 +496,23 @@ var _ = Describe("controller", Ordered, func() {
 		RegisterFailHandler(func(message string, callerSkip ...int) {
 			// print logs
 			cmd := exec.Command("kubectl", "logs", "-l", "control-plane=controller-manager", "-n", namespace)
+			fmt.Println("controller-manager logs:")
 			log, _ := utils.Run(cmd)
 			fmt.Println(string(log))
+
+			cmd = exec.Command("kubectl", "get", "pods", "-n", namespace)
+			result, _ := utils.Run(cmd)
+			fmt.Println("pods:")
+			fmt.Println(string(result))
+
+			cmd = exec.Command("kubectl", "get", "po", "-l", fmt.Sprintf("job-name=%s", common.GenJobName(wuName)), "-n", namespace, "--no-headers", "-o", "jsonpath='{.items[*].metadata.name}'")
+			result, _ = utils.Run(cmd)
+			if len(utils.GetNonEmptyLines(string(result))) == 1 {
+				fmt.Println("warmup pod describe:")
+				cmd = exec.Command("kubectl", "describe", "pod", string(result), "-n", namespace)
+				log, _ = utils.Run(cmd)
+				fmt.Println(string(log))
+			}
 			Fail(message, callerSkip...)
 		})
 

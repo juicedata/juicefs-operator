@@ -24,11 +24,10 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
 
 	"github.com/juicedata/juicefs-cache-group-operator/pkg/common"
 	"github.com/juicedata/juicefs-cache-group-operator/test/utils"
-
-	corev1 "k8s.io/api/core/v1"
 )
 
 const namespace = "juicefs-cache-group-operator-system"
@@ -408,12 +407,30 @@ var _ = Describe("controller", Ordered, func() {
 				if err != nil {
 					return fmt.Errorf("worker pods not created")
 				}
-				if len(utils.GetNonEmptyLines(string(result))) != 3 {
-					return fmt.Errorf("expect 3 worker pods created, but got %d", len(utils.GetNonEmptyLines(string(result))))
+				if len(utils.GetNonEmptyLines(string(result))) != 1 {
+					return fmt.Errorf("expect 1 worker pods created, but got %d", len(utils.GetNonEmptyLines(string(result))))
 				}
 				return nil
 			}
 			Eventually(verifyWorkerCreated, 5*time.Minute, 3*time.Second).Should(Succeed())
+
+			By("validating cg ready")
+			verifyCgStatusUpToDate := func() error {
+				// Validate cg status
+				cmd := exec.Command("kubectl", "get",
+					"cachegroups.juicefs.io", cgName, "-o", "jsonpath={.status.phase}",
+					"-n", namespace,
+				)
+				status, err := utils.Run(cmd)
+				ExpectWithOffset(1, err).NotTo(HaveOccurred())
+				if string(status) != "Ready" {
+					return fmt.Errorf("cg expect Ready status, but got %s", status)
+				}
+				return nil
+			}
+			Eventually(verifyCgStatusUpToDate, time.Minute, time.Second).Should(Succeed())
+
+			time.Sleep(5 * time.Second)
 
 			cmd = exec.Command("kubectl", "apply", "-f", "test/e2e/config/e2e-test-warmup.yaml", "-n", namespace)
 			_, err = utils.Run(cmd)
@@ -494,26 +511,39 @@ var _ = Describe("controller", Ordered, func() {
 			}
 			Eventually(verifyWarmUpJobCreated, 5*time.Minute, time.Second).Should(Succeed())
 
-			By("validating warmup job completed")
-			verifyWarmUpJobCompleted := func() error {
-				cmd := exec.Command("kubectl", "get", "job", common.GenJobName(wuName), "-n", namespace, "-o", "jsonpath={.status.succeeded}")
+			By("validating warmup job running")
+			verifyWarmUpJobRunning := func() error {
+				cmd := exec.Command("kubectl", "get", "job", common.GenJobName(wuName), "-n", namespace, "-o", "jsonpath={.status.active}")
 				result, err := utils.Run(cmd)
 				if err != nil {
 					return fmt.Errorf("get warmup job failed, %+v", err)
 				}
 				if string(result) != "1" {
-					return fmt.Errorf("expect 1 warmup job completed, but got %s", string(result))
+					return fmt.Errorf("expect 1 warmup job running, but got %s", string(result))
 				}
 				return nil
 			}
-			Eventually(verifyWarmUpJobCompleted, 5*time.Minute, time.Second).Should(Succeed())
+			Eventually(verifyWarmUpJobRunning, 1*time.Minute, time.Second).Should(Succeed())
 
 			By("validating that the WarmUp status is up to date")
-			verifyWarmUpStatus := func() {
+			verifyWarmUpStatus := func() error {
 				cmd := exec.Command("kubectl", "get", "warmups.juicefs.io", wuName, "-o", "jsonpath={.status.phase}", "-n", namespace)
 				status, err := utils.Run(cmd)
-				Expect(err).NotTo(HaveOccurred())
-				Expect(status).Should(BeEquivalentTo("Complete"))
+				if err != nil {
+					return fmt.Errorf("get warmup job failed, %+v", err)
+				}
+				if string(status) != "Running" {
+					return fmt.Errorf("warmup in %s status", status)
+				}
+				cmd = exec.Command("kubectl", "get", "po", "-l", fmt.Sprintf("job-name=%s", common.GenJobName(wuName)), "-n", namespace, "--no-headers")
+				result, err := utils.Run(cmd)
+				if err != nil {
+					return fmt.Errorf("get warmup job pod failed, %+v", err)
+				}
+				if len(utils.GetNonEmptyLines(string(result))) != 1 {
+					return fmt.Errorf("expect 1 warmup job pod running, but got %s", string(result))
+				}
+				return nil
 			}
 			Eventually(verifyWarmUpStatus, 5*time.Minute, time.Second).Should(Succeed())
 		})

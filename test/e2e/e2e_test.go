@@ -184,8 +184,13 @@ var _ = Describe("controller", Ordered, func() {
 
 			cmd = exec.Command("kubectl", "get", "pods", "-l", "juicefs.io/cache-group="+cgName, "-n", namespace, "--no-headers", "-o", "jsonpath='{.items[*].metadata.name}'")
 			result, _ = utils.Run(cmd)
-			if len(utils.GetNonEmptyLines(string(result))) == 1 {
+			if len(utils.GetNonEmptyLines(string(result))) == 1 && string(result) != "" {
 				fmt.Println("worker pod describe:")
+				cmd = exec.Command("kubectl", "describe", "pod", string(result), "-n", namespace)
+				log, _ = utils.Run(cmd)
+				fmt.Println(string(log))
+
+				fmt.Println("worker pod log:")
 				cmd = exec.Command("kubectl", "describe", "pod", string(result), "-n", namespace)
 				log, _ = utils.Run(cmd)
 				fmt.Println(string(log))
@@ -507,8 +512,13 @@ var _ = Describe("controller", Ordered, func() {
 
 			cmd = exec.Command("kubectl", "get", "po", "-l", fmt.Sprintf("job-name=%s", common.GenJobName(wuName)), "-n", namespace, "--no-headers", "-o", "jsonpath='{.items[*].metadata.name}'")
 			result, _ = utils.Run(cmd)
-			if len(utils.GetNonEmptyLines(string(result))) == 1 {
+			if len(utils.GetNonEmptyLines(string(result))) == 1 && string(result) != "" {
 				fmt.Println("warmup pod describe:")
+				cmd = exec.Command("kubectl", "describe", "pod", string(result), "-n", namespace)
+				log, _ = utils.Run(cmd)
+				fmt.Println(string(log))
+
+				fmt.Println("warmup pod log:")
 				cmd = exec.Command("kubectl", "describe", "pod", string(result), "-n", namespace)
 				log, _ = utils.Run(cmd)
 				fmt.Println(string(log))

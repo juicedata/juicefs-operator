@@ -35,6 +35,7 @@ import (
 const (
 	namespace = "juicefs-cache-group-operator-system"
 	running   = "Running"
+	trueValue = "true"
 )
 
 var _ = Describe("controller", Ordered, func() {
@@ -57,7 +58,7 @@ var _ = Describe("controller", Ordered, func() {
 	})
 
 	AfterAll(func() {
-		if os.Getenv("IN_CI") == "true" {
+		if os.Getenv("IN_CI") == trueValue {
 			return
 		}
 		// By("uninstalling the Prometheus manager bundle")
@@ -156,7 +157,7 @@ var _ = Describe("controller", Ordered, func() {
 		})
 
 		AfterEach(func() {
-			if os.Getenv("IN_CI") == "true" {
+			if os.Getenv("IN_CI") == trueValue {
 				return
 			}
 			cmd := exec.Command("kubectl", "delete", "cachegroups.juicefs.io", cgName, "-n", namespace)
@@ -469,7 +470,7 @@ var _ = Describe("controller", Ordered, func() {
 		})
 
 		AfterEach(func() {
-			if os.Getenv("IN_CI") == "true" {
+			if os.Getenv("IN_CI") == trueValue {
 				return
 			}
 			cmd := exec.Command("kubectl", "delete", "warmup.juicefs.io", wuName, "-n", namespace)

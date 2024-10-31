@@ -30,7 +30,10 @@ import (
 	"github.com/juicedata/juicefs-cache-group-operator/test/utils"
 )
 
-const namespace = "juicefs-cache-group-operator-system"
+const (
+	namespace = "juicefs-cache-group-operator-system"
+	running   = "Running"
+)
 
 var _ = Describe("controller", Ordered, func() {
 	BeforeAll(func() {
@@ -125,7 +128,7 @@ var _ = Describe("controller", Ordered, func() {
 				)
 				status, err := utils.Run(cmd)
 				ExpectWithOffset(2, err).NotTo(HaveOccurred())
-				if string(status) != "Running" {
+				if string(status) != running {
 					return fmt.Errorf("controller pod in %s status", status)
 				}
 				return nil
@@ -490,7 +493,7 @@ var _ = Describe("controller", Ordered, func() {
 				status, err := utils.Run(cmd)
 				ExpectWithOffset(1, err).NotTo(HaveOccurred())
 
-				if string(status) != "Running" {
+				if string(status) != running {
 					return fmt.Errorf("WarmUp resource in %s status", status)
 				}
 				return nil

@@ -19,7 +19,9 @@ package e2e
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
+	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -55,6 +57,9 @@ var _ = Describe("controller", Ordered, func() {
 	})
 
 	AfterAll(func() {
+		if os.Getenv("IN_CI") == "true" {
+			return
+		}
 		// By("uninstalling the Prometheus manager bundle")
 		// utils.UninstallPrometheusOperator()
 
@@ -151,6 +156,9 @@ var _ = Describe("controller", Ordered, func() {
 		})
 
 		AfterEach(func() {
+			if os.Getenv("IN_CI") == "true" {
+				return
+			}
 			cmd := exec.Command("kubectl", "delete", "cachegroups.juicefs.io", cgName, "-n", namespace)
 			_, err := utils.Run(cmd)
 			ExpectWithOffset(1, err).NotTo(HaveOccurred())
@@ -184,7 +192,7 @@ var _ = Describe("controller", Ordered, func() {
 
 			cmd = exec.Command("kubectl", "get", "pods", "-l", "juicefs.io/cache-group="+cgName, "-n", namespace, "--no-headers", "-o", "jsonpath='{.items[*].metadata.name}'")
 			result, _ = utils.Run(cmd)
-			if len(utils.GetNonEmptyLines(string(result))) == 1 && string(result) != "" {
+			if len(utils.GetNonEmptyLines(string(result))) == 1 && strings.TrimSpace(string(result)) != "''" {
 				fmt.Println("worker pod describe:")
 				cmd = exec.Command("kubectl", "describe", "pod", string(result), "-n", namespace)
 				log, _ = utils.Run(cmd)
@@ -461,6 +469,9 @@ var _ = Describe("controller", Ordered, func() {
 		})
 
 		AfterEach(func() {
+			if os.Getenv("IN_CI") == "true" {
+				return
+			}
 			cmd := exec.Command("kubectl", "delete", "warmup.juicefs.io", wuName, "-n", namespace)
 			_, err := utils.Run(cmd)
 			ExpectWithOffset(1, err).NotTo(HaveOccurred())
@@ -512,7 +523,7 @@ var _ = Describe("controller", Ordered, func() {
 
 			cmd = exec.Command("kubectl", "get", "po", "-l", fmt.Sprintf("job-name=%s", common.GenJobName(wuName)), "-n", namespace, "--no-headers", "-o", "jsonpath='{.items[*].metadata.name}'")
 			result, _ = utils.Run(cmd)
-			if len(utils.GetNonEmptyLines(string(result))) == 1 && string(result) != "" {
+			if len(utils.GetNonEmptyLines(string(result))) == 1 && strings.TrimSpace(string(result)) != "''" {
 				fmt.Println("warmup pod describe:")
 				cmd = exec.Command("kubectl", "describe", "pod", string(result), "-n", namespace)
 				log, _ = utils.Run(cmd)

@@ -50,4 +50,27 @@ jobs:
     - name: Run e2e tests
       env:
         KIND_CLUSTER: e2e
+        IN_CI: "true"
+        JUICEFS_TOKEN: ${{ secrets.JUICEFS_TOKEN }}
       run: make test-e2e
+
+    - name: Setup upterm session
+      if: ${{ failure() }}
+      timeout-minutes: 60
+      uses: lhotari/action-upterm@v1
+
+  success-all-test:
+    runs-on: ubuntu-latest
+    needs: [ build, e2e ]
+    if: always()
+    steps:
+      - uses: technote-space/workflow-conclusion-action@v3
+      - uses: actions/checkout@v3
+
+      - name: Check Failure
+        if: env.WORKFLOW_CONCLUSION == 'failure'
+        run: exit 1
+
+      - name: Success
+        if: ${{ success() }}
+        run: echo "All Done"

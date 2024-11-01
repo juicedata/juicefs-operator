@@ -1,0 +1,6 @@
+apiVersion: juicefs.io/v1
+kind: WarmUp
+metadata:
+  name: e2e-test-warmup
+spec:
+  cacheGroupName: e2e-test-cachegroup

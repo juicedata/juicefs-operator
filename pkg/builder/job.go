@@ -82,7 +82,7 @@ func (j *JobBuilder) genBaseJob() *batchv1.Job {
 
 func (j *JobBuilder) getWarmUpCommand() []string {
 	cmds := []string{
-		"/usr/local/bin/kubectl",
+		"kubectl",
 		"-n",
 		j.wu.Namespace,
 		"exec",
@@ -119,7 +119,7 @@ func (j *JobBuilder) getWarmUpCommand() []string {
 	return []string{
 		"/bin/sh",
 		"-c",
-		strings.Join(cmds, " "),
+		fmt.Sprintf("#!/bin/bash\nset -e\n%s", strings.Join(cmds, " ")),
 	}
 }
 

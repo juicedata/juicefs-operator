@@ -36,6 +36,7 @@ const (
 	namespace = "juicefs-cache-group-operator-system"
 	running   = "Running"
 	trueValue = "true"
+	image     = "registry.cn-hangzhou.aliyuncs.com/juicedata/mount:ee-5.1.2-59d9736"
 )
 
 var _ = Describe("controller", Ordered, func() {
@@ -252,7 +253,7 @@ var _ = Describe("controller", Ordered, func() {
 				ExpectWithOffset(1, err).NotTo(HaveOccurred())
 				for _, node := range nodes.Items {
 					ExpectWithOffset(1, node.Spec.HostNetwork).Should(BeTrue())
-					ExpectWithOffset(1, node.Spec.Containers[0].Image).Should(Equal("juicedata/mount:ee-5.1.1-1faf43b"))
+					ExpectWithOffset(1, node.Spec.Containers[0].Image).Should(Equal(image))
 					ExpectWithOffset(1, node.Spec.Containers[0].Resources.Requests.Cpu().String()).Should(Equal("100m"))
 					ExpectWithOffset(1, node.Spec.Containers[0].Resources.Requests.Memory().String()).Should(Equal("128Mi"))
 					ExpectWithOffset(1, node.Spec.Containers[0].Resources.Limits.Cpu().String()).Should(Equal("1"))
@@ -397,7 +398,7 @@ var _ = Describe("controller", Ordered, func() {
 				ExpectWithOffset(1, err).NotTo(HaveOccurred())
 				for _, node := range nodes.Items {
 					ExpectWithOffset(1, node.Spec.HostNetwork).Should(BeTrue())
-					ExpectWithOffset(1, node.Spec.Containers[0].Image).Should(Equal("juicedata/mount:ee-5.1.1-1faf43b"))
+					ExpectWithOffset(1, node.Spec.Containers[0].Image).Should(Equal(image))
 					ExpectWithOffset(1, node.Spec.Containers[0].Resources.Requests.Cpu().String()).Should(Equal("100m"))
 					ExpectWithOffset(1, node.Spec.Containers[0].Resources.Requests.Memory().String()).Should(Equal("128Mi"))
 					if node.Spec.NodeName == utils.GetKindNodeName("worker2") {
@@ -439,8 +440,8 @@ var _ = Describe("controller", Ordered, func() {
 				if err != nil {
 					return fmt.Errorf("worker pods not created")
 				}
-				if len(utils.GetNonEmptyLines(string(result))) != 1 {
-					return fmt.Errorf("expect 1 worker pods created, but got %d", len(utils.GetNonEmptyLines(string(result))))
+				if len(utils.GetNonEmptyLines(string(result))) != 3 {
+					return fmt.Errorf("expect 3 worker pods created, but got %d", len(utils.GetNonEmptyLines(string(result))))
 				}
 				return nil
 			}

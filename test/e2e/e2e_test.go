@@ -19,19 +19,25 @@ package e2e
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
+	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
 
 	"github.com/juicedata/juicefs-cache-group-operator/pkg/common"
 	"github.com/juicedata/juicefs-cache-group-operator/test/utils"
-
-	corev1 "k8s.io/api/core/v1"
 )
 
-const namespace = "juicefs-cache-group-operator-system"
+const (
+	namespace = "juicefs-cache-group-operator-system"
+	running   = "Running"
+	trueValue = "true"
+	image     = "registry.cn-hangzhou.aliyuncs.com/juicedata/mount:ee-5.1.2-59d9736"
+)
 
 var _ = Describe("controller", Ordered, func() {
 	BeforeAll(func() {
@@ -53,6 +59,9 @@ var _ = Describe("controller", Ordered, func() {
 	})
 
 	AfterAll(func() {
+		if os.Getenv("IN_CI") == trueValue {
+			return
+		}
 		// By("uninstalling the Prometheus manager bundle")
 		// utils.UninstallPrometheusOperator()
 
@@ -126,7 +135,7 @@ var _ = Describe("controller", Ordered, func() {
 				)
 				status, err := utils.Run(cmd)
 				ExpectWithOffset(2, err).NotTo(HaveOccurred())
-				if string(status) != "Running" {
+				if string(status) != running {
 					return fmt.Errorf("controller pod in %s status", status)
 				}
 				return nil
@@ -149,6 +158,9 @@ var _ = Describe("controller", Ordered, func() {
 		})
 
 		AfterEach(func() {
+			if os.Getenv("IN_CI") == trueValue {
+				return
+			}
 			cmd := exec.Command("kubectl", "delete", "cachegroups.juicefs.io", cgName, "-n", namespace)
 			_, err := utils.Run(cmd)
 			ExpectWithOffset(1, err).NotTo(HaveOccurred())
@@ -172,7 +184,27 @@ var _ = Describe("controller", Ordered, func() {
 			// print logs
 			cmd := exec.Command("kubectl", "logs", "-l", "control-plane=controller-manager", "-n", namespace)
 			log, _ := utils.Run(cmd)
+			fmt.Println("controller-manager logs:")
 			fmt.Println(string(log))
+
+			cmd = exec.Command("kubectl", "get", "pods", "-n", namespace)
+			result, _ := utils.Run(cmd)
+			fmt.Println("pods:")
+			fmt.Println(string(result))
+
+			cmd = exec.Command("kubectl", "get", "pods", "-l", "juicefs.io/cache-group="+cgName, "-n", namespace, "--no-headers", "-o", "jsonpath='{.items[*].metadata.name}'")
+			result, _ = utils.Run(cmd)
+			if len(utils.GetNonEmptyLines(string(result))) == 1 && strings.TrimSpace(string(result)) != "''" {
+				fmt.Println("worker pod describe:")
+				cmd = exec.Command("kubectl", "describe", "pod", string(result), "-n", namespace)
+				log, _ = utils.Run(cmd)
+				fmt.Println(string(log))
+
+				fmt.Println("worker pod log:")
+				cmd = exec.Command("kubectl", "describe", "pod", string(result), "-n", namespace)
+				log, _ = utils.Run(cmd)
+				fmt.Println(string(log))
+			}
 			Fail(message, callerSkip...)
 		})
 
@@ -221,7 +253,7 @@ var _ = Describe("controller", Ordered, func() {
 				ExpectWithOffset(1, err).NotTo(HaveOccurred())
 				for _, node := range nodes.Items {
 					ExpectWithOffset(1, node.Spec.HostNetwork).Should(BeTrue())
-					ExpectWithOffset(1, node.Spec.Containers[0].Image).Should(Equal("juicedata/mount:ee-5.1.1-1faf43b"))
+					ExpectWithOffset(1, node.Spec.Containers[0].Image).Should(Equal(image))
 					ExpectWithOffset(1, node.Spec.Containers[0].Resources.Requests.Cpu().String()).Should(Equal("100m"))
 					ExpectWithOffset(1, node.Spec.Containers[0].Resources.Requests.Memory().String()).Should(Equal("128Mi"))
 					ExpectWithOffset(1, node.Spec.Containers[0].Resources.Limits.Cpu().String()).Should(Equal("1"))
@@ -366,7 +398,7 @@ var _ = Describe("controller", Ordered, func() {
 				ExpectWithOffset(1, err).NotTo(HaveOccurred())
 				for _, node := range nodes.Items {
 					ExpectWithOffset(1, node.Spec.HostNetwork).Should(BeTrue())
-					ExpectWithOffset(1, node.Spec.Containers[0].Image).Should(Equal("juicedata/mount:ee-5.1.1-1faf43b"))
+					ExpectWithOffset(1, node.Spec.Containers[0].Image).Should(Equal(image))
 					ExpectWithOffset(1, node.Spec.Containers[0].Resources.Requests.Cpu().String()).Should(Equal("100m"))
 					ExpectWithOffset(1, node.Spec.Containers[0].Resources.Requests.Memory().String()).Should(Equal("128Mi"))
 					if node.Spec.NodeName == utils.GetKindNodeName("worker2") {
@@ -382,6 +414,194 @@ var _ = Describe("controller", Ordered, func() {
 				return nil
 			}
 			Eventually(verifyWorkerSpec, time.Minute, time.Second).Should(Succeed())
+		})
+	})
+
+	Context("WarmUp Controller", func() {
+		wuName := "e2e-test-warmup"
+		cgName := "e2e-test-cachegroup"
+
+		BeforeEach(func() {
+			cmd := exec.Command("kubectl", "label", "nodes", "--all", "juicefs.io/cg-worker-", "--overwrite")
+			_, err := utils.Run(cmd)
+			ExpectWithOffset(1, err).NotTo(HaveOccurred())
+
+			cmd = exec.Command("kubectl", "apply", "-f", "test/e2e/config/e2e-test-cachegroup.yaml", "-n", namespace)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			// validating workers are created
+			cmd = exec.Command("kubectl", "label", "nodes", "--all", "juicefs.io/cg-worker=true", "--overwrite")
+			_, err = utils.Run(cmd)
+			ExpectWithOffset(1, err).NotTo(HaveOccurred())
+			verifyWorkerCreated := func() error {
+				cmd = exec.Command("kubectl", "get", "pods", "-l", "juicefs.io/cache-group="+cgName, "-n", namespace, "--no-headers")
+				result, err := utils.Run(cmd)
+				if err != nil {
+					return fmt.Errorf("worker pods not created")
+				}
+				if len(utils.GetNonEmptyLines(string(result))) != 3 {
+					return fmt.Errorf("expect 3 worker pods created, but got %d", len(utils.GetNonEmptyLines(string(result))))
+				}
+				return nil
+			}
+			Eventually(verifyWorkerCreated, 5*time.Minute, 3*time.Second).Should(Succeed())
+
+			By("validating cg ready")
+			verifyCgStatusUpToDate := func() error {
+				// Validate cg status
+				cmd := exec.Command("kubectl", "get",
+					"cachegroups.juicefs.io", cgName, "-o", "jsonpath={.status.phase}",
+					"-n", namespace,
+				)
+				status, err := utils.Run(cmd)
+				ExpectWithOffset(1, err).NotTo(HaveOccurred())
+				if string(status) != "Ready" {
+					return fmt.Errorf("cg expect Ready status, but got %s", status)
+				}
+				return nil
+			}
+			Eventually(verifyCgStatusUpToDate, time.Minute, time.Second).Should(Succeed())
+
+			time.Sleep(5 * time.Second)
+
+			cmd = exec.Command("kubectl", "apply", "-f", "test/e2e/config/e2e-test-warmup.yaml", "-n", namespace)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		AfterEach(func() {
+			if os.Getenv("IN_CI") == trueValue {
+				return
+			}
+			cmd := exec.Command("kubectl", "delete", "warmup.juicefs.io", wuName, "-n", namespace)
+			_, err := utils.Run(cmd)
+			ExpectWithOffset(1, err).NotTo(HaveOccurred())
+
+			// verify jobs are deleted
+			verifyJobDeleted := func() error {
+				cmd := exec.Command("kubectl", "get", "job", "-l", "app.kubernetes.io/name=juicefs-warmup-job", "-n", namespace, "--no-headers", "--ignore-not-found=true")
+				result, err := utils.Run(cmd)
+				if err != nil {
+					return fmt.Errorf("check warmup job failed, %+v", err)
+				}
+				if len(utils.GetNonEmptyLines(string(result))) != 0 {
+					return fmt.Errorf("warmup job still exists")
+				}
+				return nil
+			}
+			Eventually(verifyJobDeleted, time.Minute, time.Second).Should(Succeed())
+
+			cmd = exec.Command("kubectl", "delete", "cachegroups.juicefs.io", cgName, "-n", namespace)
+			_, err = utils.Run(cmd)
+			ExpectWithOffset(1, err).NotTo(HaveOccurred())
+
+			// verify workers is deleted
+			verifyWorkerDeleted := func() error {
+				cmd := exec.Command("kubectl", "get", "pods", "-l", "juicefs.io/cache-group="+cgName, "-n", namespace, "--no-headers", "--ignore-not-found=true")
+				result, err := utils.Run(cmd)
+				if err != nil {
+					return fmt.Errorf("check worker pods failed, %+v", err)
+				}
+				if len(utils.GetNonEmptyLines(string(result))) != 0 {
+					return fmt.Errorf("worker pods still exists")
+				}
+				return nil
+			}
+			Eventually(verifyWorkerDeleted, time.Minute, time.Second).Should(Succeed())
+		})
+
+		RegisterFailHandler(func(message string, callerSkip ...int) {
+			// print logs
+			cmd := exec.Command("kubectl", "logs", "-l", "control-plane=controller-manager", "-n", namespace)
+			fmt.Println("controller-manager logs:")
+			log, _ := utils.Run(cmd)
+			fmt.Println(string(log))
+
+			cmd = exec.Command("kubectl", "get", "pods", "-n", namespace)
+			result, _ := utils.Run(cmd)
+			fmt.Println("pods:")
+			fmt.Println(string(result))
+
+			cmd = exec.Command("kubectl", "get", "po", "-l", fmt.Sprintf("job-name=%s", common.GenJobName(wuName)), "-n", namespace, "--no-headers", "-o", "jsonpath='{.items[*].metadata.name}'")
+			result, _ = utils.Run(cmd)
+			if len(utils.GetNonEmptyLines(string(result))) == 1 && strings.TrimSpace(string(result)) != "''" {
+				fmt.Println("warmup pod describe:")
+				cmd = exec.Command("kubectl", "describe", "pod", string(result), "-n", namespace)
+				log, _ = utils.Run(cmd)
+				fmt.Println(string(log))
+
+				fmt.Println("warmup pod log:")
+				cmd = exec.Command("kubectl", "describe", "pod", string(result), "-n", namespace)
+				log, _ = utils.Run(cmd)
+				fmt.Println(string(log))
+			}
+			Fail(message, callerSkip...)
+		})
+
+		It("should reconcile the WarmUp", func() {
+			By("validating that the WarmUp resource is reconciled")
+			verifyWarmUpReconciled := func() error {
+				cmd := exec.Command("kubectl", "get", "warmups.juicefs.io", wuName, "-o", "jsonpath={.status.phase}", "-n", namespace)
+				status, err := utils.Run(cmd)
+				ExpectWithOffset(1, err).NotTo(HaveOccurred())
+
+				if string(status) != running {
+					return fmt.Errorf("WarmUp resource in %s status", status)
+				}
+				return nil
+			}
+			Eventually(verifyWarmUpReconciled, time.Minute, time.Second).Should(Succeed())
+
+			By("validating that the WarmUp job is created")
+			verifyWarmUpJobCreated := func() error {
+				cmd := exec.Command("kubectl", "get", "job", "-l", "app.kubernetes.io/name=juicefs-warmup-job", "-n", namespace, "--no-headers")
+				result, err := utils.Run(cmd)
+				if err != nil {
+					return fmt.Errorf("get warmup job failed, %+v", err)
+				}
+				if len(utils.GetNonEmptyLines(string(result))) != 1 {
+					return fmt.Errorf("expect 1 warmup job created, but got %d", len(utils.GetNonEmptyLines(string(result))))
+				}
+				return nil
+			}
+			Eventually(verifyWarmUpJobCreated, 5*time.Minute, time.Second).Should(Succeed())
+
+			By("validating warmup job running")
+			verifyWarmUpJobRunning := func() error {
+				cmd := exec.Command("kubectl", "get", "job", common.GenJobName(wuName), "-n", namespace, "-o", "jsonpath={.status.active}")
+				result, err := utils.Run(cmd)
+				if err != nil {
+					return fmt.Errorf("get warmup job failed, %+v", err)
+				}
+				if string(result) != "1" {
+					return fmt.Errorf("expect 1 warmup job running, but got %s", string(result))
+				}
+				return nil
+			}
+			Eventually(verifyWarmUpJobRunning, 1*time.Minute, time.Second).Should(Succeed())
+
+			By("validating that the WarmUp status is up to date")
+			verifyWarmUpStatus := func() error {
+				cmd := exec.Command("kubectl", "get", "warmups.juicefs.io", wuName, "-o", "jsonpath={.status.phase}", "-n", namespace)
+				status, err := utils.Run(cmd)
+				if err != nil {
+					return fmt.Errorf("get warmup job failed, %+v", err)
+				}
+				if string(status) != "Running" {
+					return fmt.Errorf("warmup in %s status", status)
+				}
+				cmd = exec.Command("kubectl", "get", "po", "-l", fmt.Sprintf("job-name=%s", common.GenJobName(wuName)), "-n", namespace, "--no-headers")
+				result, err := utils.Run(cmd)
+				if err != nil {
+					return fmt.Errorf("get warmup job pod failed, %+v", err)
+				}
+				if len(utils.GetNonEmptyLines(string(result))) != 1 {
+					return fmt.Errorf("expect 1 warmup job pod running, but got %s", string(result))
+				}
+				return nil
+			}
+			Eventually(verifyWarmUpStatus, 5*time.Minute, time.Second).Should(Succeed())
 		})
 	})
 })

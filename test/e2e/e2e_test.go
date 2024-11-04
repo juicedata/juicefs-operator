@@ -182,7 +182,7 @@ var _ = Describe("controller", Ordered, func() {
 
 		RegisterFailHandler(func(message string, callerSkip ...int) {
 			// print logs
-			cmd := exec.Command("kubectl", "logs", "-l", "control-plane=controller-manager", "-n", namespace)
+			cmd := exec.Command("kubectl", "logs", "--tail=-1", "-l", "control-plane=controller-manager", "-n", namespace)
 			log, _ := utils.Run(cmd)
 			fmt.Println("controller-manager logs:")
 			fmt.Println(string(log))

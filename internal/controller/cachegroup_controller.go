@@ -131,7 +131,8 @@ func (r *CacheGroupReconciler) sync(ctx context.Context, cg *juicefsiov1.CacheGr
 			log.Error(err, "failed to get actual state", "node", node)
 			continue
 		}
-		expectWorker := builder.NewCacheGroupWorker(ctx, cg, secret, node, expectState)
+		podBuilder := builder.NewPodBuilder(cg, secret, node, expectState)
+		expectWorker := podBuilder.NewCacheGroupWorker(ctx)
 		hash := utils.GenHash(expectWorker)
 		expectWorker.Annotations[common.LabelWorkerHash] = hash
 

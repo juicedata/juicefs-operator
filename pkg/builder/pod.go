@@ -16,12 +16,17 @@ package builder
 
 import (
 	"context"
+	"fmt"
+	"regexp"
 	"strings"
+	"time"
 
 	juicefsiov1 "github.com/juicedata/juicefs-cache-group-operator/api/v1"
 	"github.com/juicedata/juicefs-cache-group-operator/pkg/common"
 	"github.com/juicedata/juicefs-cache-group-operator/pkg/utils"
+
 	corev1 "k8s.io/api/core/v1"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -52,27 +57,29 @@ var (
 )
 
 type PodBuilder struct {
-	volName    string
-	cg         *juicefsiov1.CacheGroup
-	node       string
-	spec       juicefsiov1.CacheGroupWorkerTemplate
-	secretData map[string]string
-	initConfig string
+	volName      string
+	cg           *juicefsiov1.CacheGroup
+	node         string
+	spec         juicefsiov1.CacheGroupWorkerTemplate
+	secretData   map[string]string
+	initConfig   string
+	backUpWorker bool
 }
 
-func NewPodBuilder(cg *juicefsiov1.CacheGroup, secret *corev1.Secret, node string, spec juicefsiov1.CacheGroupWorkerTemplate) *PodBuilder {
+func NewPodBuilder(cg *juicefsiov1.CacheGroup, secret *corev1.Secret, node string, spec juicefsiov1.CacheGroupWorkerTemplate, backUpWorker bool) *PodBuilder {
 	secretData := utils.ParseSecret(secret)
 	initconfig := ""
 	if v, ok := secretData["initconfig"]; ok && v != "" {
 		initconfig = v
 	}
 	return &PodBuilder{
-		secretData: secretData,
-		volName:    secretData["name"],
-		cg:         cg,
-		node:       node,
-		spec:       spec,
-		initConfig: initconfig,
+		secretData:   secretData,
+		volName:      secretData["name"],
+		cg:           cg,
+		node:         node,
+		spec:         spec,
+		initConfig:   initconfig,
+		backUpWorker: backUpWorker,
 	}
 }
 
@@ -215,6 +222,9 @@ func (p *PodBuilder) genCommands(ctx context.Context) []string {
 		cacheDirs = append(cacheDirs, "/var/jfsCache")
 	}
 	opts = append(opts, "cache-dir="+strings.Join(cacheDirs, ":"))
+	if p.backUpWorker {
+		opts = append(opts, "group-backup")
+	}
 	mountCmds = append(mountCmds, "-o", strings.Join(opts, ","))
 	cmds := []string{
 		"sh",
@@ -301,6 +311,16 @@ func (p *PodBuilder) NewCacheGroupWorker(ctx context.Context) *corev1.Pod {
 	}
 	worker.Spec.Containers[0].Env = p.genEnvs()
 	worker.Spec.Containers[0].Command = p.genCommands(ctx)
+
+	hash := utils.GenHash(worker)
+
+	// The following fields do not participate in the hash calculation.
+	worker.Annotations[common.LabelWorkerHash] = hash
+	if p.backUpWorker {
+		backupAt := time.Now().Format(time.RFC3339)
+		worker.Annotations[common.AnnoBackupWorker] = backupAt
+	}
+
 	return worker
 }
 
@@ -356,4 +376,16 @@ func MergeCacheGrouopWorkerTemplate(template *juicefsiov1.CacheGroupWorkerTempla
 	if overwrite.DNSPolicy != nil {
 		template.DNSPolicy = overwrite.DNSPolicy
 	}
+}
+
+func UpdateWorkerGroupWeight(worker *corev1.Pod, weight int) {
+	cmd := worker.Spec.Containers[0].Command[2]
+	weightStr := fmt.Sprint(weight)
+	if strings.Contains(cmd, "group-weight") {
+		regex := regexp.MustCompile("group-weight=[0-9]+")
+		cmd = regex.ReplaceAllString(cmd, "group-weight="+weightStr)
+	} else {
+		cmd = cmd + ",group-weight=" + weightStr
+	}
+	worker.Spec.Containers[0].Command[2] = cmd
 }

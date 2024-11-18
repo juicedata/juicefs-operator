@@ -42,6 +42,9 @@ const (
 	LabelWorkerValue = "juicefs-cache-group-worker"
 	LabelAppType     = "app.kubernetes.io/name"
 	LabelJobValue    = "juicefs-warmup-job"
+
+	AnnoBackupWorker        = "juicefs.io/backup-worker"
+	AnnoWaitingDeleteWorker = "juicefs.io/waiting-delete-worker"
 )
 
 var (

@@ -18,6 +18,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"time"
 )
 
 func ToPtr[T any](v T) *T {
@@ -47,4 +48,12 @@ func GenHash(object interface{}) string {
 	data, _ := json.Marshal(object)
 	hash := sha256.Sum256(data)
 	return hex.EncodeToString(hash[:])
+}
+
+func MustParseTime(s string) time.Time {
+	t, err := time.Parse(time.RFC3339, s)
+	if err != nil {
+		panic(err)
+	}
+	return t
 }

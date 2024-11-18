@@ -21,6 +21,7 @@ import (
 
 	juicefsiov1 "github.com/juicedata/juicefs-cache-group-operator/api/v1"
 	"github.com/juicedata/juicefs-cache-group-operator/pkg/common"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -163,6 +164,48 @@ func TestPodBuilder_genCommands(t *testing.T) {
 			got := tt.podBuilder.genCommands(ctx)
 			if !reflect.DeepEqual(got, tt.expected) {
 				t.Errorf("genCommands() = %v, want %v", got, tt.expected)
+			}
+		})
+	}
+}
+func TestUpdateWorkerGroupWeight(t *testing.T) {
+	tests := []struct {
+		name     string
+		worker   *corev1.Pod
+		weight   int
+		expected string
+	}{
+		{
+			name: "no group-weight option",
+			worker: &corev1.Pod{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{{
+						Command: []string{"sh", "-c", "cp /etc/juicefs/zxh-test-2.conf /root/.juicefs\nexec /sbin/mount.juicefs zxh-test-2 /mnt/jfs -o foreground,cache-group=juicefs-cache-group-cachegroup-sample,cache-dir=/var/jfsCache"},
+					}},
+				},
+			},
+			weight:   10,
+			expected: "cp /etc/juicefs/zxh-test-2.conf /root/.juicefs\nexec /sbin/mount.juicefs zxh-test-2 /mnt/jfs -o foreground,cache-group=juicefs-cache-group-cachegroup-sample,cache-dir=/var/jfsCache,group-weight=10",
+		},
+		{
+			name: "with group-weight option",
+			worker: &corev1.Pod{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{{
+						Command: []string{"sh", "-c", "cp /etc/juicefs/zxh-test-2.conf /root/.juicefs\nexec /sbin/mount.juicefs zxh-test-2 /mnt/jfs -o foreground,cache-group=juicefs-cache-group-cachegroup-sample,cache-dir=/var/jfsCache,group-weight=10"},
+					}},
+				},
+			},
+			weight:   0,
+			expected: "cp /etc/juicefs/zxh-test-2.conf /root/.juicefs\nexec /sbin/mount.juicefs zxh-test-2 /mnt/jfs -o foreground,cache-group=juicefs-cache-group-cachegroup-sample,cache-dir=/var/jfsCache,group-weight=0",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			UpdateWorkerGroupWeight(tt.worker, tt.weight)
+			if tt.worker.Spec.Containers[0].Command[2] != tt.expected {
+				t.Errorf("UpdateWorkerGroupWeight() = %v, want %v", tt.worker.Spec.Containers[0].Command[2], tt.expected)
 			}
 		})
 	}

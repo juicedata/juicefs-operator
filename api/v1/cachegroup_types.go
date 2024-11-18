@@ -145,10 +145,12 @@ type CacheGroupStatus struct {
 	Phase      CacheGroupPhase       `json:"phase,omitempty"`
 	Conditions []CacheGroupCondition `json:"conditions,omitempty"`
 
-	ReadyWorker  int32  `json:"readyWorker,omitempty"`
-	ExpectWorker int32  `json:"expectWorker,omitempty"`
-	ReadyStr     string `json:"readyStr,omitempty"`
-	CacheGroup   string `json:"cacheGroup,omitempty"`
+	ReadyWorker          int32  `json:"readyWorker,omitempty"`
+	BackUpWorker         int32  `json:"backUpWorker,omitempty"`
+	WaitingDeletedWorker int32  `json:"waitingDeletedWorker,omitempty"`
+	ExpectWorker         int32  `json:"expectWorker,omitempty"`
+	ReadyStr             string `json:"readyStr,omitempty"`
+	CacheGroup           string `json:"cacheGroup,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -156,6 +158,8 @@ type CacheGroupStatus struct {
 // +kubebuilder:resource:shortName=cg
 // +kubebuilder:printcolumn:name="Cache Group",type="string",JSONPath=".status.cacheGroup"
 // +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase"
+// +kubebuilder:printcolumn:name="Back up",type="string",JSONPath=".status.backUpWorker"
+// +kubebuilder:printcolumn:name="Waiting Deleted",type="string",JSONPath=".status.WaitingDeletedWorker"
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.readyStr"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 // CacheGroup is the Schema for the cachegroups API

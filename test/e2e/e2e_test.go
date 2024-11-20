@@ -155,6 +155,22 @@ var _ = Describe("controller", Ordered, func() {
 			cmd = exec.Command("kubectl", "apply", "-f", "test/e2e/config/e2e-test-cachegroup.yaml", "-n", namespace)
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
+
+			By("validating cg status is up to date")
+			verifyCgStatusUpToDate := func() error {
+				// Validate pod status
+				cmd := exec.Command("kubectl", "get",
+					"cachegroups.juicefs.io", cgName, "-o", "jsonpath={.status.phase}",
+					"-n", namespace,
+				)
+				status, err := utils.Run(cmd)
+				ExpectWithOffset(1, err).NotTo(HaveOccurred())
+				if string(status) != "Waiting" {
+					return fmt.Errorf("cg expect Waiting status, but got %s", status)
+				}
+				return nil
+			}
+			Eventually(verifyCgStatusUpToDate, time.Minute, time.Second).Should(Succeed())
 		})
 
 		AfterEach(func() {
@@ -252,13 +268,17 @@ var _ = Describe("controller", Ordered, func() {
 				err = json.Unmarshal(result, &nodes)
 				ExpectWithOffset(1, err).NotTo(HaveOccurred())
 				for _, node := range nodes.Items {
+					checkCmd := expectCmds
+					if node.Annotations[common.AnnoBackupWorker] != "" {
+						checkCmd = checkCmd + ",group-backup"
+					}
 					ExpectWithOffset(1, node.Spec.HostNetwork).Should(BeTrue())
 					ExpectWithOffset(1, node.Spec.Containers[0].Image).Should(Equal(image))
 					ExpectWithOffset(1, node.Spec.Containers[0].Resources.Requests.Cpu().String()).Should(Equal("100m"))
 					ExpectWithOffset(1, node.Spec.Containers[0].Resources.Requests.Memory().String()).Should(Equal("128Mi"))
 					ExpectWithOffset(1, node.Spec.Containers[0].Resources.Limits.Cpu().String()).Should(Equal("1"))
 					ExpectWithOffset(1, node.Spec.Containers[0].Resources.Limits.Memory().String()).Should(Equal("1Gi"))
-					ExpectWithOffset(1, node.Spec.Containers[0].Command).Should(Equal([]string{"sh", "-c", expectCmds}))
+					ExpectWithOffset(1, node.Spec.Containers[0].Command).Should(Equal([]string{"sh", "-c", checkCmd}))
 				}
 				return nil
 			}
@@ -397,23 +417,124 @@ var _ = Describe("controller", Ordered, func() {
 				err = json.Unmarshal(result, &nodes)
 				ExpectWithOffset(1, err).NotTo(HaveOccurred())
 				for _, node := range nodes.Items {
+					checkCmd := normalCmds
+					if node.Spec.NodeName == utils.GetKindNodeName("worker2") {
+						checkCmd = worker2Cmds
+					}
+					if node.Annotations[common.AnnoBackupWorker] != "" {
+						checkCmd = checkCmd + ",group-backup"
+					}
 					ExpectWithOffset(1, node.Spec.HostNetwork).Should(BeTrue())
 					ExpectWithOffset(1, node.Spec.Containers[0].Image).Should(Equal(image))
 					ExpectWithOffset(1, node.Spec.Containers[0].Resources.Requests.Cpu().String()).Should(Equal("100m"))
 					ExpectWithOffset(1, node.Spec.Containers[0].Resources.Requests.Memory().String()).Should(Equal("128Mi"))
+					ExpectWithOffset(1, node.Spec.Containers[0].Command).Should(Equal([]string{"sh", "-c", checkCmd}))
 					if node.Spec.NodeName == utils.GetKindNodeName("worker2") {
-						ExpectWithOffset(1, node.Spec.Containers[0].Command).Should(Equal([]string{"sh", "-c", worker2Cmds}))
 						ExpectWithOffset(1, node.Spec.Containers[0].Resources.Limits.Cpu().String()).Should(Equal("2"))
 						ExpectWithOffset(1, node.Spec.Containers[0].Resources.Limits.Memory().String()).Should(Equal("2Gi"))
 					} else {
 						ExpectWithOffset(1, node.Spec.Containers[0].Resources.Limits.Cpu().String()).Should(Equal("1"))
 						ExpectWithOffset(1, node.Spec.Containers[0].Resources.Limits.Memory().String()).Should(Equal("1Gi"))
-						ExpectWithOffset(1, node.Spec.Containers[0].Command).Should(Equal([]string{"sh", "-c", normalCmds}))
 					}
 				}
 				return nil
 			}
 			Eventually(verifyWorkerSpec, time.Minute, time.Second).Should(Succeed())
+		})
+
+		It("should gracefully handle member change ", func() {
+			cmd := exec.Command("kubectl", "apply", "-f", "test/e2e/config/e2e-test-cachegroup.member_change.yaml", "-n", namespace)
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			controlPlane := utils.GetKindNodeName("control-plane")
+			worker := utils.GetKindNodeName("worker")
+			worker2 := utils.GetKindNodeName("worker2")
+
+			cmd = exec.Command("kubectl", "label", "nodes", controlPlane, worker, "juicefs.io/cg-worker=true", "--overwrite")
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("validating cg status is up to date")
+			verifyCgStatusUpToDate := func() error {
+				cmd = exec.Command("kubectl", "get",
+					"cachegroups.juicefs.io", cgName, "-o", "jsonpath={.status.readyWorker}",
+					"-n", namespace,
+				)
+				readyWorker, err := utils.Run(cmd)
+				ExpectWithOffset(1, err).NotTo(HaveOccurred())
+				if string(readyWorker) != "2" {
+					return fmt.Errorf("cg expect has 2 readyWorker status, but got %s", readyWorker)
+				}
+				return nil
+			}
+			Eventually(verifyCgStatusUpToDate, 5*time.Minute, 3*time.Second).Should(Succeed())
+
+			cmd = exec.Command("kubectl", "label", "nodes", worker2, "juicefs.io/cg-worker=true", "--overwrite")
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+			verifyCgStatusUpToDate = func() error {
+				cmd = exec.Command("kubectl", "get",
+					"cachegroups.juicefs.io", cgName, "-o", "jsonpath={.status.readyWorker}",
+					"-n", namespace,
+				)
+				readyWorker, err := utils.Run(cmd)
+				ExpectWithOffset(1, err).NotTo(HaveOccurred())
+				if string(readyWorker) != "3" {
+					return fmt.Errorf("cg expect has 3 readyWorker status, but got %s", readyWorker)
+				}
+				return nil
+			}
+			Eventually(verifyCgStatusUpToDate, 5*time.Minute, 3*time.Second).Should(Succeed())
+
+			By("validating new node should be as backup node")
+			verifyBackupWorkerSpec := func() error {
+				cmd := exec.Command("kubectl", "get", "pods", "-l", "juicefs.io/cache-group="+cgName, "-n", namespace, "-o", "json")
+				result, err := utils.Run(cmd)
+				if err != nil {
+					return fmt.Errorf("get worker pods failed, %+v", err)
+				}
+				worker2Cmds := "/usr/bin/juicefs auth csi-ci --token ${TOKEN} --access-key minioadmin --bucket http://test-bucket.minio.default.svc.cluster.local:9000 --secret-key ${SECRET_KEY}\nexec /sbin/mount.juicefs csi-ci /mnt/jfs -o foreground,cache-group=juicefs-cache-group-operator-system-e2e-test-cachegroup,cache-dir=/var/jfsCache,group-backup"
+				nodes := corev1.PodList{}
+				err = json.Unmarshal(result, &nodes)
+				ExpectWithOffset(1, err).NotTo(HaveOccurred())
+				for _, node := range nodes.Items {
+					if node.Spec.NodeName == worker2 {
+						ExpectWithOffset(1, node.Spec.Containers[0].Command).Should(Equal([]string{"sh", "-c", worker2Cmds}))
+					}
+				}
+				return nil
+			}
+			Eventually(verifyBackupWorkerSpec, time.Minute, time.Second).Should(Succeed())
+
+			verifyWarmupFile := func() error {
+				cmd = exec.Command("kubectl", "exec", "-i", "-n",
+					namespace, "-c", common.WorkerContainerName, common.GenWorkerName("e2e-test-cachegroup", worker), "--",
+					"sh", "-c", "echo 1 > /mnt/jfs/cache-group-test.txt")
+				_, err = utils.Run(cmd)
+				return err
+			}
+			Eventually(verifyWarmupFile, time.Minute, time.Second).Should(Succeed())
+
+			cmd = exec.Command("kubectl", "label", "nodes", worker, "juicefs.io/cg-worker-")
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			verifyWorkerWeightToZero := func() error {
+				cmd := exec.Command("kubectl", "get", "pods", common.GenWorkerName(cgName, worker), "-n", namespace, "-o", "json")
+				result, err := utils.Run(cmd)
+				if err != nil {
+					return fmt.Errorf("get worker pods failed, %+v", err)
+				}
+				workerNode := corev1.Pod{}
+				err = json.Unmarshal(result, &workerNode)
+				ExpectWithOffset(1, err).NotTo(HaveOccurred())
+				if !strings.Contains(workerNode.Spec.Containers[0].Command[2], "group-weight=0") {
+					return fmt.Errorf("worker weight not set to 0")
+				}
+				return nil
+			}
+			Eventually(verifyWorkerWeightToZero, time.Minute, time.Second).Should(Succeed())
 		})
 	})
 

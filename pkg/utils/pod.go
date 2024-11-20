@@ -39,7 +39,7 @@ func IsPodReady(pod corev1.Pod) bool {
 
 // IsMountPointReady checks if the mount point is ready in the given pod
 func IsMountPointReady(ctx context.Context, pod corev1.Pod, mountPoint string) bool {
-	log := log.FromContext(ctx).WithName("checkMountPoint").WithValues("worker", pod.Name)
+	log := log.FromContext(ctx).WithValues("worker", pod.Name)
 
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()

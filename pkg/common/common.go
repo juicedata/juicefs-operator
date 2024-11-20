@@ -16,6 +16,7 @@ package common
 
 import (
 	"fmt"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -58,6 +59,8 @@ var (
 			corev1.ResourceMemory: resource.MustParse("1Gi"),
 		},
 	}
+
+	BackupWorkerDuration = 10 * time.Minute
 )
 
 func GenWorkerName(cgName string, nodeName string) string {

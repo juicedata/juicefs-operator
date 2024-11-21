@@ -512,7 +512,24 @@ var _ = Describe("controller", Ordered, func() {
 					namespace, "-c", common.WorkerContainerName, common.GenWorkerName("e2e-test-cachegroup", worker), "--",
 					"sh", "-c", "echo 1 > /mnt/jfs/cache-group-test.txt")
 				_, err = utils.Run(cmd)
-				return err
+
+				// check block bytes
+				cmd = exec.Command("kubectl", "exec", "-i", "-n",
+					namespace, "-c", common.WorkerContainerName, common.GenWorkerName("e2e-test-cachegroup", worker), "--",
+					"sh", "-c", "cat /mnt/jfs/.stats | grep blockcache.bytes")
+				result, err := utils.Run(cmd)
+				if err != nil {
+					return fmt.Errorf("get block bytes failed, %+v", err)
+				}
+				var blockBytes int
+				_, err = fmt.Sscanf(strings.Trim(string(result), "\n"), "blockcache.bytes: %d", &blockBytes)
+				if err != nil {
+					return fmt.Errorf("failed to scan block bytes: %v", err)
+				}
+				if blockBytes == 0 {
+					return fmt.Errorf("block bytes is ")
+				}
+				return nil
 			}
 			Eventually(verifyWarmupFile, time.Minute, time.Second).Should(Succeed())
 

@@ -83,6 +83,20 @@ spec:
                   overwrite:
                     items:
                       properties:
+                        cacheDirs:
+                          items:
+                            properties:
+                              name:
+                                type: string
+                              path:
+                                type: string
+                              type:
+                                enum:
+                                - HostPath
+                                - PVC
+                                type: string
+                            type: object
+                          type: array
                         dnsPolicy:
                           type: string
                         env:
@@ -1477,6 +1491,20 @@ spec:
                     type: array
                   template:
                     properties:
+                      cacheDirs:
+                        items:
+                          properties:
+                            name:
+                              type: string
+                            path:
+                              type: string
+                            type:
+                              enum:
+                              - HostPath
+                              - PVC
+                              type: string
+                          type: object
+                        type: array
                       dnsPolicy:
                         type: string
                       env:

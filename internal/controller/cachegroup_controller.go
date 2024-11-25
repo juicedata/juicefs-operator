@@ -229,7 +229,7 @@ func (r *CacheGroupReconciler) parseExpectState(ctx context.Context, cg *juicefs
 		for _, overwrite := range cg.Spec.Worker.Overwrite {
 			if utils.SliceContains(overwrite.Nodes, node.Name) ||
 				(overwrite.NodeSelector != nil && utils.NodeSelectorContains(overwrite.NodeSelector, node.Labels)) {
-				builder.MergeCacheGrouopWorkerTemplate(expectState, overwrite)
+				builder.MergeCacheGroupWorkerTemplate(expectState, overwrite)
 			}
 		}
 		expectStates[node.Name] = *expectState

@@ -25,6 +25,24 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
+type CacheDirType string
+
+var (
+	CacheDirTypeHostPath CacheDirType = "HostPath"
+	CacheDirTypePVC      CacheDirType = "PVC"
+)
+
+type CacheDir struct {
+	// +kubebuilder:validation:Enum=HostPath;PVC
+	Type CacheDirType `json:"type,omitempty"`
+	// required for HostPath type
+	// +optional
+	Path string `json:"path,omitempty"`
+	// required for PVC type
+	// +optional
+	Name string `json:"name,omitempty"`
+}
+
 // CacheGroupWorkerTemplate defines cache group worker template
 type CacheGroupWorkerTemplate struct {
 	NodeSelector       map[string]string   `json:"nodeSelector,omitempty"`
@@ -32,6 +50,7 @@ type CacheGroupWorkerTemplate struct {
 	HostNetwork        *bool               `json:"hostNetwork,omitempty"`
 	SchedulerName      string              `json:"schedulerName,omitempty"`
 	Tolerations        []corev1.Toleration `json:"tolerations,omitempty"`
+	CacheDirs          []CacheDir          `json:"cacheDirs,omitempty"`
 
 	// Container image.
 	// More info: https://kubernetes.io/docs/concepts/containers/images

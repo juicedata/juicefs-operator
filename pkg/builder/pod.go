@@ -57,13 +57,14 @@ var (
 )
 
 type PodBuilder struct {
-	volName      string
-	cg           *juicefsiov1.CacheGroup
-	node         string
-	spec         juicefsiov1.CacheGroupWorkerTemplate
-	secretData   map[string]string
-	initConfig   string
-	backUpWorker bool
+	volName              string
+	cg                   *juicefsiov1.CacheGroup
+	node                 string
+	spec                 juicefsiov1.CacheGroupWorkerTemplate
+	secretData           map[string]string
+	initConfig           string
+	backUpWorker         bool
+	cacheDirsInContainer []string
 }
 
 func NewPodBuilder(cg *juicefsiov1.CacheGroup, secret *corev1.Secret, node string, spec juicefsiov1.CacheGroupWorkerTemplate, backUpWorker bool) *PodBuilder {
@@ -185,6 +186,60 @@ func (p *PodBuilder) genAuthCmds(ctx context.Context) []string {
 	return authCmds
 }
 
+func (p *PodBuilder) genCacheDirs() {
+	volumes := []corev1.Volume{}
+	volumeMounts := []corev1.VolumeMount{}
+	for i, dir := range p.spec.CacheDirs {
+		cachePathInContainer := fmt.Sprintf("%s%d", common.CacheDirVolumeMountPathPrefix, i)
+		volumeName := fmt.Sprintf("%s%d", common.CacheDirVolumeNamePrefix, i)
+		p.spec.VolumeMounts = append(volumeMounts, corev1.VolumeMount{
+			Name:      volumeName,
+			MountPath: cachePathInContainer,
+		})
+		switch dir.Type {
+		case juicefsiov1.CacheDirTypeHostPath:
+			p.spec.Volumes = append(volumes, corev1.Volume{
+				Name: volumeName,
+				VolumeSource: corev1.VolumeSource{
+					HostPath: &corev1.HostPathVolumeSource{
+						Path: dir.Path,
+						Type: utils.ToPtr(corev1.HostPathDirectoryOrCreate),
+					},
+				},
+			})
+		case juicefsiov1.CacheDirTypePVC:
+			p.spec.Volumes = append(volumes, corev1.Volume{
+				Name: volumeName,
+				VolumeSource: corev1.VolumeSource{
+					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+						ClaimName: dir.Name,
+					},
+				},
+			})
+		}
+		p.cacheDirsInContainer = append(p.cacheDirsInContainer, cachePathInContainer)
+	}
+
+	if len(p.cacheDirsInContainer) == 0 {
+		cachePathInContainer := common.DefaultCacheHostPath
+		volumeName := fmt.Sprintf("%s%d", common.CacheDirVolumeNamePrefix, 0)
+		p.spec.Volumes = append(volumes, corev1.Volume{
+			Name: volumeName,
+			VolumeSource: corev1.VolumeSource{
+				HostPath: &corev1.HostPathVolumeSource{
+					Path: common.DefaultCacheHostPath,
+					Type: utils.ToPtr(corev1.HostPathDirectoryOrCreate),
+				},
+			},
+		})
+		p.spec.VolumeMounts = append(volumeMounts, corev1.VolumeMount{
+			Name:      volumeName,
+			MountPath: cachePathInContainer,
+		})
+		p.cacheDirsInContainer = append(p.cacheDirsInContainer, cachePathInContainer)
+	}
+}
+
 func (p *PodBuilder) genCommands(ctx context.Context) []string {
 	authCmds := p.genAuthCmds(ctx)
 	cacheGroup := GenCacheGroupName(p.cg)
@@ -200,16 +255,10 @@ func (p *PodBuilder) genCommands(ctx context.Context) []string {
 		"cache-group=" + cacheGroup,
 	}
 
-	cacheDirs := []string{}
 	parsedOpts := utils.ParseOptions(ctx, p.spec.Opts)
 	for _, opt := range parsedOpts {
 		if opt[0] == "cache-dir" {
-			if opt[1] == "" {
-				log.FromContext(ctx).Info("invalid cache-dir option", "option", opt)
-				continue
-			}
-			cacheDirs = strings.Split(opt[1], ":")
-			continue
+			log.FromContext(ctx).Info("cache-dir option is not allowed, plz use cacheDirs instead")
 		}
 		if opt[1] != "" {
 			opts = append(opts, strings.TrimSpace(opt[0])+"="+strings.TrimSpace(opt[1]))
@@ -217,11 +266,7 @@ func (p *PodBuilder) genCommands(ctx context.Context) []string {
 			opts = append(opts, strings.TrimSpace(opt[0]))
 		}
 	}
-
-	if len(cacheDirs) == 0 {
-		cacheDirs = append(cacheDirs, "/var/jfsCache")
-	}
-	opts = append(opts, "cache-dir="+strings.Join(cacheDirs, ":"))
+	opts = append(opts, "cache-dir="+strings.Join(p.cacheDirsInContainer, ":"))
 	if p.backUpWorker {
 		opts = append(opts, "group-backup")
 	}
@@ -262,6 +307,7 @@ func (p *PodBuilder) genInitConfigVolumes() {
 func (p *PodBuilder) NewCacheGroupWorker(ctx context.Context) *corev1.Pod {
 	worker := newBasicPod(p.cg, p.node)
 	p.genInitConfigVolumes()
+	p.genCacheDirs()
 	spec := p.spec
 	if spec.HostNetwork != nil {
 		worker.Spec.HostNetwork = *spec.HostNetwork
@@ -324,7 +370,7 @@ func (p *PodBuilder) NewCacheGroupWorker(ctx context.Context) *corev1.Pod {
 	return worker
 }
 
-func MergeCacheGrouopWorkerTemplate(template *juicefsiov1.CacheGroupWorkerTemplate, overwrite juicefsiov1.CacheGroupWorkerOverwrite) {
+func MergeCacheGroupWorkerTemplate(template *juicefsiov1.CacheGroupWorkerTemplate, overwrite juicefsiov1.CacheGroupWorkerOverwrite) {
 	if overwrite.ServiceAccountName != "" {
 		template.ServiceAccountName = overwrite.ServiceAccountName
 	}
@@ -375,6 +421,9 @@ func MergeCacheGrouopWorkerTemplate(template *juicefsiov1.CacheGroupWorkerTempla
 	}
 	if overwrite.DNSPolicy != nil {
 		template.DNSPolicy = overwrite.DNSPolicy
+	}
+	if overwrite.CacheDirs != nil {
+		template.CacheDirs = overwrite.CacheDirs
 	}
 }
 

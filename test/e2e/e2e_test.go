@@ -279,6 +279,10 @@ var _ = Describe("controller", Ordered, func() {
 					ExpectWithOffset(1, node.Spec.Containers[0].Resources.Limits.Cpu().String()).Should(Equal("1"))
 					ExpectWithOffset(1, node.Spec.Containers[0].Resources.Limits.Memory().String()).Should(Equal("1Gi"))
 					ExpectWithOffset(1, node.Spec.Containers[0].Command).Should(Equal([]string{"sh", "-c", checkCmd}))
+					ExpectWithOffset(1, node.Spec.Volumes[0].Name).Should(Equal("jfs-cache-dir-0"))
+					ExpectWithOffset(1, node.Spec.Volumes[0].HostPath.Path).Should(Equal("/var/jfsCache"))
+					ExpectWithOffset(1, node.Spec.Containers[0].VolumeMounts[0].Name).Should(Equal("jfs-cache-dir-0"))
+					ExpectWithOffset(1, node.Spec.Containers[0].VolumeMounts[0].MountPath).Should(Equal("/var/jfsCache"))
 				}
 				return nil
 			}
@@ -412,7 +416,7 @@ var _ = Describe("controller", Ordered, func() {
 					return fmt.Errorf("get worker pods failed, %+v", err)
 				}
 				normalCmds := "/usr/bin/juicefs auth csi-ci --token ${TOKEN} --access-key minioadmin --bucket http://test-bucket.minio.default.svc.cluster.local:9000 --secret-key ${SECRET_KEY}\nexec /sbin/mount.juicefs csi-ci /mnt/jfs -o foreground,cache-group=juicefs-cache-group-operator-system-e2e-test-cachegroup,free-space-ratio=0.1,group-weight=200,cache-dir=/var/jfsCache"
-				worker2Cmds := "/usr/bin/juicefs auth csi-ci --token ${TOKEN} --access-key minioadmin --bucket http://test-bucket.minio.default.svc.cluster.local:9000 --secret-key ${SECRET_KEY}\nexec /sbin/mount.juicefs csi-ci /mnt/jfs -o foreground,cache-group=juicefs-cache-group-operator-system-e2e-test-cachegroup,free-space-ratio=0.01,group-weight=100,cache-dir=/var/jfsCache"
+				worker2Cmds := "/usr/bin/juicefs auth csi-ci --token ${TOKEN} --access-key minioadmin --bucket http://test-bucket.minio.default.svc.cluster.local:9000 --secret-key ${SECRET_KEY}\nexec /sbin/mount.juicefs csi-ci /mnt/jfs -o foreground,cache-group=juicefs-cache-group-operator-system-e2e-test-cachegroup,free-space-ratio=0.01,group-weight=100,cache-dir=/var/jfsCache-0"
 				nodes := corev1.PodList{}
 				err = json.Unmarshal(result, &nodes)
 				ExpectWithOffset(1, err).NotTo(HaveOccurred())
@@ -432,6 +436,10 @@ var _ = Describe("controller", Ordered, func() {
 					if node.Spec.NodeName == utils.GetKindNodeName("worker2") {
 						ExpectWithOffset(1, node.Spec.Containers[0].Resources.Limits.Cpu().String()).Should(Equal("2"))
 						ExpectWithOffset(1, node.Spec.Containers[0].Resources.Limits.Memory().String()).Should(Equal("2Gi"))
+						ExpectWithOffset(1, node.Spec.Volumes[0].Name).Should(Equal("jfs-cache-dir-0"))
+						ExpectWithOffset(1, node.Spec.Volumes[0].HostPath.Path).Should(Equal("/data/juicefs"))
+						ExpectWithOffset(1, node.Spec.Containers[0].VolumeMounts[0].Name).Should(Equal("jfs-cache-dir-0"))
+						ExpectWithOffset(1, node.Spec.Containers[0].VolumeMounts[0].MountPath).Should(Equal("/var/jfsCache-0"))
 					} else {
 						ExpectWithOffset(1, node.Spec.Containers[0].Resources.Limits.Cpu().String()).Should(Equal("1"))
 						ExpectWithOffset(1, node.Spec.Containers[0].Resources.Limits.Memory().String()).Should(Equal("1Gi"))

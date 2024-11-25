@@ -32,9 +32,12 @@ const (
 	// Finalizer is the finalizer for CacheGroup
 	Finalizer = "juicefs.io/finalizer"
 	// juicefs binary path
-	JuiceFSBinary      = "/usr/bin/juicefs"
-	JuiceFsMountBinary = "/sbin/mount.juicefs"
-	MountPoint         = "/mnt/jfs"
+	JuiceFSBinary                 = "/usr/bin/juicefs"
+	JuiceFsMountBinary            = "/sbin/mount.juicefs"
+	MountPoint                    = "/mnt/jfs"
+	CacheDirVolumeNamePrefix      = "jfs-cache-dir-"
+	CacheDirVolumeMountPathPrefix = "/var/jfsCache-"
+	DefaultCacheHostPath          = "/var/jfsCache"
 
 	// label keys
 	LabelCacheGroup  = "juicefs.io/cache-group"

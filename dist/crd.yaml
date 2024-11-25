@@ -22,6 +22,12 @@ spec:
     - jsonPath: .status.phase
       name: Phase
       type: string
+    - jsonPath: .status.backUpWorker
+      name: Back up
+      type: string
+    - jsonPath: .status.WaitingDeletedWorker
+      name: Waiting Deleted
+      type: string
     - jsonPath: .status.readyStr
       name: Ready
       type: string
@@ -76,6 +82,20 @@ spec:
                   overwrite:
                     items:
                       properties:
+                        cacheDirs:
+                          items:
+                            properties:
+                              name:
+                                type: string
+                              path:
+                                type: string
+                              type:
+                                enum:
+                                - HostPath
+                                - PVC
+                                type: string
+                            type: object
+                          type: array
                         dnsPolicy:
                           type: string
                         env:
@@ -1470,6 +1490,20 @@ spec:
                     type: array
                   template:
                     properties:
+                      cacheDirs:
+                        items:
+                          properties:
+                            name:
+                              type: string
+                            path:
+                              type: string
+                            type:
+                              enum:
+                              - HostPath
+                              - PVC
+                              type: string
+                          type: object
+                        type: array
                       dnsPolicy:
                         type: string
                       env:
@@ -2861,6 +2895,9 @@ spec:
             type: object
           status:
             properties:
+              backUpWorker:
+                format: int32
+                type: integer
               cacheGroup:
                 type: string
               conditions:
@@ -2887,6 +2924,9 @@ spec:
               readyStr:
                 type: string
               readyWorker:
+                format: int32
+                type: integer
+              waitingDeletedWorker:
                 format: int32
                 type: integer
             type: object

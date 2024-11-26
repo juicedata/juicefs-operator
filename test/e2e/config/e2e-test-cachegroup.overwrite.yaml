@@ -40,3 +40,6 @@ spec:
       opts:
         - free-space-ratio=0.01
         - group-weight=100
+      cacheDirs:
+        - type: HostPath
+          path: /data/juicefs

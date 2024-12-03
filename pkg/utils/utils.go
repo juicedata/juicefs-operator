@@ -18,6 +18,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -56,4 +58,39 @@ func MustParseTime(s string) time.Time {
 		panic(err)
 	}
 	return t
+}
+
+// CompareImageVersion compares two image versions
+// return 1 if image > target
+// return -1 if image < target
+// return 0 if image == target
+func CompareEEImageVersion(image, target string) int {
+	current := strings.Split(image, ":")[1]
+	current = strings.ReplaceAll(current, "ee-", "")
+	if strings.Contains(current, "latest") ||
+		strings.Contains(current, "nightly") ||
+		strings.Contains(current, "dev") {
+		return 1
+	}
+
+	currentParts := strings.Split(current, ".")
+	targetParts := strings.Split(target, ".")
+	for i := 0; i < len(currentParts); i++ {
+		if i >= len(targetParts) {
+			return 1
+		}
+		v1, _ := strconv.Atoi(currentParts[i])
+		v2, _ := strconv.Atoi(targetParts[i])
+		if v1 > v2 {
+			return 1
+		} else if v1 < v2 {
+			return -1
+		}
+	}
+
+	if len(currentParts) < len(targetParts) {
+		return -1
+	}
+
+	return 0
 }

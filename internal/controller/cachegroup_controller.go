@@ -137,8 +137,8 @@ func (r *CacheGroupReconciler) sync(ctx context.Context, cg *juicefsiov1.CacheGr
 			log.Error(err, "failed to get actual state", "node", node)
 			continue
 		}
-		backUpWorker := r.asBackupWorkerOrNot(cg, actualState)
-		podBuilder := builder.NewPodBuilder(cg, secret, node, expectState, backUpWorker)
+		groupBackUp := r.shouldAddGroupBackupOrNot(cg, actualState, expectState.Image)
+		podBuilder := builder.NewPodBuilder(cg, secret, node, expectState, groupBackUp)
 		expectWorker := podBuilder.NewCacheGroupWorker(ctx)
 
 		if r.actualShouldbeUpdate(updateStrategyType, expectWorker, actualState) {
@@ -150,8 +150,8 @@ func (r *CacheGroupReconciler) sync(ctx context.Context, cg *juicefsiov1.CacheGr
 			numUnavailable++
 			go func() {
 				defer wg.Done()
-				if backUpWorker {
-					log.V(1).Info("new worker added, as backup worker", "worker", expectWorker.Name)
+				if groupBackUp {
+					log.V(1).Info("new worker added, add group-backup option", "worker", expectWorker.Name)
 				}
 				if err := r.createOrUpdateWorker(ctx, actualState, expectWorker); err != nil {
 					log.Error(err, "failed to create or update worker", "worker", expectWorker.Name)
@@ -354,6 +354,7 @@ func (r *CacheGroupReconciler) gracefulShutdownWorker(ctx context.Context, worke
 	log := log.FromContext(ctx)
 	isReady := utils.IsPodReady(*worker) && utils.IsMountPointReady(ctx, *worker, common.MountPoint)
 	if !isReady {
+		// TODO: add a timeout for data migration.
 		if _, ok := worker.Annotations[common.AnnoWaitingDeleteWorker]; ok {
 			return false, nil
 		}
@@ -387,13 +388,17 @@ func (r *CacheGroupReconciler) gracefulShutdownWorker(ctx context.Context, worke
 	return false, err
 }
 
-func (r *CacheGroupReconciler) asBackupWorkerOrNot(cg *juicefsiov1.CacheGroup, actual *corev1.Pod) bool {
-	// If it is a new node and there are already 2 or more worker nodes
-	// then this node is a backup worker.
-	if actual == nil {
-		return cg.Status.ReadyWorker >= 2
+func (r *CacheGroupReconciler) shouldAddGroupBackupOrNot(cg *juicefsiov1.CacheGroup, actual *corev1.Pod, newImage string) bool {
+	if utils.CompareEEImageVersion(newImage, "5.1.0") < 0 {
+		return false
 	}
-	// If this node has been acting as a backup node for 10 minutes
+
+	// If it is a new node and there are already 1 or more worker nodes
+	// then this node should add group-backup.
+	if actual == nil {
+		return cg.Status.ReadyWorker >= 1
+	}
+	// If this node has been added group-backup for 10 minutes
 	// then this node is a normal worker.
 	if v, ok := actual.Annotations[common.AnnoBackupWorker]; ok {
 		backupAt := utils.MustParseTime(v)

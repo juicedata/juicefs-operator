@@ -63,24 +63,24 @@ type PodBuilder struct {
 	spec                 juicefsiov1.CacheGroupWorkerTemplate
 	secretData           map[string]string
 	initConfig           string
-	backUpWorker         bool
+	groupBackup          bool
 	cacheDirsInContainer []string
 }
 
-func NewPodBuilder(cg *juicefsiov1.CacheGroup, secret *corev1.Secret, node string, spec juicefsiov1.CacheGroupWorkerTemplate, backUpWorker bool) *PodBuilder {
+func NewPodBuilder(cg *juicefsiov1.CacheGroup, secret *corev1.Secret, node string, spec juicefsiov1.CacheGroupWorkerTemplate, groupBackup bool) *PodBuilder {
 	secretData := utils.ParseSecret(secret)
 	initconfig := ""
 	if v, ok := secretData["initconfig"]; ok && v != "" {
 		initconfig = v
 	}
 	return &PodBuilder{
-		secretData:   secretData,
-		volName:      secretData["name"],
-		cg:           cg,
-		node:         node,
-		spec:         spec,
-		initConfig:   initconfig,
-		backUpWorker: backUpWorker,
+		secretData:  secretData,
+		volName:     secretData["name"],
+		cg:          cg,
+		node:        node,
+		spec:        spec,
+		initConfig:  initconfig,
+		groupBackup: groupBackup,
 	}
 }
 
@@ -267,7 +267,7 @@ func (p *PodBuilder) genCommands(ctx context.Context) []string {
 		}
 	}
 	opts = append(opts, "cache-dir="+strings.Join(p.cacheDirsInContainer, ":"))
-	if p.backUpWorker {
+	if p.groupBackup {
 		opts = append(opts, "group-backup")
 	}
 	mountCmds = append(mountCmds, "-o", strings.Join(opts, ","))
@@ -362,7 +362,7 @@ func (p *PodBuilder) NewCacheGroupWorker(ctx context.Context) *corev1.Pod {
 
 	// The following fields do not participate in the hash calculation.
 	worker.Annotations[common.LabelWorkerHash] = hash
-	if p.backUpWorker {
+	if p.groupBackup {
 		backupAt := time.Now().Format(time.RFC3339)
 		worker.Annotations[common.AnnoBackupWorker] = backupAt
 	}

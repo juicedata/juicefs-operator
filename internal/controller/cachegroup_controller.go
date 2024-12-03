@@ -193,7 +193,7 @@ func (r *CacheGroupReconciler) sync(ctx context.Context, cg *juicefsiov1.CacheGr
 	}
 
 	// calculate status
-	newStatus := r.calculateStatus(cg, expectStates, actualWorks)
+	newStatus := r.calculateStatus(cg, string(secret.Data["name"]), expectStates, actualWorks)
 	if !reflect.DeepEqual(cg.Status, newStatus) {
 		cg.Status = newStatus
 		return utils.IgnoreConflict(r.Status().Update(ctx, cg))
@@ -404,9 +404,11 @@ func (r *CacheGroupReconciler) asBackupWorkerOrNot(cg *juicefsiov1.CacheGroup, a
 
 func (r *CacheGroupReconciler) calculateStatus(
 	cg *juicefsiov1.CacheGroup,
+	fileSystem string,
 	expectStates map[string]juicefsiov1.CacheGroupWorkerTemplate,
 	actualWorks []corev1.Pod) juicefsiov1.CacheGroupStatus {
 	newStatus := cg.Status
+	newStatus.FileSystem = fileSystem
 	if len(expectStates) == 0 {
 		newStatus.ReadyStr = "-"
 		newStatus.ReadyWorker = 0

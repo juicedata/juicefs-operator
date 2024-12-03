@@ -164,6 +164,7 @@ type CacheGroupStatus struct {
 	Phase      CacheGroupPhase       `json:"phase,omitempty"`
 	Conditions []CacheGroupCondition `json:"conditions,omitempty"`
 
+	FileSystem           string `json:"fileSystem,omitempty"`
 	ReadyWorker          int32  `json:"readyWorker,omitempty"`
 	BackUpWorker         int32  `json:"backUpWorker,omitempty"`
 	WaitingDeletedWorker int32  `json:"waitingDeletedWorker,omitempty"`

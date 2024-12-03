@@ -2919,6 +2919,8 @@ spec:
               expectWorker:
                 format: int32
                 type: integer
+              fileSystem:
+                type: string
               phase:
                 type: string
               readyStr:

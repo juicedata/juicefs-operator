@@ -46,6 +46,8 @@ spec:
             type: object
           spec:
             properties:
+              backupDuration:
+                type: string
               cacheGroup:
                 type: string
               cleanCache:
@@ -77,6 +79,8 @@ spec:
                   type:
                     type: string
                 type: object
+              waitingDeletedMaxDuration:
+                type: string
               worker:
                 properties:
                   overwrite:

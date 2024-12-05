@@ -63,7 +63,8 @@ var (
 		},
 	}
 
-	BackupWorkerDuration = 10 * time.Minute
+	DefaultBackupWorkerDuration = 10 * time.Minute
+	DefaultWaitingMaxDuration   = 1 * time.Hour
 )
 
 func GenWorkerName(cgName string, nodeName string) string {

@@ -140,6 +140,14 @@ type CacheGroupSpec struct {
 	CleanCache     bool                            `json:"cleanCache,omitempty"`
 	CacheGroup     string                          `json:"cacheGroup,omitempty"`
 	Worker         CacheGroupWorkerSpec            `json:"worker,omitempty"`
+	// Duration for new node to join cluster with group-backup option
+	// Default is 10 minutes
+	// +optional
+	BackupDuration *metav1.Duration `json:"backupDuration,omitempty"`
+	// Maximum time to wait for data migration when deleting
+	// Default is 1 hour
+	// +optional
+	WaitingDeletedMaxDuration *metav1.Duration `json:"waitingDeletedMaxDuration,omitempty"`
 }
 
 type CacheGroupPhase string

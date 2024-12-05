@@ -21,6 +21,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/juicedata/juicefs-cache-group-operator/pkg/common"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func ToPtr[T any](v T) *T {
@@ -93,4 +96,18 @@ func CompareEEImageVersion(image, target string) int {
 	}
 
 	return 0
+}
+
+func GetWaitingDeletedMaxDuration(d *metav1.Duration) time.Duration {
+	if d == nil {
+		return common.DefaultWaitingMaxDuration
+	}
+	return d.Duration
+}
+
+func GetBackupWorkerDuration(d *metav1.Duration) time.Duration {
+	if d == nil {
+		return common.DefaultBackupWorkerDuration
+	}
+	return d.Duration
 }

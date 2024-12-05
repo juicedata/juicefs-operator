@@ -330,7 +330,7 @@ func (r *CacheGroupReconciler) removeRedundantWorkers(
 		}
 
 		if cg.Status.ReadyWorker > 1 {
-			delete, err := r.gracefulShutdownWorker(ctx, &worker)
+			delete, err := r.gracefulShutdownWorker(ctx, cg, &worker)
 			if err != nil {
 				log.Error(err, "failed to graceful shutdown worker", "worker", worker)
 				return err
@@ -350,11 +350,13 @@ func (r *CacheGroupReconciler) removeRedundantWorkers(
 }
 
 // change pod options `group-weight` to zero, delete and recreate the worker pod
-func (r *CacheGroupReconciler) gracefulShutdownWorker(ctx context.Context, worker *corev1.Pod) (delete bool, err error) {
+func (r *CacheGroupReconciler) gracefulShutdownWorker(
+	ctx context.Context,
+	cg *juicefsiov1.CacheGroup,
+	worker *corev1.Pod) (delete bool, err error) {
 	log := log.FromContext(ctx)
 	isReady := utils.IsPodReady(*worker) && utils.IsMountPointReady(ctx, *worker, common.MountPoint)
 	if !isReady {
-		// TODO: add a timeout for data migration.
 		if _, ok := worker.Annotations[common.AnnoWaitingDeleteWorker]; ok {
 			return false, nil
 		}
@@ -372,7 +374,13 @@ func (r *CacheGroupReconciler) gracefulShutdownWorker(ctx context.Context, worke
 		return true, nil
 	}
 
-	if _, ok := worker.Annotations[common.AnnoWaitingDeleteWorker]; ok {
+	if v, ok := worker.Annotations[common.AnnoWaitingDeleteWorker]; ok {
+		waitingAt := utils.MustParseTime(v)
+		if time.Since(waitingAt) > utils.GetWaitingDeletedMaxDuration(cg.Spec.WaitingDeletedMaxDuration) {
+			log.Info("redundant worker still has cache blocks, waiting for data migration timeout, delete it", "worker", worker.Name)
+			return true, nil
+		}
+		// already set group-weight to 0
 		return false, nil
 	}
 	log.V(1).Info("redundant worker has cache blocks, recreate to set group-weight to 0", "worker", worker.Name, "cacheBytes", cacheBytes)
@@ -398,11 +406,11 @@ func (r *CacheGroupReconciler) shouldAddGroupBackupOrNot(cg *juicefsiov1.CacheGr
 	if actual == nil {
 		return cg.Status.ReadyWorker >= 1
 	}
-	// If this node has been added group-backup for 10 minutes
+	// If this node has been added group-backup for x(default 10m) minutes
 	// then this node is a normal worker.
 	if v, ok := actual.Annotations[common.AnnoBackupWorker]; ok {
 		backupAt := utils.MustParseTime(v)
-		return time.Since(backupAt) < common.BackupWorkerDuration
+		return time.Since(backupAt) < utils.GetBackupWorkerDuration(cg.Spec.BackupDuration)
 	}
 	return false
 }

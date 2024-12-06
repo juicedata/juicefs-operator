@@ -132,3 +132,63 @@ func GetWarmUpOwnerReference(wu *juicefsiov1.WarmUp) []metav1.OwnerReference {
 		Controller: utils.ToPtr(true),
 	}}
 }
+
+func NewCleanCacheJob(cg juicefsiov1.CacheGroup, worker corev1.Pod) *batchv1.Job {
+	cacheVolumes := []corev1.Volume{}
+	for _, volume := range worker.Spec.Volumes {
+		if strings.HasPrefix(volume.Name, common.CacheDirVolumeNamePrefix) {
+			cacheVolumes = append(cacheVolumes, volume)
+		}
+	}
+
+	if len(cacheVolumes) == 0 {
+		return nil
+	}
+
+	cacheVolumeMounts := []corev1.VolumeMount{}
+	for _, volume := range cacheVolumes {
+		cacheVolumeMounts = append(cacheVolumeMounts, corev1.VolumeMount{
+			Name:      volume.Name,
+			MountPath: fmt.Sprintf("/var/jfsCache/%s", volume.Name),
+		})
+	}
+	job := &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      common.GenCleanCacheJobName(worker.Spec.NodeName),
+			Namespace: worker.Namespace,
+			Labels: map[string]string{
+				common.LabelAppType:    common.LableCleanCacheJobValue,
+				common.LabelCacheGroup: cg.Name,
+			},
+		},
+		Spec: batchv1.JobSpec{
+			Parallelism:             utils.ToPtr(int32(1)),
+			BackoffLimit:            utils.ToPtr(int32(3)),
+			TTLSecondsAfterFinished: utils.ToPtr(int32(60)),
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						common.LabelAppType:    common.LableCleanCacheJobValue,
+						common.LabelCacheGroup: cg.Name,
+					},
+				},
+				Spec: corev1.PodSpec{
+					RestartPolicy: corev1.RestartPolicyNever,
+					Tolerations:   worker.Spec.Tolerations,
+					NodeSelector:  worker.Spec.NodeSelector,
+					Containers: []corev1.Container{{
+						Name:         common.CleanCacheContainerName,
+						Image:        worker.Spec.Containers[0].Image,
+						Command:      []string{"/bin/sh", "-c", "rm -rf /var/jfsCache/*/" + cg.Status.FileSystem},
+						VolumeMounts: cacheVolumeMounts,
+						Resources:    common.DefaultForCleanCacheResources,
+					}},
+					ServiceAccountName: worker.Spec.ServiceAccountName,
+					Volumes:            cacheVolumes,
+					NodeName:           worker.Spec.NodeName,
+				},
+			},
+		},
+	}
+	return job
+}

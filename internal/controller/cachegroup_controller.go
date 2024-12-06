@@ -35,6 +35,7 @@ import (
 	"github.com/juicedata/juicefs-cache-group-operator/pkg/utils"
 
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
@@ -345,6 +346,10 @@ func (r *CacheGroupReconciler) removeRedundantWorkers(
 			log.Error(err, "failed to delete worker", "worker", worker.Name)
 			return err
 		}
+		if err := r.cleanWorkerCache(ctx, cg, worker); err != nil {
+			log.Error(err, "failed to clean worker cache", "worker", worker.Name)
+			return err
+		}
 	}
 	return nil
 }
@@ -480,8 +485,47 @@ func (r *CacheGroupReconciler) waitForWorkerReady(ctx context.Context, cg *juice
 	}
 }
 
+func (r *CacheGroupReconciler) cleanWorkerCache(ctx context.Context, cg *juicefsiov1.CacheGroup, worker corev1.Pod) error {
+	log := log.FromContext(ctx).WithValues("worker", worker.Name)
+	if !cg.Spec.CleanCache {
+		return nil
+	}
+	job := builder.NewCleanCacheJob(*cg, worker)
+	if job == nil {
+		return nil
+	}
+	log.Info("worker is to be deleted, create job to clean cache", "job", job.Name)
+	err := r.Get(ctx, client.ObjectKey{Namespace: job.Namespace, Name: job.Name}, &batchv1.Job{})
+	if err == nil {
+		log.Info("clean cache job already exists", "job", job.Name)
+		return nil
+	}
+	if !apierrors.IsNotFound(err) {
+		log.Error(err, "failed to get clean cache job", "job", job.Name)
+		return err
+	}
+	if err := r.Create(ctx, job); err != nil {
+		log.Error(err, "failed to create clean cache job", "job", job.Name)
+		return err
+	}
+	return nil
+}
+
 func (r *CacheGroupReconciler) HandleFinalizer(ctx context.Context, cg *juicefsiov1.CacheGroup) error {
-	// TODO: clean cache
+	log := log.FromContext(ctx)
+	if !cg.Spec.CleanCache {
+		return nil
+	}
+	workers, err := r.listActualWorkers(ctx, cg)
+	if err != nil {
+		log.Error(err, "failed to list actual worker nodes")
+		return err
+	}
+	for _, worker := range workers {
+		if err := r.cleanWorkerCache(ctx, cg, worker); err != nil {
+			log.Error(err, "failed to clean worker cache", "worker", worker.Name)
+		}
+	}
 	return nil
 }
 

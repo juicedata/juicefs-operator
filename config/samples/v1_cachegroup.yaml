@@ -36,36 +36,18 @@ spec:
         limits:
           cpu: 1
           memory: 1Gi
+      cacheDirs:
+        - path: /var/jfsCache-0
+          type: HostPath
       opts:
-        - cache-dir=/mnt/juicefs:/mnt/juicefs2:/mnt/juicefs3
-      volumeMounts:
-        - name: cachedir-0
-          mountPath: /mnt/juicefs
-        - name: cachedir-1
-          mountPath: /mnt/juicefs2
-        - name: cachedir-2
-          mountPath: /mnt/juicefs3
-      volumes:
-        - name: cachedir-0
-          hostPath:
-            path: /mnt/juicefs
-        - name: cachedir-1
-          hostPath:
-            path: /dev/sda/juicefs2
-        - name: cachedir-2
-          persistentVolumeClaim:
-            claimName: juicefs-cache-pvc
+        - group-weight=100
     overwrite:
       - nodes:
           - k8s-03
         opts:
-          - cache-dir=/mnt/juicefs
           - group-weight=50
-        volumeMounts:
-          - name: cachedir-0
-            mountPath: /mnt/juicefs
-        volumes:
-          - name: cachedir-0
-            hostPath:
-              path: /mnt/juicefs
-
+        cacheDirs:
+        - path: /var/jfsCache-1
+          type: HostPath
+        - path: /var/jfsCache-2
+          type: HostPath

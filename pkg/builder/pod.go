@@ -187,18 +187,16 @@ func (p *PodBuilder) genAuthCmds(ctx context.Context) []string {
 }
 
 func (p *PodBuilder) genCacheDirs() {
-	volumes := []corev1.Volume{}
-	volumeMounts := []corev1.VolumeMount{}
 	for i, dir := range p.spec.CacheDirs {
 		cachePathInContainer := fmt.Sprintf("%s%d", common.CacheDirVolumeMountPathPrefix, i)
 		volumeName := fmt.Sprintf("%s%d", common.CacheDirVolumeNamePrefix, i)
-		p.spec.VolumeMounts = append(volumeMounts, corev1.VolumeMount{
+		p.spec.VolumeMounts = append(p.spec.VolumeMounts, corev1.VolumeMount{
 			Name:      volumeName,
 			MountPath: cachePathInContainer,
 		})
 		switch dir.Type {
 		case juicefsiov1.CacheDirTypeHostPath:
-			p.spec.Volumes = append(volumes, corev1.Volume{
+			p.spec.Volumes = append(p.spec.Volumes, corev1.Volume{
 				Name: volumeName,
 				VolumeSource: corev1.VolumeSource{
 					HostPath: &corev1.HostPathVolumeSource{
@@ -208,7 +206,7 @@ func (p *PodBuilder) genCacheDirs() {
 				},
 			})
 		case juicefsiov1.CacheDirTypePVC:
-			p.spec.Volumes = append(volumes, corev1.Volume{
+			p.spec.Volumes = append(p.spec.Volumes, corev1.Volume{
 				Name: volumeName,
 				VolumeSource: corev1.VolumeSource{
 					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
@@ -223,7 +221,7 @@ func (p *PodBuilder) genCacheDirs() {
 	if len(p.cacheDirsInContainer) == 0 {
 		cachePathInContainer := common.DefaultCacheHostPath
 		volumeName := fmt.Sprintf("%s%d", common.CacheDirVolumeNamePrefix, 0)
-		p.spec.Volumes = append(volumes, corev1.Volume{
+		p.spec.Volumes = append(p.spec.Volumes, corev1.Volume{
 			Name: volumeName,
 			VolumeSource: corev1.VolumeSource{
 				HostPath: &corev1.HostPathVolumeSource{
@@ -232,7 +230,7 @@ func (p *PodBuilder) genCacheDirs() {
 				},
 			},
 		})
-		p.spec.VolumeMounts = append(volumeMounts, corev1.VolumeMount{
+		p.spec.VolumeMounts = append(p.spec.VolumeMounts, corev1.VolumeMount{
 			Name:      volumeName,
 			MountPath: cachePathInContainer,
 		})

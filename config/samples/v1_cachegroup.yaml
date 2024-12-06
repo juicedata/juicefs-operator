@@ -16,6 +16,10 @@ metadata:
 spec:
   secretRef:
     name: juicefs-secret
+  # Duration for new node to join cluster with group-backup option
+  backupDuration: "10m"
+  # Maximum time to wait for data migration when deleting
+  waitingDeletedMaxDuration: "1h"
   updateStrategy:
     # support：
     # - RollingUpdate: default policy

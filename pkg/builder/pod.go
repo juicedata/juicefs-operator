@@ -250,6 +250,7 @@ func (p *PodBuilder) genCommands(ctx context.Context) []string {
 
 	opts := []string{
 		"foreground",
+		"no-update",
 		"cache-group=" + cacheGroup,
 	}
 

@@ -53,7 +53,7 @@ func TestPodBuilder_genCommands(t *testing.T) {
 				"sh",
 				"-c",
 				common.JuiceFSBinary + " auth test-name --token ${TOKEN} --secret-key ${SECRET_KEY}\n" +
-					"exec " + common.JuiceFsMountBinary + " test-name " + common.MountPoint + " -o foreground,cache-group=default-test-cg,cache-dir=/var/jfsCache",
+					"exec " + common.JuiceFsMountBinary + " test-name " + common.MountPoint + " -o foreground,no-update,cache-group=default-test-cg,cache-dir=/var/jfsCache",
 			},
 		},
 		{
@@ -83,7 +83,7 @@ func TestPodBuilder_genCommands(t *testing.T) {
 				"sh",
 				"-c",
 				common.JuiceFSBinary + " auth test-name --token ${TOKEN} --secret-key ${SECRET_KEY}\n" +
-					"exec " + common.JuiceFsMountBinary + " test-name " + common.MountPoint + " -o foreground,cache-group=default-test-cg,cache-dir=/var/jfsCache-0",
+					"exec " + common.JuiceFsMountBinary + " test-name " + common.MountPoint + " -o foreground,no-update,cache-group=default-test-cg,cache-dir=/var/jfsCache-0",
 			},
 		},
 		{
@@ -108,7 +108,7 @@ func TestPodBuilder_genCommands(t *testing.T) {
 				"sh",
 				"-c",
 				common.JuiceFSBinary + " auth test-name --token ${TOKEN} --secret-key ${SECRET_KEY}\n" +
-					"exec " + common.JuiceFsMountBinary + " test-name " + common.MountPoint + " -o foreground,cache-group=default-test-cg,a=b,verbose,cache-dir=/var/jfsCache",
+					"exec " + common.JuiceFsMountBinary + " test-name " + common.MountPoint + " -o foreground,no-update,cache-group=default-test-cg,a=b,verbose,cache-dir=/var/jfsCache",
 			},
 		},
 		{
@@ -134,7 +134,7 @@ func TestPodBuilder_genCommands(t *testing.T) {
 				"sh",
 				"-c",
 				common.JuiceFSBinary + " auth test-name --token ${TOKEN} --secret-key ${SECRET_KEY} --format-options --format-options2\n" +
-					"exec " + common.JuiceFsMountBinary + " test-name " + common.MountPoint + " -o foreground,cache-group=default-test-cg,verbose,cache-dir=/var/jfsCache",
+					"exec " + common.JuiceFsMountBinary + " test-name " + common.MountPoint + " -o foreground,no-update,cache-group=default-test-cg,verbose,cache-dir=/var/jfsCache",
 			},
 		},
 		{
@@ -165,7 +165,7 @@ func TestPodBuilder_genCommands(t *testing.T) {
 				"sh",
 				"-c",
 				"cp /etc/juicefs/test-name.conf /root/.juicefs\n" +
-					"exec " + common.JuiceFsMountBinary + " test-name " + common.MountPoint + " -o foreground,cache-group=default-test-cg,cache-dir=/var/jfsCache",
+					"exec " + common.JuiceFsMountBinary + " test-name " + common.MountPoint + " -o foreground,no-update,cache-group=default-test-cg,cache-dir=/var/jfsCache",
 			},
 		},
 	}
@@ -195,24 +195,24 @@ func TestUpdateWorkerGroupWeight(t *testing.T) {
 			worker: &corev1.Pod{
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{{
-						Command: []string{"sh", "-c", "cp /etc/juicefs/zxh-test-2.conf /root/.juicefs\nexec /sbin/mount.juicefs zxh-test-2 /mnt/jfs -o foreground,cache-group=juicefs-cache-group-cachegroup-sample,cache-dir=/var/jfsCache"},
+						Command: []string{"sh", "-c", "cp /etc/juicefs/zxh-test-2.conf /root/.juicefs\nexec /sbin/mount.juicefs zxh-test-2 /mnt/jfs -o foreground,no-update,cache-group=juicefs-cache-group-cachegroup-sample,cache-dir=/var/jfsCache"},
 					}},
 				},
 			},
 			weight:   10,
-			expected: "cp /etc/juicefs/zxh-test-2.conf /root/.juicefs\nexec /sbin/mount.juicefs zxh-test-2 /mnt/jfs -o foreground,cache-group=juicefs-cache-group-cachegroup-sample,cache-dir=/var/jfsCache,group-weight=10",
+			expected: "cp /etc/juicefs/zxh-test-2.conf /root/.juicefs\nexec /sbin/mount.juicefs zxh-test-2 /mnt/jfs -o foreground,no-update,cache-group=juicefs-cache-group-cachegroup-sample,cache-dir=/var/jfsCache,group-weight=10",
 		},
 		{
 			name: "with group-weight option",
 			worker: &corev1.Pod{
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{{
-						Command: []string{"sh", "-c", "cp /etc/juicefs/zxh-test-2.conf /root/.juicefs\nexec /sbin/mount.juicefs zxh-test-2 /mnt/jfs -o foreground,cache-group=juicefs-cache-group-cachegroup-sample,cache-dir=/var/jfsCache,group-weight=10"},
+						Command: []string{"sh", "-c", "cp /etc/juicefs/zxh-test-2.conf /root/.juicefs\nexec /sbin/mount.juicefs zxh-test-2 /mnt/jfs -o foreground,no-update,cache-group=juicefs-cache-group-cachegroup-sample,cache-dir=/var/jfsCache,group-weight=10"},
 					}},
 				},
 			},
 			weight:   0,
-			expected: "cp /etc/juicefs/zxh-test-2.conf /root/.juicefs\nexec /sbin/mount.juicefs zxh-test-2 /mnt/jfs -o foreground,cache-group=juicefs-cache-group-cachegroup-sample,cache-dir=/var/jfsCache,group-weight=0",
+			expected: "cp /etc/juicefs/zxh-test-2.conf /root/.juicefs\nexec /sbin/mount.juicefs zxh-test-2 /mnt/jfs -o foreground,no-update,cache-group=juicefs-cache-group-cachegroup-sample,cache-dir=/var/jfsCache,group-weight=0",
 		},
 	}
 

@@ -336,11 +336,12 @@ var _ = Describe("controller", Ordered, func() {
 				cmd = exec.Command("kubectl", "wait", "pod/"+expectWorkerName,
 					"--for", "condition=Ready",
 					"--namespace", namespace,
-					"--timeout", "2m",
+					"--timeout", "1m",
 				)
 				_, err = utils.Run(cmd)
-				ExpectWithOffset(1, err).NotTo(HaveOccurred())
-
+				if err != nil {
+					return fmt.Errorf("wait worker pod failed, %+v", err)
+				}
 				return nil
 			}
 			Eventually(verifyWorkerCreated, time.Minute, time.Second).Should(Succeed())

@@ -16,12 +16,17 @@ package builder
 
 import (
 	"context"
+	"fmt"
+	"regexp"
 	"strings"
+	"time"
 
 	juicefsiov1 "github.com/juicedata/juicefs-cache-group-operator/api/v1"
 	"github.com/juicedata/juicefs-cache-group-operator/pkg/common"
 	"github.com/juicedata/juicefs-cache-group-operator/pkg/utils"
+
 	corev1 "k8s.io/api/core/v1"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -52,27 +57,30 @@ var (
 )
 
 type PodBuilder struct {
-	volName    string
-	cg         *juicefsiov1.CacheGroup
-	node       string
-	spec       juicefsiov1.CacheGroupWorkerTemplate
-	secretData map[string]string
-	initConfig string
+	volName              string
+	cg                   *juicefsiov1.CacheGroup
+	node                 string
+	spec                 juicefsiov1.CacheGroupWorkerTemplate
+	secretData           map[string]string
+	initConfig           string
+	groupBackup          bool
+	cacheDirsInContainer []string
 }
 
-func NewPodBuilder(cg *juicefsiov1.CacheGroup, secret *corev1.Secret, node string, spec juicefsiov1.CacheGroupWorkerTemplate) *PodBuilder {
+func NewPodBuilder(cg *juicefsiov1.CacheGroup, secret *corev1.Secret, node string, spec juicefsiov1.CacheGroupWorkerTemplate, groupBackup bool) *PodBuilder {
 	secretData := utils.ParseSecret(secret)
 	initconfig := ""
 	if v, ok := secretData["initconfig"]; ok && v != "" {
 		initconfig = v
 	}
 	return &PodBuilder{
-		secretData: secretData,
-		volName:    secretData["name"],
-		cg:         cg,
-		node:       node,
-		spec:       spec,
-		initConfig: initconfig,
+		secretData:  secretData,
+		volName:     secretData["name"],
+		cg:          cg,
+		node:        node,
+		spec:        spec,
+		initConfig:  initconfig,
+		groupBackup: groupBackup,
 	}
 }
 
@@ -178,6 +186,58 @@ func (p *PodBuilder) genAuthCmds(ctx context.Context) []string {
 	return authCmds
 }
 
+func (p *PodBuilder) genCacheDirs() {
+	for i, dir := range p.spec.CacheDirs {
+		cachePathInContainer := fmt.Sprintf("%s%d", common.CacheDirVolumeMountPathPrefix, i)
+		volumeName := fmt.Sprintf("%s%d", common.CacheDirVolumeNamePrefix, i)
+		p.spec.VolumeMounts = append(p.spec.VolumeMounts, corev1.VolumeMount{
+			Name:      volumeName,
+			MountPath: cachePathInContainer,
+		})
+		switch dir.Type {
+		case juicefsiov1.CacheDirTypeHostPath:
+			p.spec.Volumes = append(p.spec.Volumes, corev1.Volume{
+				Name: volumeName,
+				VolumeSource: corev1.VolumeSource{
+					HostPath: &corev1.HostPathVolumeSource{
+						Path: dir.Path,
+						Type: utils.ToPtr(corev1.HostPathDirectoryOrCreate),
+					},
+				},
+			})
+		case juicefsiov1.CacheDirTypePVC:
+			p.spec.Volumes = append(p.spec.Volumes, corev1.Volume{
+				Name: volumeName,
+				VolumeSource: corev1.VolumeSource{
+					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+						ClaimName: dir.Name,
+					},
+				},
+			})
+		}
+		p.cacheDirsInContainer = append(p.cacheDirsInContainer, cachePathInContainer)
+	}
+
+	if len(p.cacheDirsInContainer) == 0 {
+		cachePathInContainer := common.DefaultCacheHostPath
+		volumeName := fmt.Sprintf("%s%d", common.CacheDirVolumeNamePrefix, 0)
+		p.spec.Volumes = append(p.spec.Volumes, corev1.Volume{
+			Name: volumeName,
+			VolumeSource: corev1.VolumeSource{
+				HostPath: &corev1.HostPathVolumeSource{
+					Path: common.DefaultCacheHostPath,
+					Type: utils.ToPtr(corev1.HostPathDirectoryOrCreate),
+				},
+			},
+		})
+		p.spec.VolumeMounts = append(p.spec.VolumeMounts, corev1.VolumeMount{
+			Name:      volumeName,
+			MountPath: cachePathInContainer,
+		})
+		p.cacheDirsInContainer = append(p.cacheDirsInContainer, cachePathInContainer)
+	}
+}
+
 func (p *PodBuilder) genCommands(ctx context.Context) []string {
 	authCmds := p.genAuthCmds(ctx)
 	cacheGroup := GenCacheGroupName(p.cg)
@@ -190,18 +250,18 @@ func (p *PodBuilder) genCommands(ctx context.Context) []string {
 
 	opts := []string{
 		"foreground",
+		"no-update",
 		"cache-group=" + cacheGroup,
 	}
 
-	cacheDirs := []string{}
 	parsedOpts := utils.ParseOptions(ctx, p.spec.Opts)
 	for _, opt := range parsedOpts {
 		if opt[0] == "cache-dir" {
-			if opt[1] == "" {
-				log.FromContext(ctx).Info("invalid cache-dir option", "option", opt)
-				continue
-			}
-			cacheDirs = strings.Split(opt[1], ":")
+			log.FromContext(ctx).Info("cache-dir option is not allowed, plz use cacheDirs instead")
+			continue
+		}
+		if utils.SliceContains(opts, opt[1]) {
+			log.FromContext(ctx).Info("option is duplicated, skip", "option", opt[0])
 			continue
 		}
 		if opt[1] != "" {
@@ -210,11 +270,10 @@ func (p *PodBuilder) genCommands(ctx context.Context) []string {
 			opts = append(opts, strings.TrimSpace(opt[0]))
 		}
 	}
-
-	if len(cacheDirs) == 0 {
-		cacheDirs = append(cacheDirs, "/var/jfsCache")
+	opts = append(opts, "cache-dir="+strings.Join(p.cacheDirsInContainer, ":"))
+	if p.groupBackup {
+		opts = append(opts, "group-backup")
 	}
-	opts = append(opts, "cache-dir="+strings.Join(cacheDirs, ":"))
 	mountCmds = append(mountCmds, "-o", strings.Join(opts, ","))
 	cmds := []string{
 		"sh",
@@ -252,6 +311,7 @@ func (p *PodBuilder) genInitConfigVolumes() {
 func (p *PodBuilder) NewCacheGroupWorker(ctx context.Context) *corev1.Pod {
 	worker := newBasicPod(p.cg, p.node)
 	p.genInitConfigVolumes()
+	p.genCacheDirs()
 	spec := p.spec
 	if spec.HostNetwork != nil {
 		worker.Spec.HostNetwork = *spec.HostNetwork
@@ -301,10 +361,20 @@ func (p *PodBuilder) NewCacheGroupWorker(ctx context.Context) *corev1.Pod {
 	}
 	worker.Spec.Containers[0].Env = p.genEnvs()
 	worker.Spec.Containers[0].Command = p.genCommands(ctx)
+
+	hash := utils.GenHash(worker)
+
+	// The following fields do not participate in the hash calculation.
+	worker.Annotations[common.LabelWorkerHash] = hash
+	if p.groupBackup {
+		backupAt := time.Now().Format(time.RFC3339)
+		worker.Annotations[common.AnnoBackupWorker] = backupAt
+	}
+
 	return worker
 }
 
-func MergeCacheGrouopWorkerTemplate(template *juicefsiov1.CacheGroupWorkerTemplate, overwrite juicefsiov1.CacheGroupWorkerOverwrite) {
+func MergeCacheGroupWorkerTemplate(template *juicefsiov1.CacheGroupWorkerTemplate, overwrite juicefsiov1.CacheGroupWorkerOverwrite) {
 	if overwrite.ServiceAccountName != "" {
 		template.ServiceAccountName = overwrite.ServiceAccountName
 	}
@@ -356,4 +426,19 @@ func MergeCacheGrouopWorkerTemplate(template *juicefsiov1.CacheGroupWorkerTempla
 	if overwrite.DNSPolicy != nil {
 		template.DNSPolicy = overwrite.DNSPolicy
 	}
+	if overwrite.CacheDirs != nil {
+		template.CacheDirs = overwrite.CacheDirs
+	}
+}
+
+func UpdateWorkerGroupWeight(worker *corev1.Pod, weight int) {
+	cmd := worker.Spec.Containers[0].Command[2]
+	weightStr := fmt.Sprint(weight)
+	if strings.Contains(cmd, "group-weight") {
+		regex := regexp.MustCompile("group-weight=[0-9]+")
+		cmd = regex.ReplaceAllString(cmd, "group-weight="+weightStr)
+	} else {
+		cmd = cmd + ",group-weight=" + weightStr
+	}
+	worker.Spec.Containers[0].Command[2] = cmd
 }

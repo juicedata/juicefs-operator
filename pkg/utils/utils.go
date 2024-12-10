@@ -18,6 +18,12 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/juicedata/juicefs-cache-group-operator/pkg/common"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func ToPtr[T any](v T) *T {
@@ -47,4 +53,61 @@ func GenHash(object interface{}) string {
 	data, _ := json.Marshal(object)
 	hash := sha256.Sum256(data)
 	return hex.EncodeToString(hash[:])
+}
+
+func MustParseTime(s string) time.Time {
+	t, err := time.Parse(time.RFC3339, s)
+	if err != nil {
+		panic(err)
+	}
+	return t
+}
+
+// CompareImageVersion compares two image versions
+// return 1 if image > target
+// return -1 if image < target
+// return 0 if image == target
+func CompareEEImageVersion(image, target string) int {
+	current := strings.Split(image, ":")[1]
+	current = strings.ReplaceAll(current, "ee-", "")
+	if strings.Contains(current, "latest") ||
+		strings.Contains(current, "nightly") ||
+		strings.Contains(current, "dev") {
+		return 1
+	}
+
+	currentParts := strings.Split(current, ".")
+	targetParts := strings.Split(target, ".")
+	for i := 0; i < len(currentParts); i++ {
+		if i >= len(targetParts) {
+			return 1
+		}
+		v1, _ := strconv.Atoi(currentParts[i])
+		v2, _ := strconv.Atoi(targetParts[i])
+		if v1 > v2 {
+			return 1
+		} else if v1 < v2 {
+			return -1
+		}
+	}
+
+	if len(currentParts) < len(targetParts) {
+		return -1
+	}
+
+	return 0
+}
+
+func GetWaitingDeletedMaxDuration(d *metav1.Duration) time.Duration {
+	if d == nil {
+		return common.DefaultWaitingMaxDuration
+	}
+	return d.Duration
+}
+
+func GetBackupWorkerDuration(d *metav1.Duration) time.Duration {
+	if d == nil {
+		return common.DefaultBackupWorkerDuration
+	}
+	return d.Duration
 }

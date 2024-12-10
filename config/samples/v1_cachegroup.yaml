@@ -2,6 +2,7 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: juicefs-secret
+  namespace: default
 type: Opaque
 stringData:
   name: juicefs-xx
@@ -13,9 +14,14 @@ apiVersion: juicefs.io/v1
 kind: CacheGroup
 metadata:
   name: cachegroup-sample
+  namespace: default
 spec:
   secretRef:
     name: juicefs-secret
+  # Duration for new node to join cluster with group-backup option
+  backupDuration: "10m"
+  # Maximum time to wait for data migration when deleting
+  waitingDeletedMaxDuration: "1h"
   updateStrategy:
     # support：
     # - RollingUpdate: default policy
@@ -36,36 +42,18 @@ spec:
         limits:
           cpu: 1
           memory: 1Gi
+      cacheDirs:
+        - path: /var/jfsCache-0
+          type: HostPath
       opts:
-        - cache-dir=/mnt/juicefs:/mnt/juicefs2:/mnt/juicefs3
-      volumeMounts:
-        - name: cachedir-0
-          mountPath: /mnt/juicefs
-        - name: cachedir-1
-          mountPath: /mnt/juicefs2
-        - name: cachedir-2
-          mountPath: /mnt/juicefs3
-      volumes:
-        - name: cachedir-0
-          hostPath:
-            path: /mnt/juicefs
-        - name: cachedir-1
-          hostPath:
-            path: /dev/sda/juicefs2
-        - name: cachedir-2
-          persistentVolumeClaim:
-            claimName: juicefs-cache-pvc
+        - group-weight=100
     overwrite:
       - nodes:
           - k8s-03
         opts:
-          - cache-dir=/mnt/juicefs
           - group-weight=50
-        volumeMounts:
-          - name: cachedir-0
-            mountPath: /mnt/juicefs
-        volumes:
-          - name: cachedir-0
-            hostPath:
-              path: /mnt/juicefs
-
+        cacheDirs:
+        - path: /var/jfsCache-1
+          type: HostPath
+        - path: /var/jfsCache-2
+          type: HostPath

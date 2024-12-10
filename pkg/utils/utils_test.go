@@ -96,3 +96,51 @@ func TestContainsNodeSelector(t *testing.T) {
 		})
 	}
 }
+
+func TestCompareImageVersion(t *testing.T) {
+	tests := []struct {
+		name    string
+		current string
+		target  string
+		want    int
+	}{
+		{
+			name:    "Test with current greater than target",
+			current: "juicedata/mount:ee-1.2.3",
+			target:  "1.2.2",
+			want:    1,
+		},
+		{
+			name:    "Test with current less than target",
+			current: "juicedata/mount:ee-1.2.2",
+			target:  "1.2.3",
+			want:    -1,
+		},
+		{
+			name:    "Test with current equal to target",
+			current: "juicedata/mount:ee-1.2.3",
+			target:  "1.2.3",
+			want:    0,
+		},
+		{
+			name:    "Test with current having less parts than target",
+			current: "juicedata/mount:ee-1.2",
+			target:  "1.2.3",
+			want:    -1,
+		},
+		{
+			name:    "Test with specific version",
+			current: "juicedata/mount:ee-nightly",
+			target:  "1.2.1",
+			want:    1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := CompareEEImageVersion(tt.current, tt.target); got != tt.want {
+				t.Errorf("CompareImageVersion() = %v, want = %v", got, tt.want)
+			}
+		})
+	}
+}

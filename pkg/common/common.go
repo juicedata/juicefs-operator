@@ -16,6 +16,7 @@ package common
 
 import (
 	"fmt"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -31,9 +32,12 @@ const (
 	// Finalizer is the finalizer for CacheGroup
 	Finalizer = "juicefs.io/finalizer"
 	// juicefs binary path
-	JuiceFSBinary      = "/usr/bin/juicefs"
-	JuiceFsMountBinary = "/sbin/mount.juicefs"
-	MountPoint         = "/mnt/jfs"
+	JuiceFSBinary                 = "/usr/bin/juicefs"
+	JuiceFsMountBinary            = "/sbin/mount.juicefs"
+	MountPoint                    = "/mnt/jfs"
+	CacheDirVolumeNamePrefix      = "jfs-cache-dir-"
+	CacheDirVolumeMountPathPrefix = "/var/jfsCache-"
+	DefaultCacheHostPath          = "/var/jfsCache"
 
 	// label keys
 	LabelCacheGroup  = "juicefs.io/cache-group"
@@ -42,6 +46,9 @@ const (
 	LabelWorkerValue = "juicefs-cache-group-worker"
 	LabelAppType     = "app.kubernetes.io/name"
 	LabelJobValue    = "juicefs-warmup-job"
+
+	AnnoBackupWorker        = "juicefs.io/backup-worker"
+	AnnoWaitingDeleteWorker = "juicefs.io/waiting-delete-worker"
 )
 
 var (
@@ -55,6 +62,9 @@ var (
 			corev1.ResourceMemory: resource.MustParse("1Gi"),
 		},
 	}
+
+	DefaultBackupWorkerDuration = 10 * time.Minute
+	DefaultWaitingMaxDuration   = 1 * time.Hour
 )
 
 func GenWorkerName(cgName string, nodeName string) string {

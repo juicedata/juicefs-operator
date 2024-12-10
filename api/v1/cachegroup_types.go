@@ -25,6 +25,24 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
+type CacheDirType string
+
+var (
+	CacheDirTypeHostPath CacheDirType = "HostPath"
+	CacheDirTypePVC      CacheDirType = "PVC"
+)
+
+type CacheDir struct {
+	// +kubebuilder:validation:Enum=HostPath;PVC
+	Type CacheDirType `json:"type,omitempty"`
+	// required for HostPath type
+	// +optional
+	Path string `json:"path,omitempty"`
+	// required for PVC type
+	// +optional
+	Name string `json:"name,omitempty"`
+}
+
 // CacheGroupWorkerTemplate defines cache group worker template
 type CacheGroupWorkerTemplate struct {
 	NodeSelector       map[string]string   `json:"nodeSelector,omitempty"`
@@ -32,6 +50,7 @@ type CacheGroupWorkerTemplate struct {
 	HostNetwork        *bool               `json:"hostNetwork,omitempty"`
 	SchedulerName      string              `json:"schedulerName,omitempty"`
 	Tolerations        []corev1.Toleration `json:"tolerations,omitempty"`
+	CacheDirs          []CacheDir          `json:"cacheDirs,omitempty"`
 
 	// Container image.
 	// More info: https://kubernetes.io/docs/concepts/containers/images
@@ -121,6 +140,14 @@ type CacheGroupSpec struct {
 	CleanCache     bool                            `json:"cleanCache,omitempty"`
 	CacheGroup     string                          `json:"cacheGroup,omitempty"`
 	Worker         CacheGroupWorkerSpec            `json:"worker,omitempty"`
+	// Duration for new node to join cluster with group-backup option
+	// Default is 10 minutes
+	// +optional
+	BackupDuration *metav1.Duration `json:"backupDuration,omitempty"`
+	// Maximum time to wait for data migration when deleting
+	// Default is 1 hour
+	// +optional
+	WaitingDeletedMaxDuration *metav1.Duration `json:"waitingDeletedMaxDuration,omitempty"`
 }
 
 type CacheGroupPhase string
@@ -145,10 +172,13 @@ type CacheGroupStatus struct {
 	Phase      CacheGroupPhase       `json:"phase,omitempty"`
 	Conditions []CacheGroupCondition `json:"conditions,omitempty"`
 
-	ReadyWorker  int32  `json:"readyWorker,omitempty"`
-	ExpectWorker int32  `json:"expectWorker,omitempty"`
-	ReadyStr     string `json:"readyStr,omitempty"`
-	CacheGroup   string `json:"cacheGroup,omitempty"`
+	FileSystem           string `json:"fileSystem,omitempty"`
+	ReadyWorker          int32  `json:"readyWorker,omitempty"`
+	BackUpWorker         int32  `json:"backUpWorker,omitempty"`
+	WaitingDeletedWorker int32  `json:"waitingDeletedWorker,omitempty"`
+	ExpectWorker         int32  `json:"expectWorker,omitempty"`
+	ReadyStr             string `json:"readyStr,omitempty"`
+	CacheGroup           string `json:"cacheGroup,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -156,6 +186,8 @@ type CacheGroupStatus struct {
 // +kubebuilder:resource:shortName=cg
 // +kubebuilder:printcolumn:name="Cache Group",type="string",JSONPath=".status.cacheGroup"
 // +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase"
+// +kubebuilder:printcolumn:name="Back up",type="string",JSONPath=".status.backUpWorker"
+// +kubebuilder:printcolumn:name="Waiting Deleted",type="string",JSONPath=".status.WaitingDeletedWorker"
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.readyStr"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 // CacheGroup is the Schema for the cachegroups API

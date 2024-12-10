@@ -21,6 +21,7 @@ import (
 
 	juicefsiov1 "github.com/juicedata/juicefs-cache-group-operator/api/v1"
 	"github.com/juicedata/juicefs-cache-group-operator/pkg/common"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -52,11 +53,11 @@ func TestPodBuilder_genCommands(t *testing.T) {
 				"sh",
 				"-c",
 				common.JuiceFSBinary + " auth test-name --token ${TOKEN} --secret-key ${SECRET_KEY}\n" +
-					"exec " + common.JuiceFsMountBinary + " test-name " + common.MountPoint + " -o foreground,cache-group=default-test-cg,cache-dir=/var/jfsCache",
+					"exec " + common.JuiceFsMountBinary + " test-name " + common.MountPoint + " -o foreground,no-update,cache-group=default-test-cg,cache-dir=/var/jfsCache",
 			},
 		},
 		{
-			name: "with cache-dir option",
+			name: "with cache-dir",
 			podBuilder: &PodBuilder{
 				volName: "test-name",
 				cg: &juicefsiov1.CacheGroup{
@@ -70,14 +71,19 @@ func TestPodBuilder_genCommands(t *testing.T) {
 					"secret-key": "test-secret-key",
 				},
 				spec: juicefsiov1.CacheGroupWorkerTemplate{
-					Opts: []string{"cache-dir=/custom/cache"},
+					CacheDirs: []juicefsiov1.CacheDir{
+						{
+							Type: juicefsiov1.CacheDirTypeHostPath,
+							Path: "/custom/cache",
+						},
+					},
 				},
 			},
 			expected: []string{
 				"sh",
 				"-c",
 				common.JuiceFSBinary + " auth test-name --token ${TOKEN} --secret-key ${SECRET_KEY}\n" +
-					"exec " + common.JuiceFsMountBinary + " test-name " + common.MountPoint + " -o foreground,cache-group=default-test-cg,cache-dir=/custom/cache",
+					"exec " + common.JuiceFsMountBinary + " test-name " + common.MountPoint + " -o foreground,no-update,cache-group=default-test-cg,cache-dir=/var/jfsCache-0",
 			},
 		},
 		{
@@ -95,14 +101,14 @@ func TestPodBuilder_genCommands(t *testing.T) {
 					"secret-key": "test-secret-key",
 				},
 				spec: juicefsiov1.CacheGroupWorkerTemplate{
-					Opts: []string{"cache-dir=/custom/cache", "verbose"},
+					Opts: []string{"a=b", "verbose"},
 				},
 			},
 			expected: []string{
 				"sh",
 				"-c",
 				common.JuiceFSBinary + " auth test-name --token ${TOKEN} --secret-key ${SECRET_KEY}\n" +
-					"exec " + common.JuiceFsMountBinary + " test-name " + common.MountPoint + " -o foreground,cache-group=default-test-cg,verbose,cache-dir=/custom/cache",
+					"exec " + common.JuiceFsMountBinary + " test-name " + common.MountPoint + " -o foreground,no-update,cache-group=default-test-cg,a=b,verbose,cache-dir=/var/jfsCache",
 			},
 		},
 		{
@@ -121,14 +127,14 @@ func TestPodBuilder_genCommands(t *testing.T) {
 					"format-options": "format-options,format-options2",
 				},
 				spec: juicefsiov1.CacheGroupWorkerTemplate{
-					Opts: []string{"cache-dir=/custom/cache", "verbose"},
+					Opts: []string{"verbose"},
 				},
 			},
 			expected: []string{
 				"sh",
 				"-c",
 				common.JuiceFSBinary + " auth test-name --token ${TOKEN} --secret-key ${SECRET_KEY} --format-options --format-options2\n" +
-					"exec " + common.JuiceFsMountBinary + " test-name " + common.MountPoint + " -o foreground,cache-group=default-test-cg,verbose,cache-dir=/custom/cache",
+					"exec " + common.JuiceFsMountBinary + " test-name " + common.MountPoint + " -o foreground,no-update,cache-group=default-test-cg,verbose,cache-dir=/var/jfsCache",
 			},
 		},
 		{
@@ -139,6 +145,13 @@ func TestPodBuilder_genCommands(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test-cg",
 						Namespace: "default",
+					},
+					Spec: juicefsiov1.CacheGroupSpec{
+						SecretRef: &corev1.SecretEnvSource{
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: "test-secret",
+							},
+						},
 					},
 				},
 				initConfig: "initconfig",
@@ -152,7 +165,7 @@ func TestPodBuilder_genCommands(t *testing.T) {
 				"sh",
 				"-c",
 				"cp /etc/juicefs/test-name.conf /root/.juicefs\n" +
-					"exec " + common.JuiceFsMountBinary + " test-name " + common.MountPoint + " -o foreground,cache-group=default-test-cg,cache-dir=/var/jfsCache",
+					"exec " + common.JuiceFsMountBinary + " test-name " + common.MountPoint + " -o foreground,no-update,cache-group=default-test-cg,cache-dir=/var/jfsCache",
 			},
 		},
 	}
@@ -160,9 +173,54 @@ func TestPodBuilder_genCommands(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := context.TODO()
+			tt.podBuilder.genInitConfigVolumes()
+			tt.podBuilder.genCacheDirs()
 			got := tt.podBuilder.genCommands(ctx)
 			if !reflect.DeepEqual(got, tt.expected) {
 				t.Errorf("genCommands() = %v, want %v", got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestUpdateWorkerGroupWeight(t *testing.T) {
+	tests := []struct {
+		name     string
+		worker   *corev1.Pod
+		weight   int
+		expected string
+	}{
+		{
+			name: "no group-weight option",
+			worker: &corev1.Pod{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{{
+						Command: []string{"sh", "-c", "cp /etc/juicefs/zxh-test-2.conf /root/.juicefs\nexec /sbin/mount.juicefs zxh-test-2 /mnt/jfs -o foreground,no-update,cache-group=juicefs-cache-group-cachegroup-sample,cache-dir=/var/jfsCache"},
+					}},
+				},
+			},
+			weight:   10,
+			expected: "cp /etc/juicefs/zxh-test-2.conf /root/.juicefs\nexec /sbin/mount.juicefs zxh-test-2 /mnt/jfs -o foreground,no-update,cache-group=juicefs-cache-group-cachegroup-sample,cache-dir=/var/jfsCache,group-weight=10",
+		},
+		{
+			name: "with group-weight option",
+			worker: &corev1.Pod{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{{
+						Command: []string{"sh", "-c", "cp /etc/juicefs/zxh-test-2.conf /root/.juicefs\nexec /sbin/mount.juicefs zxh-test-2 /mnt/jfs -o foreground,no-update,cache-group=juicefs-cache-group-cachegroup-sample,cache-dir=/var/jfsCache,group-weight=10"},
+					}},
+				},
+			},
+			weight:   0,
+			expected: "cp /etc/juicefs/zxh-test-2.conf /root/.juicefs\nexec /sbin/mount.juicefs zxh-test-2 /mnt/jfs -o foreground,no-update,cache-group=juicefs-cache-group-cachegroup-sample,cache-dir=/var/jfsCache,group-weight=0",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			UpdateWorkerGroupWeight(tt.worker, tt.weight)
+			if tt.worker.Spec.Containers[0].Command[2] != tt.expected {
+				t.Errorf("UpdateWorkerGroupWeight() = %v, want %v", tt.worker.Spec.Containers[0].Command[2], tt.expected)
 			}
 		})
 	}

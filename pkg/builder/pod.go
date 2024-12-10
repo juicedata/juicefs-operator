@@ -258,6 +258,11 @@ func (p *PodBuilder) genCommands(ctx context.Context) []string {
 	for _, opt := range parsedOpts {
 		if opt[0] == "cache-dir" {
 			log.FromContext(ctx).Info("cache-dir option is not allowed, plz use cacheDirs instead")
+			continue
+		}
+		if utils.SliceContains(opts, opt[1]) {
+			log.FromContext(ctx).Info("option is duplicated, skip", "option", opt[0])
+			continue
 		}
 		if opt[1] != "" {
 			opts = append(opts, strings.TrimSpace(opt[0])+"="+strings.TrimSpace(opt[1]))

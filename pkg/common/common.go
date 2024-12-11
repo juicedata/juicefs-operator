@@ -24,8 +24,9 @@ import (
 
 const (
 	// CacheGroupContainerName is the name of cache group worker container
-	WorkerContainerName = "juicefs-cg-worker"
-	WarmUpContainerName = "juicefs-warmup"
+	WorkerContainerName     = "juicefs-cg-worker"
+	WarmUpContainerName     = "juicefs-warmup"
+	CleanCacheContainerName = "juicefs-clean-cache"
 	// WorkerNamePrefix is the prefix of worker name
 	WorkerNamePrefix = "juicefs-cg-worker"
 	WarmUpNamePrefix = "juicefs-warmup"
@@ -40,12 +41,13 @@ const (
 	DefaultCacheHostPath          = "/var/jfsCache"
 
 	// label keys
-	LabelCacheGroup  = "juicefs.io/cache-group"
-	LabelWorkerHash  = "juicefs.io/worker-hash"
-	LabelWorker      = "app.kubernetes.io/name"
-	LabelWorkerValue = "juicefs-cache-group-worker"
-	LabelAppType     = "app.kubernetes.io/name"
-	LabelJobValue    = "juicefs-warmup-job"
+	LabelCacheGroup         = "juicefs.io/cache-group"
+	LabelWorkerHash         = "juicefs.io/worker-hash"
+	LabelWorker             = "app.kubernetes.io/name"
+	LabelWorkerValue        = "juicefs-cache-group-worker"
+	LabelAppType            = "app.kubernetes.io/name"
+	LabelJobValue           = "juicefs-warmup-job"
+	LableCleanCacheJobValue = "juicefs-clean-cache-job"
 
 	AnnoBackupWorker        = "juicefs.io/backup-worker"
 	AnnoWaitingDeleteWorker = "juicefs.io/waiting-delete-worker"
@@ -53,11 +55,22 @@ const (
 
 var (
 	DefaultResources = corev1.ResourceRequirements{
+		Requests: corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse("1000m"),
+			corev1.ResourceMemory: resource.MustParse("1Gi"),
+		},
 		Limits: corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse("2"),
+			corev1.ResourceMemory: resource.MustParse("5Gi"),
+		},
+	}
+
+	DefaultForCleanCacheResources = corev1.ResourceRequirements{
+		Requests: corev1.ResourceList{
 			corev1.ResourceCPU:    resource.MustParse("100m"),
 			corev1.ResourceMemory: resource.MustParse("100Mi"),
 		},
-		Requests: corev1.ResourceList{
+		Limits: corev1.ResourceList{
 			corev1.ResourceCPU:    resource.MustParse("1"),
 			corev1.ResourceMemory: resource.MustParse("1Gi"),
 		},
@@ -85,4 +98,8 @@ func GenRoleBindingName(wuName string) string {
 
 func GenRoleName(wuName string) string {
 	return fmt.Sprintf("%s-%s-role", WarmUpNamePrefix, wuName)
+}
+
+func GenCleanCacheJobName(nodeName string) string {
+	return fmt.Sprintf("%s-%s", CleanCacheContainerName, nodeName)
 }

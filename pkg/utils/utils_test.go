@@ -144,3 +144,68 @@ func TestCompareImageVersion(t *testing.T) {
 		})
 	}
 }
+
+func TestParseYamlOrJson(t *testing.T) {
+	tests := []struct {
+		name    string
+		source  string
+		want    map[string]interface{}
+		wantErr bool
+	}{
+		{
+			name:   "Test with valid JSON",
+			source: `{"key1": "value1", "key2": "value2"}`,
+			want: map[string]interface{}{
+				"key1": "value1",
+				"key2": "value2",
+			},
+			wantErr: false,
+		},
+		{
+			name:   "Test with valid YAML",
+			source: "key1: value1\nkey2: value2\n",
+			want: map[string]interface{}{
+				"key1": "value1",
+				"key2": "value2",
+			},
+			wantErr: false,
+		},
+		{
+			name:    "Test with invalid JSON and YAML",
+			source:  `{"key1": "value1", "key2": "value2"`,
+			want:    nil,
+			wantErr: true,
+		},
+		{
+			name:    "Test with empty source",
+			source:  ``,
+			want:    map[string]interface{}{},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ParseYamlOrJson(tt.source)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ParseYamlOrJson() error = %v, wantErr = %v", err, tt.wantErr)
+				return
+			}
+			if !tt.wantErr && !equalMaps(got, tt.want) {
+				t.Errorf("ParseYamlOrJson() = %v, want = %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func equalMaps(a, b map[string]interface{}) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for k, v := range a {
+		if b[k] != v {
+			return false
+		}
+	}
+	return true
+}

@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -124,8 +125,22 @@ func newBasicPod(cg *juicefsiov1.CacheGroup, nodeName string) *corev1.Pod {
 	return worker
 }
 
-func (p *PodBuilder) genEnvs() []corev1.EnvVar {
+func (p *PodBuilder) genEnvs(ctx context.Context) []corev1.EnvVar {
 	envs := []corev1.EnvVar{}
+	if v, ok := p.secretData["envs"]; ok && v != "" {
+		secretEnvs, err := utils.ParseYamlOrJson(v)
+		if err != nil {
+			log.FromContext(ctx).Error(err, "failed to parse envs, will ignore", "envs", v)
+		} else {
+			for k, v := range secretEnvs {
+				envs = append(envs, corev1.EnvVar{
+					Name:  k,
+					Value: fmt.Sprint(v),
+				})
+			}
+		}
+	}
+
 	for _, k := range secretStrippedEnvs {
 		_, isOptional := secretStrippedEnvOptional[k]
 		envs = append(envs, corev1.EnvVar{
@@ -142,6 +157,9 @@ func (p *PodBuilder) genEnvs() []corev1.EnvVar {
 		})
 	}
 	envs = append(envs, p.spec.Env...)
+	sort.SliceStable(envs, func(i, j int) bool {
+		return envs[i].Name < envs[j].Name
+	})
 	return envs
 }
 
@@ -359,7 +377,7 @@ func (p *PodBuilder) NewCacheGroupWorker(ctx context.Context) *corev1.Pod {
 	} else {
 		worker.Spec.Containers[0].Resources = common.DefaultResources
 	}
-	worker.Spec.Containers[0].Env = p.genEnvs()
+	worker.Spec.Containers[0].Env = p.genEnvs(ctx)
 	worker.Spec.Containers[0].Command = p.genCommands(ctx)
 
 	hash := utils.GenHash(worker)

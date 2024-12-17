@@ -21,6 +21,7 @@ import (
 
 	juicefsiov1 "github.com/juicedata/juicefs-cache-group-operator/api/v1"
 	"github.com/juicedata/juicefs-cache-group-operator/pkg/common"
+	"github.com/juicedata/juicefs-cache-group-operator/pkg/utils"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -221,6 +222,118 @@ func TestUpdateWorkerGroupWeight(t *testing.T) {
 			UpdateWorkerGroupWeight(tt.worker, tt.weight)
 			if tt.worker.Spec.Containers[0].Command[2] != tt.expected {
 				t.Errorf("UpdateWorkerGroupWeight() = %v, want %v", tt.worker.Spec.Containers[0].Command[2], tt.expected)
+			}
+		})
+	}
+}
+
+func TestPodBuilder_genEnvs(t *testing.T) {
+	tests := []struct {
+		name       string
+		podBuilder *PodBuilder
+		expected   []corev1.EnvVar
+	}{
+		{
+			name: "basic envs",
+			podBuilder: &PodBuilder{
+				cg: &juicefsiov1.CacheGroup{
+					Spec: juicefsiov1.CacheGroupSpec{
+						SecretRef: &corev1.SecretEnvSource{
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: "test-secret",
+							},
+						},
+					},
+				},
+				secretData: map[string]string{
+					"envs": `{"ENV1": "value1", "ENV2": "value2"}`,
+				},
+			},
+			expected: []corev1.EnvVar{
+				{Name: "ENV1", Value: "value1"},
+				{Name: "ENV2", Value: "value2"},
+				{Name: "SECRET_KEY", ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						Key:      "secret-key",
+						Optional: utils.ToPtr(false),
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: "test-secret",
+						},
+					},
+				}},
+				{Name: "SECRET_KEY_2", ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						Key:      "secret-key2",
+						Optional: utils.ToPtr(true),
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: "test-secret",
+						},
+					},
+				}},
+				{Name: "TOKEN", ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						Key:      "token",
+						Optional: utils.ToPtr(false),
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: "test-secret",
+						},
+					},
+				}},
+			},
+		},
+		{
+			name: "no envs in secretData",
+			podBuilder: &PodBuilder{
+				cg: &juicefsiov1.CacheGroup{
+					Spec: juicefsiov1.CacheGroupSpec{
+						SecretRef: &corev1.SecretEnvSource{
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: "test-secret",
+							},
+						},
+					},
+				},
+				secretData: map[string]string{},
+				spec:       juicefsiov1.CacheGroupWorkerTemplate{},
+			},
+			expected: []corev1.EnvVar{
+				{Name: "SECRET_KEY", ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						Key:      "secret-key",
+						Optional: utils.ToPtr(false),
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: "test-secret",
+						},
+					},
+				}},
+				{Name: "SECRET_KEY_2", ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						Key:      "secret-key2",
+						Optional: utils.ToPtr(true),
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: "test-secret",
+						},
+					},
+				}},
+				{Name: "TOKEN", ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						Key:      "token",
+						Optional: utils.ToPtr(false),
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: "test-secret",
+						},
+					},
+				}},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.TODO()
+			got := tt.podBuilder.genEnvs(ctx)
+			if !reflect.DeepEqual(got, tt.expected) {
+				t.Errorf("genEnvs() = %v, want %v", got, tt.expected)
 			}
 		})
 	}

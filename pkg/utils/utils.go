@@ -24,6 +24,7 @@ import (
 
 	"github.com/juicedata/juicefs-cache-group-operator/pkg/common"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/yaml"
 )
 
 func ToPtr[T any](v T) *T {
@@ -110,4 +111,14 @@ func GetBackupWorkerDuration(d *metav1.Duration) time.Duration {
 		return common.DefaultBackupWorkerDuration
 	}
 	return d.Duration
+}
+
+func ParseYamlOrJson(source string) (map[string]interface{}, error) {
+	dst := make(map[string]interface{})
+	if err := json.Unmarshal([]byte(source), &dst); err != nil {
+		if err := yaml.Unmarshal([]byte(source), &dst); err != nil {
+			return nil, err
+		}
+	}
+	return dst, nil
 }

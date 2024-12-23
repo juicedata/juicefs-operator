@@ -34,6 +34,10 @@ spec:
       nodeSelector:
         juicefs.io/cg-worker: "true"
       image: juicedata/mount:ee-5.1.1-1faf43b
+      tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
       hostNetwork: true
       resources:
         requests:
@@ -47,13 +51,22 @@ spec:
           type: HostPath
       opts:
         - group-weight=100
+        - cache-size=204800
+        - free-space-ratio=0.01
     overwrite:
       - nodes:
           - k8s-03
         opts:
           - group-weight=50
+          - cache-size=102400
+          - free-space-ratio=0.01
         cacheDirs:
         - path: /var/jfsCache-1
           type: HostPath
         - path: /var/jfsCache-2
           type: HostPath
+      - nodeSelector:
+          k8s/instance-type: c5.large
+        opts:
+          - group-weight=10
+          - cache-size=1024

@@ -255,7 +255,7 @@ func TestPodBuilder_genEnvs(t *testing.T) {
 				{Name: "SECRET_KEY", ValueFrom: &corev1.EnvVarSource{
 					SecretKeyRef: &corev1.SecretKeySelector{
 						Key:      "secret-key",
-						Optional: utils.ToPtr(false),
+						Optional: utils.ToPtr(true),
 						LocalObjectReference: corev1.LocalObjectReference{
 							Name: "test-secret",
 						},
@@ -300,7 +300,7 @@ func TestPodBuilder_genEnvs(t *testing.T) {
 				{Name: "SECRET_KEY", ValueFrom: &corev1.EnvVarSource{
 					SecretKeyRef: &corev1.SecretKeySelector{
 						Key:      "secret-key",
-						Optional: utils.ToPtr(false),
+						Optional: utils.ToPtr(true),
 						LocalObjectReference: corev1.LocalObjectReference{
 							Name: "test-secret",
 						},

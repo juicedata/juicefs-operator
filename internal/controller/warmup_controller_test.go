@@ -83,6 +83,11 @@ var _ = Describe("WarmUp Controller", func() {
 							{
 								Name:  "juicefs",
 								Image: "juicedata/mount:ee-5.1.1-ca439c2",
+								Command: []string{
+									"sh",
+									"-c",
+									"/usr/bin/juicefs auth zxh-test-2\nexec /sbin/mount.juicefs zxh-test-2 /mnt/jfs -o cache-dir=/mnt/cache",
+								},
 							},
 						},
 					},

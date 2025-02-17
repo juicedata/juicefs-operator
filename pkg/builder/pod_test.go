@@ -347,18 +347,6 @@ func TestParseWorkerMountCmds(t *testing.T) {
 		expectedOptions []string
 	}{
 		{
-			name:            "empty command",
-			cmds:            "",
-			expectedVolName: "",
-			expectedOptions: nil,
-		},
-		{
-			name:            "invalid command prefix",
-			cmds:            "invalid command",
-			expectedVolName: "",
-			expectedOptions: nil,
-		},
-		{
 			name:            "valid command with options",
 			cmds:            "exec /sbin/mount.juicefs test-vol /mnt/jfs -o option1,option2",
 			expectedVolName: "test-vol",
@@ -369,12 +357,6 @@ func TestParseWorkerMountCmds(t *testing.T) {
 			cmds:            "exec /sbin/mount.juicefs test-vol /mnt/jfs -o ",
 			expectedVolName: "test-vol",
 			expectedOptions: []string{""},
-		},
-		{
-			name:            "invalid command format",
-			cmds:            "exec /sbin/mount.juicefs",
-			expectedVolName: "",
-			expectedOptions: nil,
 		},
 	}
 

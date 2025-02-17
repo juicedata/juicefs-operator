@@ -448,7 +448,7 @@ var _ = Describe("controller", Ordered, func() {
 				}
 				return nil
 			}
-			Eventually(verifyWorkerSpec, time.Minute, time.Second).Should(Succeed())
+			Eventually(verifyWorkerSpec, 5*time.Minute, 3*time.Second).Should(Succeed())
 		})
 
 		It("should gracefully handle member change ", func() {

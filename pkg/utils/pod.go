@@ -122,3 +122,21 @@ func ParseUpdateStrategy(strategy *appsv1.DaemonSetUpdateStrategy, total int) (a
 
 	return appsv1.RollingUpdateDaemonSetStrategyType, 1
 }
+
+func MustParseWorkerMountCmds(cmds string) (volName string, options []string) {
+	if cmds == "" {
+		panic("empty worker mount cmds")
+	}
+	if !strings.HasPrefix(cmds, "exec") {
+		panic("invalid worker mount cmds")
+	}
+	// parse cmds
+	// style like: "exec /sbin/mount.juicefs <volName> /mnt/jfs -o <options>"
+	parts := strings.Split(cmds, " ")
+	if len(parts) < 5 {
+		panic("invalid worker mount cmds")
+	}
+	volName = parts[2]
+	options = strings.Split(parts[5], ",")
+	return volName, options
+}

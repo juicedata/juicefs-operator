@@ -53,6 +53,7 @@ var (
 		"secret-key2": "SECRET_KEY_2",
 	}
 	secretStrippedEnvOptional = map[string]bool{
+		"secret-key":  true,
 		"secret-key2": true,
 	}
 )

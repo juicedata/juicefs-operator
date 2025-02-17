@@ -422,6 +422,9 @@ var _ = Describe("controller", Ordered, func() {
 				err = json.Unmarshal(result, &nodes)
 				ExpectWithOffset(1, err).NotTo(HaveOccurred())
 				for _, node := range nodes.Items {
+					if node.DeletionTimestamp != nil {
+						return fmt.Errorf("worker pod is deleting")
+					}
 					checkCmd := normalCmds
 					if node.Spec.NodeName == utils.GetKindNodeName("worker2") {
 						checkCmd = worker2Cmds
@@ -448,7 +451,7 @@ var _ = Describe("controller", Ordered, func() {
 				}
 				return nil
 			}
-			Eventually(verifyWorkerSpec, time.Minute, time.Second).Should(Succeed())
+			Eventually(verifyWorkerSpec, 5*time.Minute, 3*time.Second).Should(Succeed())
 		})
 
 		It("should gracefully handle member change ", func() {

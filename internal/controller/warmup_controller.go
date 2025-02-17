@@ -299,7 +299,7 @@ func (c *cronHandler) sync(ctx context.Context, wu *juicefsiov1.WarmUp) (err err
 		}
 		return err
 	}
-	newStatus := c.calculateStatus(ctx, &cronjob)
+	newStatus := c.calculateStatus(&cronjob)
 	if !reflect.DeepEqual(wu.Status, newStatus) {
 		wu.Status = *newStatus
 		return utils.IgnoreConflict(c.Status().Update(ctx, wu))
@@ -307,7 +307,7 @@ func (c *cronHandler) sync(ctx context.Context, wu *juicefsiov1.WarmUp) (err err
 	return nil
 }
 
-func (o *cronHandler) calculateStatus(ctx context.Context, crobjob *batchv1.CronJob) *juicefsiov1.WarmUpStatus {
+func (o *cronHandler) calculateStatus(crobjob *batchv1.CronJob) *juicefsiov1.WarmUpStatus {
 	status := &juicefsiov1.WarmUpStatus{}
 	if crobjob == nil {
 		status.Phase = juicefsiov1.WarmUpPhasePending

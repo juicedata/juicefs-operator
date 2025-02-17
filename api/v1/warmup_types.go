@@ -68,7 +68,7 @@ const (
 
 type Cron struct {
 	Schedule string `json:"schedule,omitempty"`
-	//+optional
+	// +optional
 	Suspend *bool `json:"suspend,omitempty"`
 }
 

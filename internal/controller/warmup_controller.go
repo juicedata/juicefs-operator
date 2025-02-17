@@ -46,6 +46,7 @@ type WarmUpReconciler struct {
 // +kubebuilder:rbac:groups=juicefs.io,resources=warmups/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=juicefs.io,resources=warmups/finalizers,verbs=update
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;create;delete;watch
+// +kubebuilder:rbac:groups=batch,resources=cronjobs,verbs=get;list;create;delete;watch;update
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=rolebindings,verbs=get;list;create;watch
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles,verbs=get;list;create;watch
 // +kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=get;list;create;watch
@@ -67,6 +68,8 @@ func (r *WarmUpReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
+	logger.V(1).Info("reconcile WarmUp", "warmup", wu.Name)
+
 	cg := &juicefsiov1.CacheGroup{}
 	if err := r.Get(ctx, types.NamespacedName{
 		Namespace: wu.Namespace,
@@ -76,13 +79,13 @@ func (r *WarmUpReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, err
 	}
 
-	handler := r.getWarmUpHandler(wu.Spec.Policy.Type)
-	if handler == nil {
-		logger.Error(fmt.Errorf("unsupported policy type %s", wu.Spec.Policy.Type), "unable to get WarmUp handler")
+	if wu.DeletionTimestamp != nil {
 		return ctrl.Result{}, nil
 	}
 
-	if wu.DeletionTimestamp != nil {
+	handler := r.getWarmUpHandler(wu.Spec.Policy.Type)
+	if handler == nil {
+		logger.Error(fmt.Errorf("unsupported policy type %s", wu.Spec.Policy.Type), "unable to get WarmUp handler")
 		return ctrl.Result{}, nil
 	}
 
@@ -124,7 +127,9 @@ func (o *onceHandler) sync(ctx context.Context, wu *juicefsiov1.WarmUp) (err err
 		if utils.IsNotFound(err) {
 			// create a new job
 			podList := &corev1.PodList{}
-			if err := o.List(ctx, podList, client.MatchingLabels{common.LabelCacheGroup: wu.Spec.CacheGroupName}); err != nil {
+			if err := o.List(ctx, podList, client.MatchingLabels{common.LabelCacheGroup: wu.Spec.CacheGroupName}, &client.ListOptions{
+				Limit: 1,
+			}); err != nil {
 				l.Error(err, "list pod error", "cache group", wu.Spec.CacheGroupName)
 				return err
 			}
@@ -135,7 +140,7 @@ func (o *onceHandler) sync(ctx context.Context, wu *juicefsiov1.WarmUp) (err err
 
 			// prepare rbac
 			l.Info("prepare rbac for warmup", "warmup", wu.Name)
-			err = o.prepareRBACForWarmUp(ctx, wu)
+			err = prepareRBACForWarmUp(ctx, o.Client, wu)
 			if err != nil {
 				return err
 			}
@@ -164,15 +169,15 @@ func (o *onceHandler) sync(ctx context.Context, wu *juicefsiov1.WarmUp) (err err
 	return nil
 }
 
-func (o *onceHandler) prepareRBACForWarmUp(ctx context.Context, wu *juicefsiov1.WarmUp) error {
+func prepareRBACForWarmUp(ctx context.Context, c client.Client, wu *juicefsiov1.WarmUp) error {
 	l := log.FromContext(ctx)
 	role := &rbacv1.Role{}
-	if err := o.Get(ctx, client.ObjectKey{
+	if err := c.Get(ctx, client.ObjectKey{
 		Name:      common.GenRoleName(wu.Name),
 		Namespace: wu.Namespace,
 	}, role); err != nil {
 		if utils.IsNotFound(err) {
-			if err := o.Create(ctx, builder.GenRoleForWarmUp(wu)); err != nil {
+			if err := c.Create(ctx, builder.GenRoleForWarmUp(wu)); err != nil {
 				l.Error(err, "create role error", "role", role.Name)
 				return err
 			}
@@ -182,12 +187,12 @@ func (o *onceHandler) prepareRBACForWarmUp(ctx context.Context, wu *juicefsiov1.
 		}
 	}
 	rbinding := &rbacv1.RoleBinding{}
-	if err := o.Get(ctx, client.ObjectKey{
+	if err := c.Get(ctx, client.ObjectKey{
 		Name:      common.GenRoleBindingName(wu.Name),
 		Namespace: wu.Namespace,
 	}, rbinding); err != nil {
 		if utils.IsNotFound(err) {
-			if err := o.Create(ctx, builder.GenRoleBindingForWarmUp(wu)); err != nil {
+			if err := c.Create(ctx, builder.GenRoleBindingForWarmUp(wu)); err != nil {
 				l.Error(err, "create roleBinding error", "roleBinding", rbinding.Name)
 				return err
 			}
@@ -198,9 +203,9 @@ func (o *onceHandler) prepareRBACForWarmUp(ctx context.Context, wu *juicefsiov1.
 	}
 
 	sa := &corev1.ServiceAccount{}
-	if err := o.Get(ctx, client.ObjectKey{Namespace: wu.Namespace, Name: common.GenSaName(wu.Name)}, sa); err != nil {
+	if err := c.Get(ctx, client.ObjectKey{Namespace: wu.Namespace, Name: common.GenSaName(wu.Name)}, sa); err != nil {
 		if utils.IsNotFound(err) {
-			if err := o.Create(ctx, builder.GenServiceAccount(wu)); err != nil {
+			if err := c.Create(ctx, builder.GenServiceAccount(wu)); err != nil {
 				l.Error(err, "create serviceAccount error", "serviceAccount", sa.Name)
 				return err
 			}
@@ -252,8 +257,66 @@ type cronHandler struct {
 var _ warmUpHandler = &cronHandler{}
 
 func (c *cronHandler) sync(ctx context.Context, wu *juicefsiov1.WarmUp) (err error) {
-	// TODO implement me
-	panic("implement me")
+	l := log.FromContext(ctx)
+	var cronjob batchv1.CronJob
+	podList := &corev1.PodList{}
+	if err := c.List(ctx, podList, client.MatchingLabels{common.LabelCacheGroup: wu.Spec.CacheGroupName}, &client.ListOptions{Limit: 1}); err != nil {
+		l.Error(err, "list pod error", "cache group", wu.Spec.CacheGroupName)
+		return err
+	}
+	if len(podList.Items) == 0 {
+		return fmt.Errorf("no worker found for cache group %s", wu.Spec.CacheGroupName)
+	}
+	l.Info("get worker of cacheGroup for warmup", "cacheGroup", wu.Spec.CacheGroupName, "worker", podList.Items[0].Name)
+	cronjobBuilder := builder.NewJobBuilder(wu, &podList.Items[0])
+	newCronJob := cronjobBuilder.NewWarmUpCronJob()
+
+	if err := c.Get(ctx, client.ObjectKey{Namespace: wu.Namespace, Name: common.GenJobName(wu.Name)}, &cronjob); err != nil {
+		if utils.IsNotFound(err) {
+			// prepare rbac
+			l.Info("prepare rbac for warmup", "warmup", wu.Name)
+			err = prepareRBACForWarmUp(ctx, c.Client, wu)
+			if err != nil {
+				return err
+			}
+			l.Info("create warmup cronjob", "cronjob", newCronJob.Name)
+			err = c.Create(ctx, newCronJob)
+			if err != nil {
+				l.Error(err, "create cronjob error", "cronjob", newCronJob.Name)
+				return err
+			}
+			cronjob = *newCronJob
+		} else {
+			l.Error(err, "get cronjob error", "cronjob", newCronJob.Name)
+			return err
+		}
+	} else {
+		if newCronJob.Annotations[common.LabelWorkerHash] != cronjob.Annotations[common.LabelWorkerHash] {
+			l.Info("update warmup cronjob", "cronjob", newCronJob.Name)
+			if err := c.Update(ctx, newCronJob); err != nil {
+				return utils.IgnoreConflict(err)
+			}
+		}
+		return err
+	}
+	newStatus := c.calculateStatus(ctx, &cronjob)
+	if !reflect.DeepEqual(wu.Status, newStatus) {
+		wu.Status = *newStatus
+		return utils.IgnoreConflict(c.Status().Update(ctx, wu))
+	}
+	return nil
+}
+
+func (o *cronHandler) calculateStatus(ctx context.Context, crobjob *batchv1.CronJob) *juicefsiov1.WarmUpStatus {
+	status := &juicefsiov1.WarmUpStatus{}
+	if crobjob == nil {
+		status.Phase = juicefsiov1.WarmUpPhasePending
+		return status
+	}
+	status.Phase = juicefsiov1.WarmUpPhaseRunning
+	status.LastScheduleTime = crobjob.Status.LastScheduleTime
+	status.LastCompleteTime = crobjob.Status.LastSuccessfulTime
+	return status
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -261,5 +324,6 @@ func (r *WarmUpReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&juicefsiov1.WarmUp{}).
 		Owns(&batchv1.Job{}).
+		Owns(&batchv1.CronJob{}).
 		Complete(r)
 }

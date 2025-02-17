@@ -47,6 +47,7 @@ const (
 	LabelWorkerValue        = "juicefs-cache-group-worker"
 	LabelAppType            = "app.kubernetes.io/name"
 	LabelJobValue           = "juicefs-warmup-job"
+	LabelCronJobValue       = "juicefs-warmup-cron-job"
 	LableCleanCacheJobValue = "juicefs-clean-cache-job"
 
 	AnnoBackupWorker        = "juicefs.io/backup-worker"

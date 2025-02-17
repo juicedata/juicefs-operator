@@ -338,3 +338,55 @@ func TestPodBuilder_genEnvs(t *testing.T) {
 		})
 	}
 }
+
+func TestParseWorkerMountCmds(t *testing.T) {
+	tests := []struct {
+		name            string
+		cmds            string
+		expectedVolName string
+		expectedOptions []string
+	}{
+		{
+			name:            "empty command",
+			cmds:            "",
+			expectedVolName: "",
+			expectedOptions: nil,
+		},
+		{
+			name:            "invalid command prefix",
+			cmds:            "invalid command",
+			expectedVolName: "",
+			expectedOptions: nil,
+		},
+		{
+			name:            "valid command with options",
+			cmds:            "exec /sbin/mount.juicefs test-vol /mnt/jfs -o option1,option2",
+			expectedVolName: "test-vol",
+			expectedOptions: []string{"option1", "option2"},
+		},
+		{
+			name:            "valid command without options",
+			cmds:            "exec /sbin/mount.juicefs test-vol /mnt/jfs -o ",
+			expectedVolName: "test-vol",
+			expectedOptions: []string{""},
+		},
+		{
+			name:            "invalid command format",
+			cmds:            "exec /sbin/mount.juicefs",
+			expectedVolName: "",
+			expectedOptions: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			volName, options := utils.MustParseWorkerMountCmds(tt.cmds)
+			if volName != tt.expectedVolName {
+				t.Errorf("ParseMountCmds() volName = %v, want %v", volName, tt.expectedVolName)
+			}
+			if !reflect.DeepEqual(options, tt.expectedOptions) {
+				t.Errorf("ParseMountCmds() options = %v, want %v", options, tt.expectedOptions)
+			}
+		})
+	}
+}

@@ -51,6 +51,21 @@ func (j *JobBuilder) NewWarmUpJob() *batchv1.Job {
 		Name:    common.WarmUpContainerName,
 		Image:   j.worker.Spec.Containers[0].Image,
 		Command: j.getWarmUpCommand(),
+		Env:     j.worker.Spec.Containers[0].Env,
+		SecurityContext: &corev1.SecurityContext{
+			Privileged: utils.ToPtr(true),
+		},
+		Lifecycle: &corev1.Lifecycle{
+			PreStop: &corev1.LifecycleHandler{
+				Exec: &corev1.ExecAction{
+					Command: []string{
+						"/bin/sh",
+						"-c",
+						"umount " + common.MountPoint,
+					},
+				},
+			},
+		},
 	}}
 	job.Spec.Template.Spec.ServiceAccountName = common.GenSaName(j.wu.Name)
 	return job
@@ -81,14 +96,29 @@ func (j *JobBuilder) genBaseJob() *batchv1.Job {
 }
 
 func (j *JobBuilder) getWarmUpCommand() []string {
+	workerCommad := strings.Split(j.worker.Spec.Containers[0].Command[2], "\n")
+	authCmd := workerCommad[0]
+	volName, opts := utils.MustParseWorkerMountCmds(workerCommad[1])
+	mountOpts := []string{
+		"no-sharing",
+	}
+	for _, opt := range opts {
+		if opt == "foreground" {
+			continue
+		}
+		mountOpts = append(mountOpts, opt)
+	}
+	mountCmds := []string{
+		common.JuiceFsMountBinary,
+		volName,
+		common.MountPoint,
+		"-o",
+		strings.Join(mountOpts, ","),
+	}
+
+	targetsCmd := ""
 	cmds := []string{
-		"kubectl",
-		"-n",
-		j.wu.Namespace,
 		"exec",
-		"-it",
-		j.worker.Name,
-		"--",
 	}
 
 	if len(j.wu.Spec.Targets) != 0 {
@@ -96,10 +126,8 @@ func (j *JobBuilder) getWarmUpCommand() []string {
 		for _, t := range j.wu.Spec.Targets {
 			targets = append(targets, path.Join(common.MountPoint, t))
 		}
-		targetsCmd := fmt.Sprintf("echo '%s' > /tmp/filelist.txt", strings.Join(targets, "\n"))
+		targetsCmd = fmt.Sprintf("echo '%s' > /tmp/filelist.txt", strings.Join(targets, "\n"))
 		cmds = append(cmds, []string{
-			targetsCmd,
-			"&&",
 			common.JuiceFSBinary,
 			"warmup",
 			"-f",
@@ -109,7 +137,7 @@ func (j *JobBuilder) getWarmUpCommand() []string {
 		cmds = append(cmds, []string{
 			common.JuiceFSBinary,
 			"warmup",
-			"/mnt/jfs",
+			common.MountPoint,
 		}...)
 	}
 
@@ -119,7 +147,10 @@ func (j *JobBuilder) getWarmUpCommand() []string {
 	return []string{
 		"/bin/sh",
 		"-c",
-		fmt.Sprintf("#!/bin/bash\nset -e\n%s", strings.Join(cmds, " ")),
+		authCmd + "\n" +
+			strings.Join(mountCmds, " ") + "\n" +
+			targetsCmd + "\n" +
+			strings.Join(cmds, " "),
 	}
 }
 

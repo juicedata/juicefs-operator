@@ -4,6 +4,7 @@
 resources:
 - bases/juicefs.io_cachegroups.yaml
 - bases/juicefs.io_warmups.yaml
+- bases/juicefs.io_syncs.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:

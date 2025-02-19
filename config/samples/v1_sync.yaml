@@ -1,0 +1,34 @@
+apiVersion: juicefs.io/v1
+kind: Sync
+metadata:
+  labels:
+    app.kubernetes.io/name: juicefs-cache-group-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: sync-test
+spec:
+  replicas: 3
+  image: registry.cn-hangzhou.aliyuncs.com/juicedata/mount:ee-5.1.9-d809773
+  from:
+    external:
+      uri: oss://sync-test.oss-cn-hangzhou.aliyuncs.com/sync-src-test/
+      accessKey:
+        value: accessKey
+      secretKey:
+        valueFrom:
+          secretKeyRef:
+            name: sync-test-secret
+            key: secretKey
+  to:
+    juicefs:
+      path: /sync-test/demo2/
+      token:
+        valueFrom:
+          secretKeyRef:
+            name: sync-test-secret
+            key: token
+      volumeName: sync-test
+      authOptions:
+        - bucket=http://sync-test.oss-cn-hangzhou.aliyuncs.com
+  options: 
+    - debug
+    - threads=10

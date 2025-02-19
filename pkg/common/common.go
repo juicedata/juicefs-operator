@@ -30,6 +30,7 @@ const (
 	// WorkerNamePrefix is the prefix of worker name
 	WorkerNamePrefix = "juicefs-cg-worker"
 	WarmUpNamePrefix = "juicefs-warmup"
+	SyncNamePrefix   = "juicefs-sync"
 	// Finalizer is the finalizer for CacheGroup
 	Finalizer = "juicefs.io/finalizer"
 	// juicefs binary path
@@ -49,6 +50,9 @@ const (
 	LabelJobValue           = "juicefs-warmup-job"
 	LabelCronJobValue       = "juicefs-warmup-cron-job"
 	LableCleanCacheJobValue = "juicefs-clean-cache-job"
+	LabelSync               = "juicefs.io/sync"
+	LabelSyncWorkerValue    = "juicefs-sync-worker"
+	LabelSyncManagerValue   = "juicefs-sync-manager"
 
 	AnnoBackupWorker        = "juicefs.io/backup-worker"
 	AnnoWaitingDeleteWorker = "juicefs.io/waiting-delete-worker"
@@ -91,4 +95,16 @@ func GenJobName(wuName string) string {
 
 func GenCleanCacheJobName(nodeName string) string {
 	return fmt.Sprintf("%s-%s", CleanCacheContainerName, nodeName)
+}
+
+func GenSyncSecretName(syncJobName string) string {
+	return fmt.Sprintf("juicefs-%s-secrets", syncJobName)
+}
+
+func GenSyncWorkerName(syncJobName string, i int) string {
+	return fmt.Sprintf("%s-%s-worker-%d", SyncNamePrefix, syncJobName, i)
+}
+
+func GenSyncManagerName(syncJobName string) string {
+	return fmt.Sprintf("%s-%s-manager", SyncNamePrefix, syncJobName)
 }

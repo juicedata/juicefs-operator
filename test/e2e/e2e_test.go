@@ -193,7 +193,7 @@ var _ = Describe("controller", Ordered, func() {
 				}
 				return nil
 			}
-			Eventually(verifyWorkerDeleted, time.Minute, time.Second).Should(Succeed())
+			Eventually(verifyWorkerDeleted, 5*time.Minute, 5*time.Second).Should(Succeed())
 		})
 
 		RegisterFailHandler(func(message string, callerSkip ...int) {

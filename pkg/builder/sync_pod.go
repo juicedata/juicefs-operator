@@ -68,11 +68,13 @@ fi
 # auth if needed
 %s
 
-# copy auth files to workers
-if ls /root/.juicefs/*.conf >/dev/null 2>&1; then
-	for ip in $(echo $WORKER_IPS | sed "s/,/ /g"); do
-		scp -r -o StrictHostKeyChecking=no /root/.juicefs/*.conf root@$ip:/root/.juicefs
-	done
+if [ "$IS_DISTRIBUTED" = "true" ]; then
+	# copy auth files to workers
+	if ls /root/.juicefs/*.conf >/dev/null 2>&1; then
+		for ip in $(echo $WORKER_IPS | sed "s/,/ /g"); do
+			scp -r -o StrictHostKeyChecking=no /root/.juicefs/*.conf root@$ip:/root/.juicefs
+		done
+	fi
 fi
 
 %s
@@ -147,7 +149,7 @@ func (s *SyncPodBuilder) newWorkerPod(i int) corev1.Pod {
 			Containers: []corev1.Container{
 				{
 					Name:  common.SyncNamePrefix,
-					Image: "registry.cn-hangzhou.aliyuncs.com/juicedata/mount:ee-5.1.9-d809773",
+					Image: s.sc.Spec.Image,
 					Command: []string{
 						"sh",
 						"-c",

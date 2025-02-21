@@ -86,6 +86,7 @@ type SyncSpec struct {
 	// Important: Run "make" to regenerate code after modifying this file
 
 	// Image of sync worker.
+	// +kubebuilder:validation:Required
 	Image string `json:"image"`
 
 	// Number of worker.

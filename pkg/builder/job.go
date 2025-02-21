@@ -67,7 +67,6 @@ func (j *JobBuilder) NewWarmUpJob() *batchv1.Job {
 			},
 		},
 	}}
-	job.Spec.Template.Spec.ServiceAccountName = common.GenSaName(j.wu.Name)
 	return job
 }
 

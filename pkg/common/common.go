@@ -89,18 +89,6 @@ func GenJobName(wuName string) string {
 	return fmt.Sprintf("%s-%s", WarmUpNamePrefix, wuName)
 }
 
-func GenSaName(wuName string) string {
-	return fmt.Sprintf("%s-%s-sa", WarmUpNamePrefix, wuName)
-}
-
-func GenRoleBindingName(wuName string) string {
-	return fmt.Sprintf("%s-%s-binding", WarmUpNamePrefix, wuName)
-}
-
-func GenRoleName(wuName string) string {
-	return fmt.Sprintf("%s-%s-role", WarmUpNamePrefix, wuName)
-}
-
 func GenCleanCacheJobName(nodeName string) string {
 	return fmt.Sprintf("%s-%s", CleanCacheContainerName, nodeName)
 }

@@ -23,7 +23,6 @@ import (
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
-	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -138,13 +137,6 @@ func (o *onceHandler) sync(ctx context.Context, wu *juicefsiov1.WarmUp) (err err
 			}
 			l.Info("get worker of cacheGroup for warmup", "cacheGroup", wu.Spec.CacheGroupName, "worker", podList.Items[0].Name)
 
-			// prepare rbac
-			l.Info("prepare rbac for warmup", "warmup", wu.Name)
-			err = prepareRBACForWarmUp(ctx, o.Client, wu)
-			if err != nil {
-				return err
-			}
-
 			jobBuilder := builder.NewJobBuilder(wu, &podList.Items[0])
 			newJob := jobBuilder.NewWarmUpJob()
 			l.Info("create warmup job", "job", newJob.Name)
@@ -164,55 +156,6 @@ func (o *onceHandler) sync(ctx context.Context, wu *juicefsiov1.WarmUp) (err err
 	if !reflect.DeepEqual(wu.Status, newStatus) {
 		wu.Status = *newStatus
 		return utils.IgnoreConflict(o.Status().Update(ctx, wu))
-	}
-
-	return nil
-}
-
-func prepareRBACForWarmUp(ctx context.Context, c client.Client, wu *juicefsiov1.WarmUp) error {
-	l := log.FromContext(ctx)
-	role := &rbacv1.Role{}
-	if err := c.Get(ctx, client.ObjectKey{
-		Name:      common.GenRoleName(wu.Name),
-		Namespace: wu.Namespace,
-	}, role); err != nil {
-		if utils.IsNotFound(err) {
-			if err := c.Create(ctx, builder.GenRoleForWarmUp(wu)); err != nil {
-				l.Error(err, "create role error", "role", role.Name)
-				return err
-			}
-		} else {
-			l.Error(err, "get role error", "role", role.Name)
-			return err
-		}
-	}
-	rbinding := &rbacv1.RoleBinding{}
-	if err := c.Get(ctx, client.ObjectKey{
-		Name:      common.GenRoleBindingName(wu.Name),
-		Namespace: wu.Namespace,
-	}, rbinding); err != nil {
-		if utils.IsNotFound(err) {
-			if err := c.Create(ctx, builder.GenRoleBindingForWarmUp(wu)); err != nil {
-				l.Error(err, "create roleBinding error", "roleBinding", rbinding.Name)
-				return err
-			}
-		} else {
-			l.Error(err, "get roleBinding error", "roleBinding", rbinding.Name)
-			return err
-		}
-	}
-
-	sa := &corev1.ServiceAccount{}
-	if err := c.Get(ctx, client.ObjectKey{Namespace: wu.Namespace, Name: common.GenSaName(wu.Name)}, sa); err != nil {
-		if utils.IsNotFound(err) {
-			if err := c.Create(ctx, builder.GenServiceAccount(wu)); err != nil {
-				l.Error(err, "create serviceAccount error", "serviceAccount", sa.Name)
-				return err
-			}
-		} else {
-			l.Error(err, "get serviceAccount error", "serviceAccount", sa.Name)
-			return err
-		}
 	}
 
 	return nil
@@ -273,12 +216,6 @@ func (c *cronHandler) sync(ctx context.Context, wu *juicefsiov1.WarmUp) (err err
 
 	if err := c.Get(ctx, client.ObjectKey{Namespace: wu.Namespace, Name: common.GenJobName(wu.Name)}, &cronjob); err != nil {
 		if utils.IsNotFound(err) {
-			// prepare rbac
-			l.Info("prepare rbac for warmup", "warmup", wu.Name)
-			err = prepareRBACForWarmUp(ctx, c.Client, wu)
-			if err != nil {
-				return err
-			}
 			l.Info("create warmup cronjob", "cronjob", newCronJob.Name)
 			err = c.Create(ctx, newCronJob)
 			if err != nil {

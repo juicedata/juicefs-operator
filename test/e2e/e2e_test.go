@@ -174,7 +174,7 @@ var _ = Describe("controller", Ordered, func() {
 		})
 
 		AfterEach(func() {
-			if os.Getenv("IN_CI") == trueValue {
+			if os.Getenv("IN_CI") == trueValue && CurrentSpecReport().Failed() {
 				return
 			}
 			cmd := exec.Command("kubectl", "delete", "cachegroups.juicefs.io", cgName, "-n", namespace)
@@ -621,7 +621,7 @@ var _ = Describe("controller", Ordered, func() {
 		})
 
 		AfterEach(func() {
-			if os.Getenv("IN_CI") == trueValue {
+			if os.Getenv("IN_CI") == trueValue && CurrentSpecReport().Failed() {
 				return
 			}
 			cmd := exec.Command("kubectl", "delete", "warmup.juicefs.io", wuName, "-n", namespace)

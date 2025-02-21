@@ -68,6 +68,8 @@ const (
 
 type Cron struct {
 	Schedule string `json:"schedule,omitempty"`
+	// +optional
+	Suspend *bool `json:"suspend,omitempty"`
 }
 
 // WarmUpStatus defines the observed state of WarmUp

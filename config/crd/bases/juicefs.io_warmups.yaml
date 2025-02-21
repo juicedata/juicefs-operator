@@ -71,6 +71,8 @@ spec:
                     properties:
                       schedule:
                         type: string
+                      suspend:
+                        type: boolean
                     type: object
                   type:
                     type: string

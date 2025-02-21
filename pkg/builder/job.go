@@ -67,8 +67,37 @@ func (j *JobBuilder) NewWarmUpJob() *batchv1.Job {
 			},
 		},
 	}}
-	job.Spec.Template.Spec.ServiceAccountName = common.GenSaName(j.wu.Name)
 	return job
+}
+
+func (j *JobBuilder) NewWarmUpCronJob() *batchv1.CronJob {
+	job := j.NewWarmUpJob()
+
+	cronJob := &batchv1.CronJob{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            common.GenJobName(j.wu.Name),
+			Namespace:       j.wu.Namespace,
+			OwnerReferences: GetWarmUpOwnerReference(j.wu),
+			Labels: map[string]string{
+				common.LabelAppType: common.LabelCronJobValue,
+			},
+		},
+		Spec: batchv1.CronJobSpec{
+			ConcurrencyPolicy: batchv1.ForbidConcurrent,
+			Schedule:          j.wu.Spec.Policy.Cron.Schedule,
+			Suspend:           j.wu.Spec.Policy.Cron.Suspend,
+			JobTemplate: batchv1.JobTemplateSpec{
+				Spec: job.Spec,
+			},
+		},
+	}
+
+	hash := utils.GenHash(cronJob)
+	if cronJob.Annotations == nil {
+		cronJob.Annotations = make(map[string]string)
+	}
+	cronJob.Annotations[common.LabelWorkerHash] = hash
+	return cronJob
 }
 
 func (j *JobBuilder) genBaseJob() *batchv1.Job {

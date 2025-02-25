@@ -99,6 +99,9 @@ type SyncSpec struct {
 	NodeSelector map[string]string   `json:"nodeSelector,omitempty"`
 	Tolerations  []corev1.Toleration `json:"tolerations,omitempty"`
 
+	// Resources
+	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
+
 	// Sync Options
 	// ref: https://juicefs.com/docs/cloud/reference/command_reference/#sync
 	Options []string `json:"options,omitempty"`

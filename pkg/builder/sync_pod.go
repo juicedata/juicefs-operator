@@ -110,8 +110,8 @@ func (s *SyncPodBuilder) newWorkerPod(i int) corev1.Pod {
 			Namespace:   s.sc.Namespace,
 			Annotations: map[string]string{},
 			Labels: map[string]string{
-				common.LabelSync:   s.sc.Name,
-				common.LabelWorker: common.LabelSyncWorkerValue,
+				common.LabelSync:    s.sc.Name,
+				common.LabelAppType: common.LabelSyncWorkerValue,
 			},
 			OwnerReferences: []metav1.OwnerReference{
 				{
@@ -144,6 +144,7 @@ func (s *SyncPodBuilder) newWorkerPod(i int) corev1.Pod {
 			},
 			NodeSelector:                  s.sc.Spec.NodeSelector,
 			Tolerations:                   s.sc.Spec.Tolerations,
+			Resources:                     s.sc.Spec.Resources,
 			RestartPolicy:                 corev1.RestartPolicyOnFailure,
 			TerminationGracePeriodSeconds: utils.ToPtr(int64(0)),
 			Containers: []corev1.Container{
@@ -262,7 +263,7 @@ func (s *SyncPodBuilder) NewManagerPod() *corev1.Pod {
 	managerPod := s.newWorkerPod(0)
 	managerPod.Spec.Containers[0].Env = s.genManagerEnvs()
 	managerPod.Name = common.GenSyncManagerName(s.sc.Name)
-	managerPod.Labels[common.LabelWorker] = common.LabelSyncManagerValue
+	managerPod.Labels[common.LabelAppType] = common.LabelSyncManagerValue
 	managerPod.Spec.Containers[0].Command = []string{
 		"sh",
 		"-c",

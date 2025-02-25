@@ -613,6 +613,11 @@ func (in *SyncSpec) DeepCopyInto(out *SyncSpec) {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
 	}
+	if in.Resources != nil {
+		in, out := &in.Resources, &out.Resources
+		*out = new(corev1.ResourceRequirements)
+		(*in).DeepCopyInto(*out)
+	}
 	if in.Options != nil {
 		in, out := &in.Options, &out.Options
 		*out = make([]string, len(*in))

@@ -80,7 +80,7 @@ func (r *SyncReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		return ctrl.Result{}, r.Status().Update(ctx, sync)
 	}
 
-	if sync.Status.Phase == juicefsiov1.SyncPhaseWaiting || sync.Status.Phase == "" {
+	if sync.Status.Phase == juicefsiov1.SyncPhasePending || sync.Status.Phase == "" {
 		sync.Status.Phase = juicefsiov1.SyncPhasePreparing
 		if err := r.Status().Update(ctx, sync); err != nil {
 			return ctrl.Result{}, err

@@ -33,6 +33,10 @@ spec:
             type: object
           spec:
             properties:
+              annotations:
+                additionalProperties:
+                  type: string
+                type: object
               from:
                 properties:
                   external:
@@ -371,6 +375,10 @@ spec:
                 type: object
               image:
                 type: string
+              labels:
+                additionalProperties:
+                  type: string
+                type: object
               nodeSelector:
                 additionalProperties:
                   type: string
@@ -777,7 +785,7 @@ spec:
           status:
             properties:
               phase:
-                default: Waiting
+                default: Pending
                 type: string
               reason:
                 type: string

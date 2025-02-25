@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"strings"
 
+	"maps"
+
 	juicefsiov1 "github.com/juicedata/juicefs-cache-group-operator/api/v1"
 	"github.com/juicedata/juicefs-cache-group-operator/pkg/common"
 	"github.com/juicedata/juicefs-cache-group-operator/pkg/utils"
@@ -115,8 +117,8 @@ func (s *SyncPodBuilder) newWorkerPod(i int) corev1.Pod {
 			},
 			OwnerReferences: []metav1.OwnerReference{
 				{
-					APIVersion: "juicefs.io/v1",
-					Kind:       "Sync",
+					APIVersion: common.GroupVersion,
+					Kind:       common.KindSync,
 					Name:       s.sc.Name,
 					UID:        s.sc.UID,
 					Controller: utils.ToPtr(true),
@@ -160,6 +162,9 @@ func (s *SyncPodBuilder) newWorkerPod(i int) corev1.Pod {
 			},
 		},
 	}
+
+	maps.Copy(pod.Labels, s.sc.Spec.Labels)
+	maps.Copy(pod.Annotations, s.sc.Spec.Annotations)
 
 	if s.IsDistributed {
 		pod.Spec.Containers[0].Ports = append(pod.Spec.Containers[0].Ports, corev1.ContainerPort{

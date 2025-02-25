@@ -52,8 +52,7 @@ type SyncSinkJuiceFS struct {
 	Token SyncSinkValue `json:"token"`
 
 	// +optional
-	Path string `json:"path"`
-
+	Path        string        `json:"path,omitempty"`
 	AccessKey   SyncSinkValue `json:"accessKey,omitempty"`
 	SecretKey   SyncSinkValue `json:"secretKey,omitempty"`
 	AuthOptions []string      `json:"authOptions,omitempty"`
@@ -98,6 +97,8 @@ type SyncSpec struct {
 	// Node selector
 	NodeSelector map[string]string   `json:"nodeSelector,omitempty"`
 	Tolerations  []corev1.Toleration `json:"tolerations,omitempty"`
+	Labels       map[string]string   `json:"labels,omitempty"`
+	Annotations  map[string]string   `json:"annotations,omitempty"`
 
 	// Resources
 	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
@@ -115,7 +116,7 @@ type SyncSpec struct {
 type SyncPhase string
 
 const (
-	SyncPhaseWaiting     SyncPhase = "Waiting"
+	SyncPhasePending     SyncPhase = "Pending"
 	SyncPhasePreparing   SyncPhase = "Preparing"
 	SyncPhaseProgressing SyncPhase = "Progressing"
 	SyncPhaseFailed      SyncPhase = "Failed"
@@ -127,7 +128,7 @@ type SyncStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// +kubebuilder:default=Waiting
+	// +kubebuilder:default=Pending
 	Phase SyncPhase `json:"phase,omitempty"`
 
 	// +optional

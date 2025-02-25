@@ -92,8 +92,8 @@ func NewSyncSecret(ctx context.Context, sync *juicefsiov1.Sync) (*corev1.Secret,
 
 	secret.SetOwnerReferences([]metav1.OwnerReference{
 		{
-			APIVersion: "juicefs.io/v1",
-			Kind:       "Sync",
+			APIVersion: common.GroupVersion,
+			Kind:       common.KindSync,
 			Name:       sync.Name,
 			UID:        sync.UID,
 			Controller: utils.ToPtr(true),

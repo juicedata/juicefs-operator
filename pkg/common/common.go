@@ -23,6 +23,11 @@ import (
 )
 
 const (
+	GroupVersion   = "juicefs.io/v1"
+	KindCaCheGroup = "CacheGroup"
+	KindSync       = "Sync"
+	KindWarmUp     = "WarmUp"
+
 	// CacheGroupContainerName is the name of cache group worker container
 	WorkerContainerName     = "juicefs-cg-worker"
 	WarmUpContainerName     = "juicefs-warmup"

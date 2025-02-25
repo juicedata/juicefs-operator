@@ -185,8 +185,8 @@ func (j *JobBuilder) getWarmUpCommand() []string {
 
 func GetWarmUpOwnerReference(wu *juicefsiov1.WarmUp) []metav1.OwnerReference {
 	return []metav1.OwnerReference{{
-		APIVersion: "juicefs.io/v1",
-		Kind:       "WarmUp",
+		APIVersion: common.GroupVersion,
+		Kind:       common.KindWarmUp,
 		Name:       wu.Name,
 		UID:        wu.UID,
 		Controller: utils.ToPtr(true),

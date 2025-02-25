@@ -754,4 +754,8 @@ var _ = Describe("controller", Ordered, func() {
 			Eventually(verifyWarmUpStatus, 5*time.Minute, time.Second).Should(Succeed())
 		})
 	})
+
+	Context("Sync Controller", func() {
+
+	})
 })

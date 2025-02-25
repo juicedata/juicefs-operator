@@ -1,0 +1,48 @@
+apiVersion: juicefs.io/v1
+kind: Sync
+metadata:
+  name: sync-test
+  namespace: default
+spec:
+  # 期望的副本数量，默认为 1，即单机同步
+  replicas: 3
+  nodeSelector:
+    sync-worker: "true"
+  resources:
+    requests:
+      cpu: 1
+      memory: 1Gi
+  # sync 参数
+  # 参考 https://juicefs.com/docs/zh/cloud/reference/command_reference/#sync
+  options: 
+    - debug
+    - threads=10
+  image: registry.cn-hangzhou.aliyuncs.com/juicedata/mount:ee-5.1.9-d809773
+  from:
+    external:
+      uri: oss://sync-test.oss-cn-hangzhou.aliyuncs.com/sync-src-test/
+      # 支持两种方式填写，value 和 valueFrom 二选一
+      accessKey:
+        value: accessKey
+      secretKey:
+        valueFrom:
+          secretKeyRef:
+            name: sync-test-secret
+            key: secretKey
+  to:
+    juicefs:
+      path: /sync-test/demo2/
+      token:
+        valueFrom:
+          secretKeyRef:
+            name: sync-test-secret
+            key: token
+      # accessKey:
+      # secretKey:
+      volumeName: sync-test
+      # 可选，默认为空
+      # 私有部署时需要填写
+      consoleUrl: ""
+      # 可选，auth 的参数
+      authOptions:
+        - bucket=http://sync-test.oss-cn-hangzhou.aliyuncs.com

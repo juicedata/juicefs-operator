@@ -63,6 +63,7 @@ rules:
   - juicefs.io
   resources:
   - cachegroups
+  - syncs
   - warmups
   verbs:
   - create
@@ -76,6 +77,7 @@ rules:
   - juicefs.io
   resources:
   - cachegroups/finalizers
+  - syncs/finalizers
   - warmups/finalizers
   verbs:
   - update
@@ -83,6 +85,7 @@ rules:
   - juicefs.io
   resources:
   - cachegroups/status
+  - syncs/status
   - warmups/status
   verbs:
   - get

@@ -22,9 +22,11 @@ import (
 )
 
 type ParsedSyncSink struct {
-	Uri  string
-	Envs []corev1.EnvVar
-	Auth string
+	Uri            string
+	Envs           []corev1.EnvVar
+	PrepareCommand string
+	// only for JuiceFS From
+	FilesFrom *SyncSinkJuiceFSFilesFrom `json:"filesFrom,omitempty"`
 }
 
 type SyncSinkValue struct {
@@ -45,6 +47,11 @@ type SyncSinkExternal struct {
 	SecretKey SyncSinkValue `json:"secretKey,omitempty"`
 }
 
+type SyncSinkJuiceFSFilesFrom struct {
+	Files     []string                     `json:"files,omitempty"`
+	ConfigMap *corev1.ConfigMapKeySelector `json:"configMap,omitempty"`
+}
+
 type SyncSinkJuiceFS struct {
 	// +kubebuilder:validation:Required
 	VolumeName string `json:"volumeName"`
@@ -52,10 +59,11 @@ type SyncSinkJuiceFS struct {
 	Token SyncSinkValue `json:"token"`
 
 	// +optional
-	Path        string        `json:"path,omitempty"`
-	AccessKey   SyncSinkValue `json:"accessKey,omitempty"`
-	SecretKey   SyncSinkValue `json:"secretKey,omitempty"`
-	AuthOptions []string      `json:"authOptions,omitempty"`
+	Path        string                    `json:"path,omitempty"`
+	AccessKey   SyncSinkValue             `json:"accessKey,omitempty"`
+	SecretKey   SyncSinkValue             `json:"secretKey,omitempty"`
+	AuthOptions []string                  `json:"authOptions,omitempty"`
+	FilesFrom   *SyncSinkJuiceFSFilesFrom `json:"filesFrom,omitempty"`
 
 	// Required in on-premise environment
 	ConsoleUrl string `json:"consoleUrl,omitempty"`
@@ -97,8 +105,10 @@ type SyncSpec struct {
 	// Node selector
 	NodeSelector map[string]string   `json:"nodeSelector,omitempty"`
 	Tolerations  []corev1.Toleration `json:"tolerations,omitempty"`
-	Labels       map[string]string   `json:"labels,omitempty"`
-	Annotations  map[string]string   `json:"annotations,omitempty"`
+	Affinity     *corev1.Affinity    `json:"affinity,omitempty"`
+
+	Labels      map[string]string `json:"labels,omitempty"`
+	Annotations map[string]string `json:"annotations,omitempty"`
 
 	// Resources
 	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`

@@ -46,9 +46,6 @@ type WarmUpReconciler struct {
 // +kubebuilder:rbac:groups=juicefs.io,resources=warmups/finalizers,verbs=update
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;create;delete;watch
 // +kubebuilder:rbac:groups=batch,resources=cronjobs,verbs=get;list;create;delete;watch;update
-// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=rolebindings,verbs=get;list;create;watch
-// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles,verbs=get;list;create;watch
-// +kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=get;list;create;watch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.

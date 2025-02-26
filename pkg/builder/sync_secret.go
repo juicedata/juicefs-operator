@@ -25,6 +25,7 @@ import (
 	"github.com/juicedata/juicefs-cache-group-operator/pkg/utils"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"maps"
 )
 
 func genJuiceFSSecretData(juicefs *juicefsiov1.SyncSinkJuiceFS, suffix string) map[string]string {
@@ -70,18 +71,10 @@ func NewSyncSecret(ctx context.Context, sync *juicefsiov1.Sync) (*corev1.Secret,
 		data["id_rsa"] = id_rsa
 		data["id_rsa.pub"] = id_rsa_pub
 	}
-	for k, b := range genJuiceFSSecretData(sync.Spec.From.JuiceFS, "JUICEFS_FROM") {
-		data[k] = b
-	}
-	for k, b := range genJuiceFSSecretData(sync.Spec.To.JuiceFS, "JUICEFS_TO") {
-		data[k] = b
-	}
-	for k, b := range genExternalSecretData(sync.Spec.From.External, "EXTERNAL_FROM") {
-		data[k] = b
-	}
-	for k, b := range genExternalSecretData(sync.Spec.To.External, "EXTERNAL_TO") {
-		data[k] = b
-	}
+	maps.Copy(data, genJuiceFSSecretData(sync.Spec.From.JuiceFS, "JUICEFS_FROM"))
+	maps.Copy(data, genJuiceFSSecretData(sync.Spec.To.JuiceFS, "JUICEFS_TO"))
+	maps.Copy(data, genExternalSecretData(sync.Spec.From.External, "EXTERNAL_FROM"))
+	maps.Copy(data, genExternalSecretData(sync.Spec.To.External, "EXTERNAL_TO"))
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      secretName,

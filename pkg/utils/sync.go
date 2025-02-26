@@ -110,6 +110,18 @@ func ParseSyncSink(sink juicefsiov1.SyncSink, syncName, ref string) (*juicefsiov
 	}
 
 	if sink.JuiceFS != nil {
+		if ref == "TO" {
+			if sink.JuiceFS.FilesFrom != nil {
+				return nil, fmt.Errorf("cannnot use filesFrom in `to` juicefs")
+			}
+		}
+		if sink.JuiceFS.FilesFrom != nil && sink.JuiceFS.FilesFrom.Files != nil && sink.JuiceFS.FilesFrom.ConfigMap != nil {
+			return nil, fmt.Errorf("cannnot use files and configMap in same time")
+		}
+		pss.FilesFrom = sink.JuiceFS.FilesFrom
+		if sink.JuiceFS.Path == "" {
+			sink.JuiceFS.Path = "/"
+		}
 		pss.Uri, err = url.JoinPath("jfs://", sink.JuiceFS.VolumeName, sink.JuiceFS.Path)
 		if err != nil {
 			return nil, err
@@ -153,7 +165,15 @@ func ParseSyncSink(sink juicefsiov1.SyncSink, syncName, ref string) (*juicefsiov
 			}
 			authCmd = append(authCmd, "--"+pair[0])
 		}
-		pss.Auth = strings.Join(authCmd, " ")
+		if pss.FilesFrom != nil && pss.FilesFrom.Files != nil {
+			filesCmd := fmt.Sprintf("mkdir %s\necho '%s' > %s/%s",
+				common.SyncFileFromPath,
+				strings.Join(pss.FilesFrom.Files, "\n"),
+				common.SyncFileFromPath,
+				common.SyncFileFromName)
+			pss.PrepareCommand += filesCmd + "\n"
+		}
+		pss.PrepareCommand += strings.Join(authCmd, " ")
 		return pss, nil
 	}
 	return nil, fmt.Errorf("invalid sync sink")

@@ -124,14 +124,26 @@ func TestCompareImageVersion(t *testing.T) {
 		},
 		{
 			name:    "Test with current having less parts than target",
-			current: "juicedata/mount:ee-1.2",
-			target:  "1.2.3",
+			current: "juicedata/mount:ee-1.2.3",
+			target:  "1.2",
+			want:    1,
+		},
+		{
+			name:    "Test with current having big parts than target",
+			current: "juicedata/mount:ee-1.2.3",
+			target:  "1.3",
 			want:    -1,
 		},
 		{
 			name:    "Test with specific version",
 			current: "juicedata/mount:ee-nightly",
 			target:  "1.2.1",
+			want:    1,
+		},
+		{
+			name:    "Test with specific version",
+			current: "registry.cn-hangzhou.aliyuncs.com/juicedata/mount:ee-5.1.12-7c7e4dd",
+			target:  "5.1.10",
 			want:    1,
 		},
 	}

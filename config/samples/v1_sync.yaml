@@ -29,6 +29,17 @@ spec:
           secretKeyRef:
             name: sync-test-secret
             key: secretKey
+    # juicefs:
+    #   token:
+    #     valueFrom:
+    #       secretKeyRef:
+    #         name: sync-test-secret
+    #         key: token
+    #   volumeName: sync-test
+    #   filesFrom:
+    #     configmap:
+    #       name: sync-test-configmap
+    #       key: files
   to:
     juicefs:
       path: /sync-test/demo2/

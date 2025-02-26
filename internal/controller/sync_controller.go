@@ -43,6 +43,8 @@ type SyncReconciler struct {
 // +kubebuilder:rbac:groups=juicefs.io,resources=syncs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=juicefs.io,resources=syncs/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=juicefs.io,resources=syncs/finalizers,verbs=update
+// +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;delete;create;watch;deletecollection
+// +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;delete;create;watch;update
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -68,6 +70,13 @@ func (r *SyncReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	from, err := utils.ParseSyncSink(sync.Spec.From, sync.Name, "FROM")
 	if err != nil {
 		l.Error(err, "failed to parse from sink")
+		sync.Status.Phase = juicefsiov1.SyncPhaseFailed
+		sync.Status.Reason = err.Error()
+		return ctrl.Result{}, r.Status().Update(ctx, sync)
+	}
+	if from.FilesFrom != nil && utils.CompareEEImageVersion(sync.Spec.Image, "5.1.10") < 0 {
+		err := fmt.Errorf("filesFrom is only supported in JuiceFS EE 5.1.10 or later")
+		l.Error(err, "")
 		sync.Status.Phase = juicefsiov1.SyncPhaseFailed
 		sync.Status.Reason = err.Error()
 		return ctrl.Result{}, r.Status().Update(ctx, sync)

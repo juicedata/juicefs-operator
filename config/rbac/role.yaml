@@ -8,7 +8,6 @@ rules:
   - ""
   resources:
   - nodes
-  - secrets
   verbs:
   - get
   - list
@@ -20,6 +19,7 @@ rules:
   verbs:
   - create
   - delete
+  - deletecollection
   - get
   - list
   - watch
@@ -32,11 +32,13 @@ rules:
 - apiGroups:
   - ""
   resources:
-  - serviceaccounts
+  - secrets
   verbs:
   - create
+  - delete
   - get
   - list
+  - update
   - watch
 - apiGroups:
   - batch
@@ -91,13 +93,3 @@ rules:
   - get
   - patch
   - update
-- apiGroups:
-  - rbac.authorization.k8s.io
-  resources:
-  - rolebindings
-  - roles
-  verbs:
-  - create
-  - get
-  - list
-  - watch

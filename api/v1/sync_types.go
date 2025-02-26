@@ -121,6 +121,9 @@ type SyncSpec struct {
 	From SyncSink `json:"from,omitempty"`
 	// +kubebuilder:validation:Required
 	To SyncSink `json:"to,omitempty"`
+
+	// +optional
+	TTLSecondsAfterFinished *int32 `json:"ttlSecondsAfterFinished,omitempty"`
 }
 
 type SyncPhase string
@@ -141,6 +144,8 @@ type SyncStatus struct {
 	// +kubebuilder:default=Pending
 	Phase SyncPhase `json:"phase,omitempty"`
 
+	StartAt     *metav1.Time `json:"startAt,omitempty"`
+	CompletedAt *metav1.Time `json:"completedAt,omitempty"`
 	// +optional
 	Reason string `json:"reason,omitempty"`
 }
@@ -149,7 +154,7 @@ type SyncStatus struct {
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
-
+// +kubebuilder:printcolumn:name="Completed",type="date",JSONPath=".status.completedAt"
 // Sync is the Schema for the syncs API.
 type Sync struct {
 	metav1.TypeMeta   `json:",inline"`

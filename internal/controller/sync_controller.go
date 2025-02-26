@@ -32,6 +32,7 @@ import (
 	"github.com/juicedata/juicefs-cache-group-operator/pkg/builder"
 	"github.com/juicedata/juicefs-cache-group-operator/pkg/common"
 	"github.com/juicedata/juicefs-cache-group-operator/pkg/utils"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // SyncReconciler reconciles a Sync object
@@ -115,6 +116,7 @@ func (r *SyncReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 			return ctrl.Result{}, err
 		}
 
+		sync.Status.StartAt = &metav1.Time{Time: time.Now()}
 		sync.Status.Phase = juicefsiov1.SyncPhaseProgressing
 		if err := r.Status().Update(ctx, sync); err != nil {
 			return ctrl.Result{}, err
@@ -130,6 +132,20 @@ func (r *SyncReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		if err := r.DeleteAllOf(ctx, &corev1.Pod{}, client.InNamespace(sync.Namespace), labelSelector); err != nil {
 			return ctrl.Result{}, err
 		}
+		if sync.Spec.TTLSecondsAfterFinished != nil {
+			completedAt := sync.Status.CompletedAt
+			if completedAt == nil {
+				return ctrl.Result{}, nil
+			}
+			since := float64(*sync.Spec.TTLSecondsAfterFinished) - time.Since(completedAt.Time).Seconds()
+			if since <= 0 {
+				l.Info("sync ttl is expired, deleted")
+				if err := r.Delete(ctx, sync); err != nil {
+					return ctrl.Result{}, client.IgnoreNotFound(err)
+				}
+			}
+			return ctrl.Result{RequeueAfter: time.Second*time.Duration(since) + 1}, nil
+		}
 	}
 
 	if sync.Status.Phase == juicefsiov1.SyncPhaseProgressing {
@@ -140,6 +156,7 @@ func (r *SyncReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		}
 		if managerPod.Status.Phase == corev1.PodSucceeded {
 			sync.Status.Phase = juicefsiov1.SyncPhaseCompleted
+			sync.Status.CompletedAt = &metav1.Time{Time: time.Now()}
 			if err := r.Status().Update(ctx, sync); err != nil {
 				return ctrl.Result{}, err
 			}

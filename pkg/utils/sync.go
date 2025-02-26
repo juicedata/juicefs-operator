@@ -112,11 +112,11 @@ func ParseSyncSink(sink juicefsiov1.SyncSink, syncName, ref string) (*juicefsiov
 	if sink.JuiceFS != nil {
 		if ref == "TO" {
 			if sink.JuiceFS.FilesFrom != nil {
-				return nil, fmt.Errorf("cannnot use filesFrom in `to` juicefs")
+				return nil, fmt.Errorf("cannot use filesFrom in `to` juicefs")
 			}
 		}
 		if sink.JuiceFS.FilesFrom != nil && sink.JuiceFS.FilesFrom.Files != nil && sink.JuiceFS.FilesFrom.ConfigMap != nil {
-			return nil, fmt.Errorf("cannnot use files and configMap in same time")
+			return nil, fmt.Errorf("cannot use files and configMap in same time")
 		}
 		pss.FilesFrom = sink.JuiceFS.FilesFrom
 		if sink.JuiceFS.Path == "" {

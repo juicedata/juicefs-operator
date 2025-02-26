@@ -20,12 +20,13 @@ import (
 	"context"
 	"fmt"
 
+	"maps"
+
 	juicefsiov1 "github.com/juicedata/juicefs-cache-group-operator/api/v1"
 	"github.com/juicedata/juicefs-cache-group-operator/pkg/common"
 	"github.com/juicedata/juicefs-cache-group-operator/pkg/utils"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"maps"
 )
 
 func genJuiceFSSecretData(juicefs *juicefsiov1.SyncSinkJuiceFS, suffix string) map[string]string {

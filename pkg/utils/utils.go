@@ -18,6 +18,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -64,20 +65,25 @@ func MustParseTime(s string) time.Time {
 	return t
 }
 
+const eeImageRegex = `ee-(\d+)\.(\d+)\.(\d+)`
+
 // CompareImageVersion compares two image versions
 // return 1 if image > target
 // return -1 if image < target
 // return 0 if image == target
 func CompareEEImageVersion(image, target string) int {
 	current := strings.Split(image, ":")[1]
-	current = strings.ReplaceAll(current, "ee-", "")
 	if strings.Contains(current, "latest") ||
 		strings.Contains(current, "nightly") ||
 		strings.Contains(current, "dev") {
 		return 1
 	}
 
-	currentParts := strings.Split(current, ".")
+	matches := regexp.MustCompile(eeImageRegex).FindStringSubmatch(current)
+	if len(matches) < 1 {
+		return -1
+	}
+	currentParts := matches[1:]
 	targetParts := strings.Split(target, ".")
 	for i := 0; i < len(currentParts); i++ {
 		if i >= len(targetParts) {

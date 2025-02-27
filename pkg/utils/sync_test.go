@@ -133,9 +133,116 @@ func TestParseSyncSink(t *testing.T) {
 						Value: "http://127.0.0.1:8080/static",
 					},
 				},
-				Auth: "juicefs auth volume --token $JUICEFS_TO_TOKEN --option1 --option2",
+				PrepareCommand: "juicefs auth volume --token $JUICEFS_TO_TOKEN --option1 --option2",
 			},
 			wantErr: false,
+		},
+		{
+			name: "from JuiceFS sink with files",
+			sink: juicefsiov1.SyncSink{
+				JuiceFS: &juicefsiov1.SyncSinkJuiceFS{
+					VolumeName: "volume",
+					Path:       "path",
+					Token: juicefsiov1.SyncSinkValue{
+						Value: "token",
+					},
+					FilesFrom: &juicefsiov1.SyncSinkJuiceFSFilesFrom{
+						Files: []string{"file1", "file2"},
+					},
+				},
+			},
+			syncName: "sync2",
+			ref:      "FROM",
+			want: &juicefsiov1.ParsedSyncSink{
+				Uri: "jfs://volume/path",
+				Envs: []corev1.EnvVar{
+					{
+						Name: "JUICEFS_FROM_TOKEN",
+						ValueFrom: &corev1.EnvVarSource{
+							SecretKeyRef: &corev1.SecretKeySelector{
+								LocalObjectReference: corev1.LocalObjectReference{
+									Name: common.GenSyncSecretName("sync2"),
+								},
+								Key: "JUICEFS_FROM_TOKEN",
+							},
+						},
+					},
+				},
+				FilesFrom: &juicefsiov1.SyncSinkJuiceFSFilesFrom{
+					Files: []string{"file1", "file2"},
+				},
+				PrepareCommand: "mkdir /tmp/sync-file\necho 'file1\nfile2' > /tmp/sync-file/files\njuicefs auth volume --token $JUICEFS_FROM_TOKEN",
+			},
+			wantErr: false,
+		},
+		{
+			name: "from JuiceFS sink with files from",
+			sink: juicefsiov1.SyncSink{
+				JuiceFS: &juicefsiov1.SyncSinkJuiceFS{
+					VolumeName: "volume",
+					Path:       "path",
+					Token: juicefsiov1.SyncSinkValue{
+						Value: "token",
+					},
+					FilesFrom: &juicefsiov1.SyncSinkJuiceFSFilesFrom{
+						ConfigMap: &corev1.ConfigMapKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: "configmap",
+							},
+							Key: "file1",
+						},
+					},
+				},
+			},
+			syncName: "sync2",
+			ref:      "FROM",
+			want: &juicefsiov1.ParsedSyncSink{
+				Uri: "jfs://volume/path",
+				Envs: []corev1.EnvVar{
+					{
+						Name: "JUICEFS_FROM_TOKEN",
+						ValueFrom: &corev1.EnvVarSource{
+							SecretKeyRef: &corev1.SecretKeySelector{
+								LocalObjectReference: corev1.LocalObjectReference{
+									Name: common.GenSyncSecretName("sync2"),
+								},
+								Key: "JUICEFS_FROM_TOKEN",
+							},
+						},
+					},
+				},
+				FilesFrom: &juicefsiov1.SyncSinkJuiceFSFilesFrom{
+					ConfigMap: &corev1.ConfigMapKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: "configmap",
+						},
+						Key: "file1",
+					},
+				},
+				PrepareCommand: "juicefs auth volume --token $JUICEFS_FROM_TOKEN",
+			},
+			wantErr: false,
+		},
+		{
+			name: "to JuiceFS sink with files should fail",
+			sink: juicefsiov1.SyncSink{
+				JuiceFS: &juicefsiov1.SyncSinkJuiceFS{
+					VolumeName: "volume",
+					Path:       "path",
+					Token: juicefsiov1.SyncSinkValue{
+						Value: "token",
+					},
+					FilesFrom: &juicefsiov1.SyncSinkJuiceFSFilesFrom{
+						Files: []string{"file1", "file2"},
+					},
+					AuthOptions: []string{"option1", "--option2"},
+					ConsoleUrl:  "http://127.0.0.1:8080/static",
+				},
+			},
+			syncName: "sync2",
+			ref:      "TO",
+			want:     nil,
+			wantErr:  true,
 		},
 		{
 			name:     "Invalid sink",

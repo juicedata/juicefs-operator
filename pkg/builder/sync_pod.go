@@ -17,6 +17,7 @@ package builder
 
 import (
 	"fmt"
+	"path"
 	"strings"
 
 	"maps"
@@ -126,25 +127,8 @@ func (s *SyncPodBuilder) newWorkerPod(i int) corev1.Pod {
 			},
 		},
 		Spec: corev1.PodSpec{
-			Affinity: &corev1.Affinity{
-				PodAffinity: &corev1.PodAffinity{
-					PreferredDuringSchedulingIgnoredDuringExecution: []corev1.WeightedPodAffinityTerm{
-						{
-							Weight: 100,
-							PodAffinityTerm: corev1.PodAffinityTerm{
-								LabelSelector: &metav1.LabelSelector{
-									MatchLabels: map[string]string{
-										common.LabelSync: s.sc.Name,
-									},
-								},
-								Namespaces:  []string{s.sc.Namespace},
-								TopologyKey: "kubernetes.io/hostname",
-							},
-						},
-					},
-				},
-			},
 			NodeSelector:                  s.sc.Spec.NodeSelector,
+			Affinity:                      s.sc.Spec.Affinity,
 			Tolerations:                   s.sc.Spec.Tolerations,
 			Resources:                     s.sc.Spec.Resources,
 			RestartPolicy:                 corev1.RestartPolicyOnFailure,
@@ -163,6 +147,27 @@ func (s *SyncPodBuilder) newWorkerPod(i int) corev1.Pod {
 		},
 	}
 
+	if pod.Spec.Affinity == nil {
+		pod.Spec.Affinity = &corev1.Affinity{
+			PodAffinity: &corev1.PodAffinity{
+				PreferredDuringSchedulingIgnoredDuringExecution: []corev1.WeightedPodAffinityTerm{
+					{
+						Weight: 100,
+						PodAffinityTerm: corev1.PodAffinityTerm{
+							LabelSelector: &metav1.LabelSelector{
+								MatchLabels: map[string]string{
+									common.LabelSync: s.sc.Name,
+								},
+							},
+							Namespaces:  []string{s.sc.Namespace},
+							TopologyKey: "kubernetes.io/hostname",
+						},
+					},
+				},
+			},
+		}
+	}
+
 	maps.Copy(pod.Labels, s.sc.Spec.Labels)
 	maps.Copy(pod.Annotations, s.sc.Spec.Annotations)
 
@@ -171,34 +176,10 @@ func (s *SyncPodBuilder) newWorkerPod(i int) corev1.Pod {
 			ContainerPort: 22,
 			Name:          "ssh",
 		})
-		pod.Spec.Volumes = append(pod.Spec.Volumes, corev1.Volume{
-			Name: "ssh-keys",
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName: common.GenSyncSecretName(s.sc.Name),
-					Items: []corev1.KeyToPath{
-						{
-							Key:  "id_rsa.pub",
-							Path: "authorized_keys",
-						},
-						{
-							Key:  "id_rsa",
-							Path: "id_rsa",
-						},
-						{
-							Key:  "id_rsa.pub",
-							Path: "id_rsa.pub",
-						},
-					},
-				},
-			},
-		})
-		pod.Spec.Containers[0].VolumeMounts = append(pod.Spec.Containers[0].VolumeMounts, corev1.VolumeMount{
-			Name:      "ssh-keys",
-			MountPath: "/root/ssh",
-		})
+		volumes, volumeMounts := s.genSyncVolumes(false)
+		pod.Spec.Volumes = volumes
+		pod.Spec.Containers[0].VolumeMounts = volumeMounts
 	}
-
 	return pod
 }
 
@@ -214,6 +195,73 @@ func (s *SyncPodBuilder) NewWorkerPods() []corev1.Pod {
 	return pods
 }
 
+func (s *SyncPodBuilder) genSyncVolumes(isManager bool) ([]corev1.Volume, []corev1.VolumeMount) {
+	volumes := []corev1.Volume{}
+	volumeMounts := []corev1.VolumeMount{}
+
+	if isManager && s.from.FilesFrom != nil && s.from.FilesFrom.ConfigMap != nil {
+		volumes = append(volumes, corev1.Volume{
+			Name: "files-from",
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: s.from.FilesFrom.ConfigMap.Name,
+					},
+					Items: []corev1.KeyToPath{
+						{
+							Key:  s.from.FilesFrom.ConfigMap.Key,
+							Path: common.SyncFileFromName,
+						},
+					},
+				},
+			},
+		})
+		volumeMounts = append(volumeMounts, corev1.VolumeMount{
+			Name:      "files-from",
+			MountPath: common.SyncFileFromPath,
+		})
+	}
+
+	if !s.IsDistributed {
+		return volumes, volumeMounts
+	}
+	var items []corev1.KeyToPath
+	if isManager {
+		items = []corev1.KeyToPath{
+			{
+				Key:  "id_rsa",
+				Path: "id_rsa",
+			},
+			{
+				Key:  "id_rsa.pub",
+				Path: "id_rsa.pub",
+			},
+		}
+	} else {
+		items = []corev1.KeyToPath{
+			{
+				Key:  "id_rsa.pub",
+				Path: "authorized_keys",
+			},
+		}
+	}
+	volumes = append(volumes, corev1.Volume{
+		Name: "ssh-keys",
+		VolumeSource: corev1.VolumeSource{
+			Secret: &corev1.SecretVolumeSource{
+				SecretName: common.GenSyncSecretName(s.sc.Name),
+				Items:      items,
+			},
+		},
+	})
+	volumeMounts = append(volumeMounts, corev1.VolumeMount{
+		Name:      "ssh-keys",
+		MountPath: "/root/ssh",
+	})
+
+	return volumes, volumeMounts
+}
+
 func (s *SyncPodBuilder) genSyncCommands() string {
 	cmds := []string{
 		"juicefs",
@@ -222,6 +270,10 @@ func (s *SyncPodBuilder) genSyncCommands() string {
 
 	if len(s.workerIPs) > 0 {
 		cmds = append(cmds, "--worker", "$WORKER_IPS")
+	}
+
+	if s.from.FilesFrom != nil {
+		cmds = append(cmds, "--files-from", path.Join(common.SyncFileFromPath, common.SyncFileFromName))
 	}
 
 	for _, opt := range s.sc.Spec.Options {
@@ -237,16 +289,16 @@ func (s *SyncPodBuilder) genSyncCommands() string {
 	return strings.Join(cmds, " ")
 }
 
-func (s *SyncPodBuilder) genAuthCommand() string {
+func (s *SyncPodBuilder) genPrepareCommand() string {
 	cmds := ""
-	if s.from.Auth == s.to.Auth {
-		return s.from.Auth
+	if s.from.PrepareCommand == s.to.PrepareCommand {
+		return s.from.PrepareCommand
 	}
-	if s.from.Auth != "" {
-		cmds += s.from.Auth + "\n"
+	if s.from.PrepareCommand != "" {
+		cmds += s.from.PrepareCommand + "\n"
 	}
-	if s.to.Auth != "" {
-		cmds += s.to.Auth
+	if s.to.PrepareCommand != "" {
+		cmds += s.to.PrepareCommand
 	}
 	return cmds
 }
@@ -275,9 +327,12 @@ func (s *SyncPodBuilder) NewManagerPod() *corev1.Pod {
 		fmt.Sprintf(
 			syncPodEnrtypoint,
 			s.IsDistributed,
-			s.genAuthCommand(),
+			s.genPrepareCommand(),
 			s.genSyncCommands(),
 		),
 	}
+	volumes, volumeMounts := s.genSyncVolumes(true)
+	managerPod.Spec.Volumes = volumes
+	managerPod.Spec.Containers[0].VolumeMounts = volumeMounts
 	return &managerPod
 }

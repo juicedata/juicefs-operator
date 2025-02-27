@@ -45,6 +45,8 @@ const (
 	CacheDirVolumeNamePrefix      = "jfs-cache-dir-"
 	CacheDirVolumeMountPathPrefix = "/var/jfsCache-"
 	DefaultCacheHostPath          = "/var/jfsCache"
+	SyncFileFromPath              = "/tmp/sync-file"
+	SyncFileFromName              = "files"
 
 	// label keys
 	LabelCacheGroup         = "juicefs.io/cache-group"

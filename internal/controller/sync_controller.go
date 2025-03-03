@@ -190,16 +190,16 @@ func (r *SyncReconciler) calculateSyncStats(ctx context.Context, sync *juicefsio
 		} else {
 			stats := juicefsiov1.SyncStats{}
 			if handled, ok := statsMap["found"]; ok {
-				stats.Handled = int64(handled)
+				stats.Handled = handled
 			}
 			if copied, ok := statsMap["copied"]; ok {
-				stats.Copied = int64(copied)
+				stats.Copied = copied
 			}
 			if failed, ok := statsMap["failed"]; ok {
-				stats.Failed = int64(failed)
+				stats.Failed = failed
 			}
 			if skipped, ok := statsMap["skipped"]; ok {
-				stats.Skipped = int64(skipped)
+				stats.Skipped = skipped
 			}
 			if copiedBytes, ok := statsMap["copied_bytes"]; ok {
 				stats.CopiedBytes = copiedBytes

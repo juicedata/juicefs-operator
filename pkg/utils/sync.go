@@ -226,7 +226,7 @@ func FetchMetrics(ctx context.Context, sync *juicefsiov1.Sync) (map[string]float
 	if len(stderr) > 0 {
 		return nil, fmt.Errorf("failed to fetch metrics: %s", stderr)
 	}
-	metrics, err := ParseSyncMetrics(string(stdout))
+	metrics, err := ParseSyncMetrics(stdout)
 	if err != nil {
 		return nil, err
 	}
@@ -324,7 +324,7 @@ func ParseLog(data string) (map[string]int64, error) {
 		if len(matches) >= 3 && matches[2] != "" {
 			bytes, err := parseBytes(matches[2])
 			if err == nil {
-				result[key+"_bytes"] = int64(bytes)
+				result[key+"_bytes"] = bytes
 			}
 		}
 	}

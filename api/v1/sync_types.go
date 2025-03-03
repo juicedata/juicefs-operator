@@ -181,6 +181,7 @@ type SyncStatus struct {
 // +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase"
 // +kubebuilder:printcolumn:name="Replicas",type="integer",JSONPath=".spec.replicas"
 // +kubebuilder:printcolumn:name="Progress",type="string",JSONPath=".status.progress"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 // Sync is the Schema for the syncs API.
 type Sync struct {
 	metav1.TypeMeta   `json:",inline"`

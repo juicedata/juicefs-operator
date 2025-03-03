@@ -17,12 +17,16 @@ limitations under the License.
 package utils
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
+	"math"
 	"net/url"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"golang.org/x/crypto/ssh"
@@ -181,4 +185,149 @@ func ParseSyncSink(sink juicefsiov1.SyncSink, syncName, ref string) (*juicefsiov
 
 func IsDistributed(sync *juicefsiov1.Sync) bool {
 	return sync.Spec.Replicas != nil && *sync.Spec.Replicas > 1
+}
+
+func FetchMetrics(ctx context.Context, sync *juicefsiov1.Sync) (map[string]float64, error) {
+	// resp, err := http.Get(fmt.Sprintf("%s/metrics", url))
+	// if err != nil {
+	// 	return nil, err
+	// }
+	// defer resp.Body.Close()
+	// if resp.StatusCode != http.StatusOK {
+	// 	return nil, fmt.Errorf("failed to fetch metrics: %s", resp.Status)
+	// }
+	// data, err := io.ReadAll(resp.Body)
+	// if err != nil {
+	// 	return nil, err
+	// }
+
+	// parse metrics options
+	port := 9567
+	for _, opt := range sync.Spec.Options {
+		if strings.Contains(opt, "metrics") {
+			parts := strings.SplitN(opt, "=", 2)
+			if len(parts) == 2 {
+				metrics := strings.Split(parts[1], ":")
+				if len(metrics) == 2 {
+					port, _ = strconv.Atoi(metrics[1])
+				}
+			}
+		}
+	}
+	stdout, stderr, err := ExecInPod(ctx,
+		sync.Namespace,
+		common.GenSyncManagerName(sync.Name),
+		common.SyncNamePrefix,
+		[]string{"curl", "-s", fmt.Sprintf("localhost:%d/metrics", port)},
+	)
+	if err != nil {
+		return nil, err
+	}
+	if len(stderr) > 0 {
+		return nil, fmt.Errorf("failed to fetch metrics: %s", stderr)
+	}
+	metrics, err := ParseSyncMetrics(string(stdout))
+	if err != nil {
+		return nil, err
+	}
+	return metrics, nil
+}
+
+// ParseSyncMetrics parse metrics from sync manager pod
+// The format of the metrics is prometheus format
+func ParseSyncMetrics(data string) (map[string]float64, error) {
+	metrics := make(map[string]float64)
+	lines := strings.Split(data, "\n")
+	for _, line := range lines {
+		if strings.HasPrefix(line, "#") || line == "" {
+			continue
+		}
+		line = strings.TrimSpace(line)
+		parts := strings.SplitN(line, " ", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		metricName := strings.SplitN(parts[0], "{", 2)[0]
+		valStr := parts[1]
+		value, err := strconv.ParseFloat(valStr, 64)
+		if err != nil {
+			return nil, err
+		}
+		metrics[metricName] = value
+	}
+	return metrics, nil
+}
+
+func parseBytes(s string) (int64, error) {
+	re := regexp.MustCompile(`(?i)^(\d+\.?\d*)\s*([KMGTPE]i?B)?$`)
+	matches := re.FindStringSubmatch(s)
+	if matches == nil {
+		return 0, fmt.Errorf("invalid bytes format: %s", s)
+	}
+
+	num, err := strconv.ParseFloat(matches[1], 64)
+	if err != nil {
+		return 0, err
+	}
+
+	unit := strings.ToLower(matches[2])
+	switch unit {
+	case "kib":
+		num *= 1024
+	case "mib":
+		num *= math.Pow(1024, 2)
+	case "gib":
+		num *= math.Pow(1024, 3)
+	case "tib":
+		num *= math.Pow(1024, 4)
+	case "pib":
+		num *= math.Pow(1024, 5)
+	case "eib":
+		num *= math.Pow(1024, 6)
+	case "b", "":
+	default:
+		return 0, fmt.Errorf("unknown unit: %s", unit)
+	}
+	return int64(num), nil
+
+}
+
+// ParseLog parse log from sync manager pod
+func ParseLog(data string) (map[string]int64, error) {
+	result := make(map[string]int64)
+	data = strings.Split(data, "<INFO>:")[1]
+	data = strings.Split(data, "[sync")[0]
+	data = strings.TrimSpace(data)
+
+	parts := strings.Split(data, ",")
+
+	valRegex := regexp.MustCompile(`^(\d+)(?:\s+\((.*)\))?$`)
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		kv := strings.SplitN(part, ":", 2)
+		if len(kv) != 2 {
+			continue
+		}
+
+		key := strings.ToLower(strings.TrimSpace(kv[0]))
+		valueStr := strings.TrimSpace(kv[1])
+
+		matches := valRegex.FindStringSubmatch(valueStr)
+		if matches == nil {
+			continue
+		}
+		num, err := strconv.Atoi(matches[1])
+		if err != nil {
+			continue
+		}
+		result[key] = int64(num)
+		if len(matches) >= 3 && matches[2] != "" {
+			bytes, err := parseBytes(matches[2])
+			if err == nil {
+				result[key+"_bytes"] = int64(bytes)
+			}
+		}
+	}
+
+	return result, nil
 }

@@ -136,6 +136,29 @@ const (
 	SyncPhaseCompleted   SyncPhase = "Completed"
 )
 
+type SyncStats struct {
+	// +kubebuilder:default=0
+	Handled int64 `json:"handled,omitempty"`
+	// +kubebuilder:default=0
+	Copied int64 `json:"copied,omitempty"`
+	// +kubebuilder:default=0
+	Failed int64 `json:"failed,omitempty"`
+	// +kubebuilder:default=0
+	Skipped int64 `json:"skipped,omitempty"`
+	// +kubebuilder:default=0
+	Checked int64 `json:"checked,omitempty"`
+	// +kubebuilder:default=0
+	Lost int64 `json:"lost,omitempty"`
+	// +kubebuilder:default=0
+	Scaanned int64 `json:"scanned,omitempty"`
+
+	// +kubebuilder:default=0
+
+	CopiedBytes int64 `json:"copiedBytes,omitempty"`
+
+	LastUpdated *metav1.Time `json:"lastUpdated,omitempty"`
+}
+
 // SyncStatus defines the observed state of Sync.
 type SyncStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
@@ -144,17 +167,20 @@ type SyncStatus struct {
 	// +kubebuilder:default=Pending
 	Phase SyncPhase `json:"phase,omitempty"`
 
+	Progress    string       `json:"progress,omitempty"`
+	Stats       SyncStats    `json:"stats,omitempty"`
 	StartAt     *metav1.Time `json:"startAt,omitempty"`
 	CompletedAt *metav1.Time `json:"completedAt,omitempty"`
 	// +optional
-	Reason string `json:"reason,omitempty"`
+	Reason   string `json:"reason,omitempty"`
+	FinshLog string `json:"finishLog,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase"
-// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
-// +kubebuilder:printcolumn:name="Completed",type="date",JSONPath=".status.completedAt"
+// +kubebuilder:printcolumn:name="Replicas",type="integer",JSONPath=".spec.replicas"
+// +kubebuilder:printcolumn:name="Progress",type="string",JSONPath=".status.progress"
 // Sync is the Schema for the syncs API.
 type Sync struct {
 	metav1.TypeMeta   `json:",inline"`

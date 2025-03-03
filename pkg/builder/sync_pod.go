@@ -107,6 +107,20 @@ func (s *SyncPodBuilder) UpdateWorkerIPs(ips []string) {
 }
 
 func (s *SyncPodBuilder) newWorkerPod(i int) corev1.Pod {
+	workerSyncCmd := `
+echo "waiting for sync worker start"
+while true; do
+    juicefs_pid=$(pgrep -f "^/tmp/juicefs sync" || true)
+    if [ -n "$juicefs_pid" ]; then
+        echo "sync worker is running with PID: $juicefs_pid"
+        while kill -0 "$juicefs_pid" 2>/dev/null; do
+            sleep 1
+        done
+        echo "sync worker is finished, exit"
+        exit 0
+    fi
+done
+`
 	pod := corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        common.GenSyncWorkerName(s.sc.Name, i),
@@ -140,7 +154,7 @@ func (s *SyncPodBuilder) newWorkerPod(i int) corev1.Pod {
 					Command: []string{
 						"sh",
 						"-c",
-						fmt.Sprintf(syncPodEnrtypoint, s.IsDistributed, "", "sleep infinity"),
+						fmt.Sprintf(syncPodEnrtypoint, s.IsDistributed, "", workerSyncCmd),
 					},
 				},
 			},

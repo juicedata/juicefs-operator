@@ -150,7 +150,7 @@ type SyncStats struct {
 	// +kubebuilder:default=0
 	Lost int64 `json:"lost,omitempty"`
 	// +kubebuilder:default=0
-	Scaanned int64 `json:"scanned,omitempty"`
+	Scanned int64 `json:"scanned,omitempty"`
 
 	// +kubebuilder:default=0
 
@@ -172,8 +172,8 @@ type SyncStatus struct {
 	StartAt     *metav1.Time `json:"startAt,omitempty"`
 	CompletedAt *metav1.Time `json:"completedAt,omitempty"`
 	// +optional
-	Reason   string `json:"reason,omitempty"`
-	FinshLog string `json:"finishLog,omitempty"`
+	Reason    string `json:"reason,omitempty"`
+	FinishLog string `json:"finishLog,omitempty"`
 }
 
 // +kubebuilder:object:root=true

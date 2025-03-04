@@ -174,17 +174,17 @@ func (r *SyncReconciler) calculateSyncStats(ctx context.Context, sync *juicefsio
 	l := log.FromContext(ctx)
 	status := sync.Status
 	if managerPod.Status.Phase == corev1.PodSucceeded {
-		finshLog, err := utils.LogPod(ctx, sync.Namespace, common.GenSyncManagerName(sync.Name), common.SyncNamePrefix, 2)
+		finishLog, err := utils.LogPod(ctx, sync.Namespace, common.GenSyncManagerName(sync.Name), common.SyncNamePrefix, 2)
 		if err != nil {
 			l.Error(err, "failed to get manager pod last logs")
 			return status, err
 		}
-		if len(finshLog) > 0 {
-			status.FinshLog = strings.Split(finshLog, "\n")[0]
+		if len(finishLog) > 0 {
+			status.FinishLog = strings.Split(finishLog, "\n")[0]
 		}
 		status.Phase = juicefsiov1.SyncPhaseCompleted
 		status.CompletedAt = &metav1.Time{Time: time.Now()}
-		statsMap, err := utils.ParseLog(status.FinshLog)
+		statsMap, err := utils.ParseLog(status.FinishLog)
 		if err != nil {
 			l.Error(err, "failed to parse log")
 		} else {
@@ -233,11 +233,11 @@ func (r *SyncReconciler) calculateSyncStats(ctx context.Context, sync *juicefsio
 			Skipped:     int64(metrics["juicefs_sync_skipped"]),
 			Checked:     int64(metrics["juicefs_sync_checked"]),
 			CopiedBytes: int64(metrics["juicefs_sync_copied_bytes"]),
-			Scaanned:    int64(metrics["juicefs_sync_scanned"]),
+			Scanned:     int64(metrics["juicefs_sync_scanned"]),
 			LastUpdated: &metav1.Time{Time: time.Now()},
 		}
-		if stats.Scaanned > 0 {
-			status.Progress = fmt.Sprintf("%.2f%%", float64(stats.Handled)/float64(stats.Scaanned)*100)
+		if stats.Scanned > 0 {
+			status.Progress = fmt.Sprintf("%.2f%%", float64(stats.Handled)/float64(stats.Scanned)*100)
 		}
 		status.Stats = stats
 		return status, nil

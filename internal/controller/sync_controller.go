@@ -213,7 +213,9 @@ func (r *SyncReconciler) calculateSyncStats(ctx context.Context, sync *juicefsio
 			if stats.Lost > 0 || stats.Failed > 0 {
 				status.Phase = juicefsiov1.SyncPhaseFailed
 			}
-			status.Progress = fmt.Sprintf("%.2f%%", float64(stats.Handled-stats.Failed-stats.Lost)/float64(stats.Handled)*100)
+			if stats.Handled > 0 {
+				status.Progress = fmt.Sprintf("%.2f%%", float64(stats.Handled-stats.Failed-stats.Lost)/float64(stats.Handled)*100)
+			}
 			status.Stats = stats
 		}
 		return status, nil

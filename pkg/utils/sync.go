@@ -188,19 +188,6 @@ func IsDistributed(sync *juicefsiov1.Sync) bool {
 }
 
 func FetchMetrics(ctx context.Context, sync *juicefsiov1.Sync) (map[string]float64, error) {
-	// resp, err := http.Get(fmt.Sprintf("%s/metrics", url))
-	// if err != nil {
-	// 	return nil, err
-	// }
-	// defer resp.Body.Close()
-	// if resp.StatusCode != http.StatusOK {
-	// 	return nil, fmt.Errorf("failed to fetch metrics: %s", resp.Status)
-	// }
-	// data, err := io.ReadAll(resp.Body)
-	// if err != nil {
-	// 	return nil, err
-	// }
-
 	// parse metrics options
 	port := 9567
 	for _, opt := range sync.Spec.Options {

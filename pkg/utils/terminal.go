@@ -70,3 +70,27 @@ func ExecInPod(ctx context.Context, namespace, name, container string, cmd []str
 	}
 	return stdout.String(), stderr.String(), nil
 }
+
+func LogPod(ctx context.Context, namespace, name, container string, tail int64) (string, error) {
+	log := log.FromContext(ctx).WithName("execInPod")
+	config := ctrl.GetConfigOrDie()
+
+	clientset, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		log.Error(err, "failed to create Kubernetes client")
+		return "", err
+	}
+	tailLines := tail
+	req := clientset.CoreV1().Pods(namespace).GetLogs(name, &corev1.PodLogOptions{
+		Container: container,
+		Follow:    false,
+		Previous:  false,
+		TailLines: &tailLines,
+	})
+	podLogs, err := req.DoRaw(ctx)
+	if err != nil {
+		log.Error(err, "failed to get pod logs")
+		return "", err
+	}
+	return string(podLogs), nil
+}

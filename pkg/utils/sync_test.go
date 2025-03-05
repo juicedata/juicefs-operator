@@ -22,6 +22,7 @@ import (
 
 	juicefsiov1 "github.com/juicedata/juicefs-cache-group-operator/api/v1"
 	"github.com/juicedata/juicefs-cache-group-operator/pkg/common"
+	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -266,4 +267,62 @@ func TestParseSyncSink(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestParseSyncMetrics(t *testing.T) {
+	metrics := `
+# HELP juicefs_sync_copied Copied objects
+# TYPE juicefs_sync_copied counter
+juicefs_sync_copied{cmd="sync",pid="31287"} 1982
+# HELP juicefs_sync_copied_bytes Copied bytes
+# TYPE juicefs_sync_copied_bytes counter
+juicefs_sync_copied_bytes{cmd="sync",pid="31287"} 1.768072e+06
+# HELP juicefs_sync_handled Handled objects
+# TYPE juicefs_sync_handled counter
+juicefs_sync_handled{cmd="sync",pid="31287"} 1983
+# HELP juicefs_sync_pending Pending objects
+# TYPE juicefs_sync_pending gauge
+juicefs_sync_pending{cmd="sync",pid="31287"} 10240
+# HELP juicefs_sync_scanned Scanned objects
+# TYPE juicefs_sync_scanned counter
+juicefs_sync_scanned{cmd="sync",pid="31287"} 12282
+# HELP juicefs_sync_skipped Skipped objects
+# TYPE juicefs_sync_skipped counter
+juicefs_sync_skipped{cmd="sync",pid="31287"} 1
+# HELP juicefs_sync_skipped_bytes Skipped bytes
+# TYPE juicefs_sync_skipped_bytes counter
+juicefs_sync_skipped_bytes{cmd="sync",pid="31287"} 1.312189e+06
+juicefs_sync_uptime 11.544506791
+`
+	metricsMap, err := ParseSyncMetrics(metrics)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected := map[string]float64{
+		"juicefs_sync_copied":        1982,
+		"juicefs_sync_copied_bytes":  1768072,
+		"juicefs_sync_handled":       1983,
+		"juicefs_sync_pending":       10240,
+		"juicefs_sync_scanned":       12282,
+		"juicefs_sync_skipped":       1,
+		"juicefs_sync_skipped_bytes": 1312189,
+		"juicefs_sync_uptime":        11.544506791,
+	}
+	assert.Equal(t, expected, metricsMap)
+}
+
+func TestParseLog(t *testing.T) {
+	data := "2025/02/28 07:36:12.271281 juicefs[148] <INFO>: Found: 4, skipped: 0 (0 B), copied: 4 (152.46 MiB), failed: 0 [sync.go:1387]"
+	result, err := ParseLog(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected := map[string]int64{
+		"found":        4,
+		"copied":       4,
+		"failed":       0,
+		"skipped":      0,
+		"copied_bytes": 159865896,
+	}
+	assert.Equal(t, expected, result)
 }

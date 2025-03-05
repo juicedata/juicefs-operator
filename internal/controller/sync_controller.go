@@ -19,6 +19,8 @@ package controller
 import (
 	"context"
 	"fmt"
+	"reflect"
+	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -154,18 +156,95 @@ func (r *SyncReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		if err := r.Get(ctx, client.ObjectKey{Namespace: sync.Namespace, Name: common.GenSyncManagerName(sync.Name)}, managerPod); err != nil {
 			return ctrl.Result{}, client.IgnoreNotFound(err)
 		}
-		if managerPod.Status.Phase == corev1.PodSucceeded {
-			sync.Status.Phase = juicefsiov1.SyncPhaseCompleted
-			sync.Status.CompletedAt = &metav1.Time{Time: time.Now()}
-			if err := r.Status().Update(ctx, sync); err != nil {
-				return ctrl.Result{}, err
-			}
-			return ctrl.Result{}, nil
+		status, err := r.calculateSyncStats(ctx, sync, managerPod)
+		if err != nil {
+			return ctrl.Result{}, err
 		}
-		return ctrl.Result{}, nil
+		if !reflect.DeepEqual(sync.Status, status) {
+			sync.Status = status
+			return ctrl.Result{RequeueAfter: 3 * time.Second}, utils.IgnoreConflict(r.Status().Update(ctx, sync))
+		}
+		return ctrl.Result{RequeueAfter: 3 * time.Second}, nil
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func (r *SyncReconciler) calculateSyncStats(ctx context.Context, sync *juicefsiov1.Sync, managerPod *corev1.Pod) (juicefsiov1.SyncStatus, error) {
+	l := log.FromContext(ctx)
+	status := sync.Status
+	if managerPod.Status.Phase == corev1.PodSucceeded {
+		finishLog, err := utils.LogPod(ctx, sync.Namespace, common.GenSyncManagerName(sync.Name), common.SyncNamePrefix, 2)
+		if err != nil {
+			l.Error(err, "failed to get manager pod last logs")
+			return status, err
+		}
+		if len(finishLog) > 0 {
+			status.FinishLog = strings.Split(finishLog, "\n")[0]
+		}
+		status.Phase = juicefsiov1.SyncPhaseCompleted
+		status.CompletedAt = &metav1.Time{Time: time.Now()}
+		statsMap, err := utils.ParseLog(status.FinishLog)
+		if err != nil {
+			l.Error(err, "failed to parse log")
+		} else {
+			stats := juicefsiov1.SyncStats{}
+			if handled, ok := statsMap["found"]; ok {
+				stats.Handled = handled
+			}
+			if copied, ok := statsMap["copied"]; ok {
+				stats.Copied = copied
+			}
+			if failed, ok := statsMap["failed"]; ok {
+				stats.Failed = failed
+			}
+			if skipped, ok := statsMap["skipped"]; ok {
+				stats.Skipped = skipped
+			}
+			if copiedBytes, ok := statsMap["copied_bytes"]; ok {
+				stats.CopiedBytes = copiedBytes
+			}
+			if checked, ok := statsMap["checked"]; ok {
+				stats.Checked = checked
+			}
+			if lost, ok := statsMap["lost"]; ok {
+				stats.Lost = lost
+			}
+			if stats.Lost > 0 || stats.Failed > 0 {
+				status.Phase = juicefsiov1.SyncPhaseFailed
+			}
+			if stats.Handled > 0 {
+				status.Progress = fmt.Sprintf("%.2f%%", float64(stats.Handled-stats.Failed-stats.Lost)/float64(stats.Handled)*100)
+			}
+			status.Stats = stats
+		}
+		return status, nil
+	}
+	if status.Stats.LastUpdated != nil && time.Since(status.Stats.LastUpdated.Time) < 3*time.Second {
+		return status, nil
+	}
+	if utils.IsPodReady(*managerPod) {
+		metrics, err := utils.FetchMetrics(ctx, sync)
+		if err != nil {
+			return status, nil
+		}
+		stats := juicefsiov1.SyncStats{
+			Handled:     int64(metrics["juicefs_sync_handled"]),
+			Copied:      int64(metrics["juicefs_sync_copied"]),
+			Failed:      int64(metrics["juicefs_sync_failed"]),
+			Skipped:     int64(metrics["juicefs_sync_skipped"]),
+			Checked:     int64(metrics["juicefs_sync_checked"]),
+			CopiedBytes: int64(metrics["juicefs_sync_copied_bytes"]),
+			Scanned:     int64(metrics["juicefs_sync_scanned"]),
+			LastUpdated: &metav1.Time{Time: time.Now()},
+		}
+		if stats.Scanned > 0 {
+			status.Progress = fmt.Sprintf("%.2f%%", float64(stats.Handled)/float64(stats.Scanned)*100)
+		}
+		status.Stats = stats
+		return status, nil
+	}
+	return status, nil
 }
 
 func (r *SyncReconciler) prepareSyncSecrets(ctx context.Context, sync *juicefsiov1.Sync) error {
@@ -221,11 +300,13 @@ func (r *SyncReconciler) prepareWorkerPod(ctx context.Context, sync *juicefsiov1
 				continue
 			}
 			if len(pods.Items) != int(*sync.Spec.Replicas)-1 {
-				log.Error(fmt.Errorf("worker pod not ready"), "worker pod not ready")
+				log.Info("worker pods not ready", "expect", *sync.Spec.Replicas-1, "actual", len(pods.Items))
+				time.Sleep(5 * time.Second)
+				continue
 			}
 			ips := make([]string, 0, len(pods.Items))
 			for _, pod := range pods.Items {
-				if pod.Status.Phase == corev1.PodRunning {
+				if utils.IsPodReady(pod) {
 					ips = append(ips, pod.Status.PodIP)
 				} else {
 					log.Info("worker pod not ready", "pod", pod.Name, "status", pod.Status.Phase)

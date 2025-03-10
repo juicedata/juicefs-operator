@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"math"
 	"net/url"
+	"path"
 	"regexp"
 	"strconv"
 	"strings"
@@ -90,97 +91,125 @@ func parseSinkValueToEnv(sink juicefsiov1.SyncSinkValue, syncName, key string) [
 	return nil
 }
 
-func ParseSyncSink(sink juicefsiov1.SyncSink, syncName, ref string) (*juicefsiov1.ParsedSyncSink, error) {
+func parseExternalSyncSink(external *juicefsiov1.SyncSinkExternal, syncName, ref string) (*juicefsiov1.ParsedSyncSink, error) {
+	pss := &juicefsiov1.ParsedSyncSink{}
+	ep, err := url.Parse(external.Uri)
+	if err != nil {
+		return nil, err
+	}
+	ak := fmt.Sprintf("EXTERNAL_%s_%s", strings.ToUpper(ref), "ACCESS_KEY")
+	sk := fmt.Sprintf("EXTERNAL_%s_%s", strings.ToUpper(ref), "SECRET_KEY")
+	if external.AccessKey.Value != "" || external.AccessKey.ValueFrom != nil {
+		pss.Envs = append(pss.Envs, parseSinkValueToEnv(external.AccessKey, syncName, ak)...)
+	}
+	if external.SecretKey.Value != "" || external.SecretKey.ValueFrom != nil {
+		pss.Envs = append(pss.Envs, parseSinkValueToEnv(external.SecretKey, syncName, sk)...)
+	}
+	if len(pss.Envs) == 2 {
+		ep.User = url.UserPassword(fmt.Sprintf("$%s", ak), fmt.Sprintf("$%s", sk))
+	}
+	pss.Uri = ep.String()
+	return pss, nil
+}
+
+func parseJuiceFSSyncSink(jfs *juicefsiov1.SyncSinkJuiceFS, syncName, ref string) (*juicefsiov1.ParsedSyncSink, error) {
 	pss := &juicefsiov1.ParsedSyncSink{}
 	var err error
+	pss.FilesFrom = jfs.FilesFrom
+	if jfs.Path == "" {
+		jfs.Path = "/"
+	}
+	pss.Uri, err = url.JoinPath("jfs://", jfs.VolumeName, jfs.Path)
+	if err != nil {
+		return nil, err
+	}
+	authCmd := []string{
+		"juicefs",
+		"auth",
+		jfs.VolumeName,
+	}
+	suffix := "JUICEFS_" + strings.ToUpper(ref)
+	if jfs.Token.Value != "" || jfs.Token.ValueFrom != nil {
+		key := fmt.Sprintf("%s_%s", suffix, "TOKEN")
+		pss.Envs = append(pss.Envs, parseSinkValueToEnv(jfs.Token, syncName, key)...)
+		authCmd = append(authCmd, "--token", fmt.Sprintf("$%s", key))
+	}
+	if jfs.AccessKey.Value != "" || jfs.AccessKey.ValueFrom != nil {
+		key := fmt.Sprintf("%s_%s", suffix, "ACCESS_KEY")
+		pss.Envs = append(pss.Envs, parseSinkValueToEnv(jfs.AccessKey, syncName, key)...)
+		authCmd = append(authCmd, "--access-key", fmt.Sprintf("$%s", key))
+	}
+	if jfs.SecretKey.Value != "" || jfs.SecretKey.ValueFrom != nil {
+		key := fmt.Sprintf("%s_%s", suffix, "SECRET_KEY")
+		pss.Envs = append(pss.Envs, parseSinkValueToEnv(jfs.SecretKey, syncName, key)...)
+		authCmd = append(authCmd, "--secret-key", fmt.Sprintf("$%s", key))
+	}
+	if jfs.ConsoleUrl != "" {
+		pss.Envs = append(pss.Envs, corev1.EnvVar{
+			Name:  "BASE_URL",
+			Value: jfs.ConsoleUrl,
+		})
+	}
+	for _, opt := range jfs.AuthOptions {
+		opt = strings.TrimPrefix(opt, "--")
+		if opt == "token" || opt == "access-key" || opt == "secret-key" {
+			continue
+		}
+		pair := strings.Split(opt, "=")
+		if len(pair) == 2 {
+			authCmd = append(authCmd, "--"+pair[0], pair[1])
+			continue
+		}
+		authCmd = append(authCmd, "--"+pair[0])
+	}
+	pss.PrepareCommand += strings.Join(authCmd, " ")
+	return pss, nil
+}
+
+func ParseSyncSink(sink juicefsiov1.SyncSink, syncName, ref string) (*juicefsiov1.ParsedSyncSink, error) {
+	var pss *juicefsiov1.ParsedSyncSink
+	var err error
 	if sink.External != nil {
-		ep, err := url.Parse(sink.External.Uri)
-		if err != nil {
-			return nil, err
-		}
-		ak := fmt.Sprintf("EXTERNAL_%s_%s", strings.ToUpper(ref), "ACCESS_KEY")
-		sk := fmt.Sprintf("EXTERNAL_%s_%s", strings.ToUpper(ref), "SECRET_KEY")
-		if sink.External.AccessKey.Value != "" || sink.External.AccessKey.ValueFrom != nil {
-			pss.Envs = append(pss.Envs, parseSinkValueToEnv(sink.External.AccessKey, syncName, ak)...)
-		}
-		if sink.External.SecretKey.Value != "" || sink.External.SecretKey.ValueFrom != nil {
-			pss.Envs = append(pss.Envs, parseSinkValueToEnv(sink.External.SecretKey, syncName, sk)...)
-		}
-		if len(pss.Envs) == 2 {
-			ep.User = url.UserPassword(fmt.Sprintf("$%s", ak), fmt.Sprintf("$%s", sk))
-		}
-		pss.Uri = ep.String()
-		return pss, nil
+		pss, err = parseExternalSyncSink(sink.External, syncName, ref)
+	}
+	if sink.JuiceFS != nil {
+		pss, err = parseJuiceFSSyncSink(sink.JuiceFS, syncName, ref)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if pss == nil {
+		return nil, fmt.Errorf("invalid sync sink")
 	}
 
-	if sink.JuiceFS != nil {
-		if ref == "TO" {
-			if sink.JuiceFS.FilesFrom != nil {
-				return nil, fmt.Errorf("cannot use filesFrom in `to` juicefs")
-			}
-		}
-		if sink.JuiceFS.FilesFrom != nil && sink.JuiceFS.FilesFrom.Files != nil && sink.JuiceFS.FilesFrom.ConfigMap != nil {
-			return nil, fmt.Errorf("cannot use files and configMap in same time")
-		}
-		pss.FilesFrom = sink.JuiceFS.FilesFrom
-		if sink.JuiceFS.Path == "" {
-			sink.JuiceFS.Path = "/"
-		}
-		pss.Uri, err = url.JoinPath("jfs://", sink.JuiceFS.VolumeName, sink.JuiceFS.Path)
+	if ref == "TO" && pss.FilesFrom != nil {
+		return nil, fmt.Errorf("filesFrom is not supported in sync sink TO")
+	}
+
+	if pss.FilesFrom != nil && pss.FilesFrom.Files != nil {
+		filesCmd := fmt.Sprintf("mkdir %s\necho '%s' > %s/%s",
+			common.SyncFileFromPath,
+			strings.Join(pss.FilesFrom.Files, "\n"),
+			common.SyncFileFromPath,
+			common.SyncFileFromName)
+		pss.PrepareCommand += "\n" + filesCmd
+	}
+	if pss.FilesFrom != nil && pss.FilesFrom.FilePath != "" {
+		filePath, err := url.JoinPath(pss.Uri, pss.FilesFrom.FilePath)
 		if err != nil {
 			return nil, err
 		}
-		authCmd := []string{
+		filesCmd := []string{
+			"mkdir -p " + common.SyncFileFromPath,
+			"&&",
 			"juicefs",
-			"auth",
-			sink.JuiceFS.VolumeName,
+			"sync",
+			filePath,
+			path.Join(common.SyncFileFromPath, common.SyncFileFromName),
 		}
-		suffix := "JUICEFS_" + strings.ToUpper(ref)
-		if sink.JuiceFS.Token.Value != "" || sink.JuiceFS.Token.ValueFrom != nil {
-			key := fmt.Sprintf("%s_%s", suffix, "TOKEN")
-			pss.Envs = append(pss.Envs, parseSinkValueToEnv(sink.JuiceFS.Token, syncName, key)...)
-			authCmd = append(authCmd, "--token", fmt.Sprintf("$%s", key))
-		}
-		if sink.JuiceFS.AccessKey.Value != "" || sink.JuiceFS.AccessKey.ValueFrom != nil {
-			key := fmt.Sprintf("%s_%s", suffix, "ACCESS_KEY")
-			pss.Envs = append(pss.Envs, parseSinkValueToEnv(sink.JuiceFS.AccessKey, syncName, key)...)
-			authCmd = append(authCmd, "--access-key", fmt.Sprintf("$%s", key))
-		}
-		if sink.JuiceFS.SecretKey.Value != "" || sink.JuiceFS.SecretKey.ValueFrom != nil {
-			key := fmt.Sprintf("%s_%s", suffix, "SECRET_KEY")
-			pss.Envs = append(pss.Envs, parseSinkValueToEnv(sink.JuiceFS.SecretKey, syncName, key)...)
-			authCmd = append(authCmd, "--secret-key", fmt.Sprintf("$%s", key))
-		}
-		if sink.JuiceFS.ConsoleUrl != "" {
-			pss.Envs = append(pss.Envs, corev1.EnvVar{
-				Name:  "BASE_URL",
-				Value: sink.JuiceFS.ConsoleUrl,
-			})
-		}
-		for _, opt := range sink.JuiceFS.AuthOptions {
-			opt = strings.TrimPrefix(opt, "--")
-			if opt == "token" || opt == "access-key" || opt == "secret-key" {
-				continue
-			}
-			pair := strings.Split(opt, "=")
-			if len(pair) == 2 {
-				authCmd = append(authCmd, "--"+pair[0], pair[1])
-				continue
-			}
-			authCmd = append(authCmd, "--"+pair[0])
-		}
-		if pss.FilesFrom != nil && pss.FilesFrom.Files != nil {
-			filesCmd := fmt.Sprintf("mkdir %s\necho '%s' > %s/%s",
-				common.SyncFileFromPath,
-				strings.Join(pss.FilesFrom.Files, "\n"),
-				common.SyncFileFromPath,
-				common.SyncFileFromName)
-			pss.PrepareCommand += filesCmd + "\n"
-		}
-		pss.PrepareCommand += strings.Join(authCmd, " ")
-		return pss, nil
+		pss.PrepareCommand += "\n" + strings.Join(filesCmd, " ")
 	}
-	return nil, fmt.Errorf("invalid sync sink")
+	return pss, nil
 }
 
 func IsDistributed(sync *juicefsiov1.Sync) bool {

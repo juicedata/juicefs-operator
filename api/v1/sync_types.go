@@ -43,13 +43,15 @@ type SyncSinkExternal struct {
 	// +kubebuilder:validation:Required
 	Uri string `json:"uri"`
 
-	AccessKey SyncSinkValue `json:"accessKey,omitempty"`
-	SecretKey SyncSinkValue `json:"secretKey,omitempty"`
+	AccessKey SyncSinkValue             `json:"accessKey,omitempty"`
+	SecretKey SyncSinkValue             `json:"secretKey,omitempty"`
+	FilesFrom *SyncSinkJuiceFSFilesFrom `json:"filesFrom,omitempty"`
 }
 
 type SyncSinkJuiceFSFilesFrom struct {
 	Files     []string                     `json:"files,omitempty"`
 	ConfigMap *corev1.ConfigMapKeySelector `json:"configMap,omitempty"`
+	FilePath  string                       `json:"filePath,omitempty"`
 }
 
 type SyncSinkJuiceFS struct {

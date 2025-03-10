@@ -172,7 +172,7 @@ func TestParseSyncSink(t *testing.T) {
 				FilesFrom: &juicefsiov1.SyncSinkJuiceFSFilesFrom{
 					Files: []string{"file1", "file2"},
 				},
-				PrepareCommand: "mkdir /tmp/sync-file\necho 'file1\nfile2' > /tmp/sync-file/files\njuicefs auth volume --token $JUICEFS_FROM_TOKEN",
+				PrepareCommand: "juicefs auth volume --token $JUICEFS_FROM_TOKEN\nmkdir /tmp/sync-file\necho 'file1\nfile2' > /tmp/sync-file/files",
 			},
 			wantErr: false,
 		},
@@ -244,6 +244,43 @@ func TestParseSyncSink(t *testing.T) {
 			ref:      "TO",
 			want:     nil,
 			wantErr:  true,
+		},
+		{
+			name: "from JuiceFS sink with files from path",
+			sink: juicefsiov1.SyncSink{
+				JuiceFS: &juicefsiov1.SyncSinkJuiceFS{
+					VolumeName: "volume",
+					Token: juicefsiov1.SyncSinkValue{
+						Value: "token",
+					},
+					FilesFrom: &juicefsiov1.SyncSinkJuiceFSFilesFrom{
+						FilePath: "/path/to/files",
+					},
+				},
+			},
+			syncName: "sync3",
+			ref:      "FROM",
+			want: &juicefsiov1.ParsedSyncSink{
+				Uri: "jfs://volume/",
+				Envs: []corev1.EnvVar{
+					{
+						Name: "JUICEFS_FROM_TOKEN",
+						ValueFrom: &corev1.EnvVarSource{
+							SecretKeyRef: &corev1.SecretKeySelector{
+								LocalObjectReference: corev1.LocalObjectReference{
+									Name: common.GenSyncSecretName("sync3"),
+								},
+								Key: "JUICEFS_FROM_TOKEN",
+							},
+						},
+					},
+				},
+				FilesFrom: &juicefsiov1.SyncSinkJuiceFSFilesFrom{
+					FilePath: "/path/to/files",
+				},
+				PrepareCommand: "juicefs auth volume --token $JUICEFS_FROM_TOKEN\nmkdir -p /tmp/sync-file && juicefs sync jfs://volume/path/to/files /tmp/sync-file/files",
+			},
+			wantErr: false,
 		},
 		{
 			name:     "Invalid sink",

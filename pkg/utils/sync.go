@@ -93,6 +93,7 @@ func parseSinkValueToEnv(sink juicefsiov1.SyncSinkValue, syncName, key string) [
 
 func parseExternalSyncSink(external *juicefsiov1.SyncSinkExternal, syncName, ref string) (*juicefsiov1.ParsedSyncSink, error) {
 	pss := &juicefsiov1.ParsedSyncSink{}
+	pss.FilesFrom = external.FilesFrom
 	ep, err := url.Parse(external.Uri)
 	if err != nil {
 		return nil, err

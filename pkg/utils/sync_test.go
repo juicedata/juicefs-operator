@@ -147,7 +147,7 @@ func TestParseSyncSink(t *testing.T) {
 					Token: juicefsiov1.SyncSinkValue{
 						Value: "token",
 					},
-					FilesFrom: &juicefsiov1.SyncSinkJuiceFSFilesFrom{
+					FilesFrom: &juicefsiov1.SyncFilesFrom{
 						Files: []string{"file1", "file2"},
 					},
 				},
@@ -169,7 +169,7 @@ func TestParseSyncSink(t *testing.T) {
 						},
 					},
 				},
-				FilesFrom: &juicefsiov1.SyncSinkJuiceFSFilesFrom{
+				FilesFrom: &juicefsiov1.SyncFilesFrom{
 					Files: []string{"file1", "file2"},
 				},
 				PrepareCommand: "juicefs auth volume --token $JUICEFS_FROM_TOKEN\nmkdir /tmp/sync-file\necho 'file1\nfile2' > /tmp/sync-file/files",
@@ -185,7 +185,7 @@ func TestParseSyncSink(t *testing.T) {
 					Token: juicefsiov1.SyncSinkValue{
 						Value: "token",
 					},
-					FilesFrom: &juicefsiov1.SyncSinkJuiceFSFilesFrom{
+					FilesFrom: &juicefsiov1.SyncFilesFrom{
 						ConfigMap: &corev1.ConfigMapKeySelector{
 							LocalObjectReference: corev1.LocalObjectReference{
 								Name: "configmap",
@@ -212,7 +212,7 @@ func TestParseSyncSink(t *testing.T) {
 						},
 					},
 				},
-				FilesFrom: &juicefsiov1.SyncSinkJuiceFSFilesFrom{
+				FilesFrom: &juicefsiov1.SyncFilesFrom{
 					ConfigMap: &corev1.ConfigMapKeySelector{
 						LocalObjectReference: corev1.LocalObjectReference{
 							Name: "configmap",
@@ -233,7 +233,7 @@ func TestParseSyncSink(t *testing.T) {
 					Token: juicefsiov1.SyncSinkValue{
 						Value: "token",
 					},
-					FilesFrom: &juicefsiov1.SyncSinkJuiceFSFilesFrom{
+					FilesFrom: &juicefsiov1.SyncFilesFrom{
 						Files: []string{"file1", "file2"},
 					},
 					AuthOptions: []string{"option1", "--option2"},
@@ -253,7 +253,7 @@ func TestParseSyncSink(t *testing.T) {
 					Token: juicefsiov1.SyncSinkValue{
 						Value: "token",
 					},
-					FilesFrom: &juicefsiov1.SyncSinkJuiceFSFilesFrom{
+					FilesFrom: &juicefsiov1.SyncFilesFrom{
 						FilePath: "/path/to/files",
 					},
 				},
@@ -275,7 +275,7 @@ func TestParseSyncSink(t *testing.T) {
 						},
 					},
 				},
-				FilesFrom: &juicefsiov1.SyncSinkJuiceFSFilesFrom{
+				FilesFrom: &juicefsiov1.SyncFilesFrom{
 					FilePath: "/path/to/files",
 				},
 				PrepareCommand: "juicefs auth volume --token $JUICEFS_FROM_TOKEN\nmkdir -p /tmp/sync-file && juicefs sync jfs://volume/path/to/files /tmp/sync-file/files",

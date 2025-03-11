@@ -25,8 +25,7 @@ type ParsedSyncSink struct {
 	Uri            string
 	Envs           []corev1.EnvVar
 	PrepareCommand string
-	// only for JuiceFS From
-	FilesFrom *SyncSinkJuiceFSFilesFrom `json:"filesFrom,omitempty"`
+	FilesFrom      *SyncFilesFrom `json:"filesFrom,omitempty"`
 }
 
 type SyncSinkValue struct {
@@ -43,12 +42,12 @@ type SyncSinkExternal struct {
 	// +kubebuilder:validation:Required
 	Uri string `json:"uri"`
 
-	AccessKey SyncSinkValue             `json:"accessKey,omitempty"`
-	SecretKey SyncSinkValue             `json:"secretKey,omitempty"`
-	FilesFrom *SyncSinkJuiceFSFilesFrom `json:"filesFrom,omitempty"`
+	AccessKey SyncSinkValue  `json:"accessKey,omitempty"`
+	SecretKey SyncSinkValue  `json:"secretKey,omitempty"`
+	FilesFrom *SyncFilesFrom `json:"filesFrom,omitempty"`
 }
 
-type SyncSinkJuiceFSFilesFrom struct {
+type SyncFilesFrom struct {
 	Files     []string                     `json:"files,omitempty"`
 	ConfigMap *corev1.ConfigMapKeySelector `json:"configMap,omitempty"`
 	FilePath  string                       `json:"filePath,omitempty"`
@@ -61,11 +60,11 @@ type SyncSinkJuiceFS struct {
 	Token SyncSinkValue `json:"token"`
 
 	// +optional
-	Path        string                    `json:"path,omitempty"`
-	AccessKey   SyncSinkValue             `json:"accessKey,omitempty"`
-	SecretKey   SyncSinkValue             `json:"secretKey,omitempty"`
-	AuthOptions []string                  `json:"authOptions,omitempty"`
-	FilesFrom   *SyncSinkJuiceFSFilesFrom `json:"filesFrom,omitempty"`
+	Path        string         `json:"path,omitempty"`
+	AccessKey   SyncSinkValue  `json:"accessKey,omitempty"`
+	SecretKey   SyncSinkValue  `json:"secretKey,omitempty"`
+	AuthOptions []string       `json:"authOptions,omitempty"`
+	FilesFrom   *SyncFilesFrom `json:"filesFrom,omitempty"`
 
 	// Required in on-premise environment
 	ConsoleUrl string `json:"consoleUrl,omitempty"`

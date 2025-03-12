@@ -29,10 +29,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	juicefsiov1 "github.com/juicedata/juicefs-cache-group-operator/api/v1"
-	"github.com/juicedata/juicefs-cache-group-operator/pkg/builder"
-	"github.com/juicedata/juicefs-cache-group-operator/pkg/common"
-	"github.com/juicedata/juicefs-cache-group-operator/pkg/utils"
+	juicefsiov1 "github.com/juicedata/juicefs-operator/api/v1"
+	"github.com/juicedata/juicefs-operator/pkg/builder"
+	"github.com/juicedata/juicefs-operator/pkg/common"
+	"github.com/juicedata/juicefs-operator/pkg/utils"
 )
 
 // WarmUpReconciler reconciles a WarmUp object

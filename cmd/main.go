@@ -19,7 +19,7 @@ package main
 import (
 	"github.com/spf13/cobra"
 
-	"github.com/juicedata/juicefs-cache-group-operator/cmd/app"
+	"github.com/juicedata/juicefs-operator/cmd/app"
 )
 
 func main() {

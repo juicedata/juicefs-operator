@@ -29,10 +29,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	juicefsiov1 "github.com/juicedata/juicefs-cache-group-operator/api/v1"
-	"github.com/juicedata/juicefs-cache-group-operator/pkg/builder"
-	"github.com/juicedata/juicefs-cache-group-operator/pkg/common"
-	"github.com/juicedata/juicefs-cache-group-operator/pkg/utils"
+	juicefsiov1 "github.com/juicedata/juicefs-operator/api/v1"
+	"github.com/juicedata/juicefs-operator/pkg/builder"
+	"github.com/juicedata/juicefs-operator/pkg/common"
+	"github.com/juicedata/juicefs-operator/pkg/utils"
 
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"

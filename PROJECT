@@ -5,8 +5,8 @@
 domain: juicefs.io
 layout:
 - go.kubebuilder.io/v4
-projectName: juicefs-cache-group-operator
-repo: github.com/juicedata/juicefs-cache-group-operator
+projectName: juicefs-operator
+repo: github.com/juicedata/juicefs-operator
 resources:
 - api:
     crdVersion: v1
@@ -14,7 +14,7 @@ resources:
   controller: true
   domain: juicefs.io
   kind: CacheGroup
-  path: github.com/juicedata/juicefs-cache-group-operator/api/v1
+  path: github.com/juicedata/juicefs-operator/api/v1
   version: v1
 - api:
     crdVersion: v1
@@ -23,7 +23,7 @@ resources:
   domain: juicefs.io
   group: juicefs.io
   kind: WarmUp
-  path: github.com/juicedata/juicefs-cache-group-operator/api/v1
+  path: github.com/juicedata/juicefs-operator/api/v1
   version: v1
 - api:
     crdVersion: v1
@@ -31,6 +31,6 @@ resources:
   controller: true
   domain: juicefs.io
   kind: Sync
-  path: github.com/juicedata/juicefs-cache-group-operator/api/v1
+  path: github.com/juicedata/juicefs-operator/api/v1
   version: v1
 version: "3"

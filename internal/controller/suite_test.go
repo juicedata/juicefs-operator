@@ -33,7 +33,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	juicefsiov1 "github.com/juicedata/juicefs-cache-group-operator/api/v1"
+	juicefsiov1 "github.com/juicedata/juicefs-operator/api/v1"
 	// +kubebuilder:scaffold:imports
 )
 

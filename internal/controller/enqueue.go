@@ -18,7 +18,7 @@ import (
 	"context"
 	"reflect"
 
-	juicefsiov1 "github.com/juicedata/juicefs-cache-group-operator/api/v1"
+	juicefsiov1 "github.com/juicedata/juicefs-operator/api/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/workqueue"
 	"sigs.k8s.io/controller-runtime/pkg/client"

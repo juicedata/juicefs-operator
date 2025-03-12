@@ -27,7 +27,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	juicefsiov1 "github.com/juicedata/juicefs-cache-group-operator/api/v1"
+	juicefsiov1 "github.com/juicedata/juicefs-operator/api/v1"
 )
 
 var _ = Describe("Sync Controller", func() {

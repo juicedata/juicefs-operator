@@ -23,7 +23,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/juicedata/juicefs-cache-group-operator/pkg/common"
+	"github.com/juicedata/juicefs-operator/pkg/common"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/yaml"
 )

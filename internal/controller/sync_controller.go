@@ -94,6 +94,14 @@ func (r *SyncReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		return ctrl.Result{}, r.Status().Update(ctx, sync)
 	}
 
+	if strings.HasSuffix(from.Uri, "/") != strings.HasSuffix(to.Uri, "/") {
+		err := fmt.Errorf("FROM and TO should both end with path separator or not")
+		l.Error(err, "")
+		sync.Status.Phase = juicefsiov1.SyncPhaseFailed
+		sync.Status.Reason = err.Error()
+		return ctrl.Result{}, r.Status().Update(ctx, sync)
+	}
+
 	if sync.Status.Phase == juicefsiov1.SyncPhasePending || sync.Status.Phase == "" {
 		sync.Status.Phase = juicefsiov1.SyncPhasePreparing
 		if err := r.Status().Update(ctx, sync); err != nil {

@@ -22,7 +22,7 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 
-	juicefsiov1 "github.com/juicedata/juicefs-cache-group-operator/api/v1"
+	juicefsiov1 "github.com/juicedata/juicefs-operator/api/v1"
 )
 
 var (

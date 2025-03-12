@@ -1,6 +1,6 @@
-# juicefs-cache-group-operator
+# juicefs-operator
 
-JuiceFS enterprise users can use the Cache Group Operator to create and manage distributed cache clusters. Compared to other deployment methods, the Cache Group Operator is more convenient to use (supporting both GUI and CLI) and also supports advanced features such as different node configurations, smooth scaling, and automatic cache cleaning.
+JuiceFS provides an [Operator](https://kubernetes.io/zh-cn/docs/concepts/extend-kubernetes/operator), which is a controller designed specifically for Kubernetes environments to automate the management of JuiceFS' distributed cache clusters, cache preloading, and data synchronization, making it easier to use JuiceFS in container environments.
 
-- [Document](https://juicefs.com/docs/csi/guide/cache-group-operator/)
-- [文档](https://juicefs.com/docs/zh/csi/guide/cache-group-operator/)
+- [Document](https://juicefs.com/docs/csi/guide/juicefs-operator/)
+- [文档](https://juicefs.com/docs/zh/csi/guide/juicefs-operator/)

@@ -28,8 +28,8 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	juicefsiov1 "github.com/juicedata/juicefs-cache-group-operator/api/v1"
-	"github.com/juicedata/juicefs-cache-group-operator/pkg/common"
+	juicefsiov1 "github.com/juicedata/juicefs-operator/api/v1"
+	"github.com/juicedata/juicefs-operator/pkg/common"
 )
 
 var _ = Describe("WarmUp Controller", func() {

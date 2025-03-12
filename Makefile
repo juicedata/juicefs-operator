@@ -108,10 +108,10 @@ PLATFORMS ?= linux/arm64,linux/amd64
 docker-buildx: ## Build and push docker image for the manager for cross-platform support
 	# copy existing Dockerfile and insert --platform=${BUILDPLATFORM} into Dockerfile.cross, and preserve the original Dockerfile
 	sed -e '1 s/\(^FROM\)/FROM --platform=\$$\{BUILDPLATFORM\}/; t' -e ' 1,// s//FROM --platform=\$$\{BUILDPLATFORM\}/' Dockerfile > Dockerfile.cross
-	- $(CONTAINER_TOOL) buildx create --name juicefs-cache-group-operator-builder
-	$(CONTAINER_TOOL) buildx use juicefs-cache-group-operator-builder
+	- $(CONTAINER_TOOL) buildx create --name juicefs-operator-builder
+	$(CONTAINER_TOOL) buildx use juicefs-operator-builder
 	- $(CONTAINER_TOOL) buildx build --push --platform=$(PLATFORMS) --tag ${IMG} -f Dockerfile.cross .
-	- $(CONTAINER_TOOL) buildx rm juicefs-cache-group-operator-builder
+	- $(CONTAINER_TOOL) buildx rm juicefs-operator-builder
 	rm Dockerfile.cross
 
 .PHONY: build-installer

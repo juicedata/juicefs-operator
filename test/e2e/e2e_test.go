@@ -28,12 +28,12 @@ import (
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 
-	"github.com/juicedata/juicefs-cache-group-operator/pkg/common"
-	"github.com/juicedata/juicefs-cache-group-operator/test/utils"
+	"github.com/juicedata/juicefs-operator/pkg/common"
+	"github.com/juicedata/juicefs-operator/test/utils"
 )
 
 const (
-	namespace = "juicefs-cache-group-operator-system"
+	namespace = "juicefs-operator-system"
 	running   = "Running"
 	trueValue = "true"
 	image     = "registry.cn-hangzhou.aliyuncs.com/juicedata/mount:ee-5.1.2-59d9736"
@@ -85,7 +85,7 @@ var _ = Describe("controller", Ordered, func() {
 			var err error
 
 			// projectimage stores the name of the image used in the example
-			var projectimage = "example.com/juicefs-cache-group-operator:v0.0.1"
+			var projectimage = "example.com/juicefs-operator:v0.0.1"
 
 			By("building the manager(Operator) image")
 			cmd := exec.Command("make", "docker-build", fmt.Sprintf("IMG=%s", projectimage))
@@ -263,7 +263,7 @@ var _ = Describe("controller", Ordered, func() {
 				if err != nil {
 					return fmt.Errorf("get worker pods failed, %+v", err)
 				}
-				expectCmds := "/usr/bin/juicefs auth csi-ci --token ${TOKEN} --access-key minioadmin --bucket http://test-bucket.minio.default.svc.cluster.local:9000 --secret-key ${SECRET_KEY}\nexec /sbin/mount.juicefs csi-ci /mnt/jfs -o foreground,no-update,cache-group=juicefs-cache-group-operator-system-e2e-test-cachegroup,cache-dir=/var/jfsCache"
+				expectCmds := "/usr/bin/juicefs auth csi-ci --token ${TOKEN} --access-key minioadmin --bucket http://test-bucket.minio.default.svc.cluster.local:9000 --secret-key ${SECRET_KEY}\nexec /sbin/mount.juicefs csi-ci /mnt/jfs -o foreground,no-update,cache-group=juicefs-operator-system-e2e-test-cachegroup,cache-dir=/var/jfsCache"
 				nodes := corev1.PodList{}
 				err = json.Unmarshal(result, &nodes)
 				ExpectWithOffset(1, err).NotTo(HaveOccurred())
@@ -416,8 +416,8 @@ var _ = Describe("controller", Ordered, func() {
 				if err != nil {
 					return fmt.Errorf("get worker pods failed, %+v", err)
 				}
-				normalCmds := "/usr/bin/juicefs auth csi-ci --token ${TOKEN} --access-key minioadmin --bucket http://test-bucket.minio.default.svc.cluster.local:9000 --secret-key ${SECRET_KEY}\nexec /sbin/mount.juicefs csi-ci /mnt/jfs -o foreground,no-update,cache-group=juicefs-cache-group-operator-system-e2e-test-cachegroup,free-space-ratio=0.1,group-weight=200,cache-dir=/var/jfsCache"
-				worker2Cmds := "/usr/bin/juicefs auth csi-ci --token ${TOKEN} --access-key minioadmin --bucket http://test-bucket.minio.default.svc.cluster.local:9000 --secret-key ${SECRET_KEY}\nexec /sbin/mount.juicefs csi-ci /mnt/jfs -o foreground,no-update,cache-group=juicefs-cache-group-operator-system-e2e-test-cachegroup,free-space-ratio=0.01,group-weight=100,cache-dir=/var/jfsCache-0"
+				normalCmds := "/usr/bin/juicefs auth csi-ci --token ${TOKEN} --access-key minioadmin --bucket http://test-bucket.minio.default.svc.cluster.local:9000 --secret-key ${SECRET_KEY}\nexec /sbin/mount.juicefs csi-ci /mnt/jfs -o foreground,no-update,cache-group=juicefs-operator-system-e2e-test-cachegroup,free-space-ratio=0.1,group-weight=200,cache-dir=/var/jfsCache"
+				worker2Cmds := "/usr/bin/juicefs auth csi-ci --token ${TOKEN} --access-key minioadmin --bucket http://test-bucket.minio.default.svc.cluster.local:9000 --secret-key ${SECRET_KEY}\nexec /sbin/mount.juicefs csi-ci /mnt/jfs -o foreground,no-update,cache-group=juicefs-operator-system-e2e-test-cachegroup,free-space-ratio=0.01,group-weight=100,cache-dir=/var/jfsCache-0"
 				nodes := corev1.PodList{}
 				err = json.Unmarshal(result, &nodes)
 				ExpectWithOffset(1, err).NotTo(HaveOccurred())
@@ -506,7 +506,7 @@ var _ = Describe("controller", Ordered, func() {
 				if err != nil {
 					return fmt.Errorf("get worker pods failed, %+v", err)
 				}
-				worker2Cmds := "/usr/bin/juicefs auth csi-ci --token ${TOKEN} --access-key minioadmin --bucket http://test-bucket.minio.default.svc.cluster.local:9000 --secret-key ${SECRET_KEY}\nexec /sbin/mount.juicefs csi-ci /mnt/jfs -o foreground,no-update,cache-group=juicefs-cache-group-operator-system-e2e-test-cachegroup,cache-dir=/var/jfsCache,group-backup"
+				worker2Cmds := "/usr/bin/juicefs auth csi-ci --token ${TOKEN} --access-key minioadmin --bucket http://test-bucket.minio.default.svc.cluster.local:9000 --secret-key ${SECRET_KEY}\nexec /sbin/mount.juicefs csi-ci /mnt/jfs -o foreground,no-update,cache-group=juicefs-operator-system-e2e-test-cachegroup,cache-dir=/var/jfsCache,group-backup"
 				nodes := corev1.PodList{}
 				err = json.Unmarshal(result, &nodes)
 				ExpectWithOffset(1, err).NotTo(HaveOccurred())

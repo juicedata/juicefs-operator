@@ -25,9 +25,9 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	juicefsiov1 "github.com/juicedata/juicefs-cache-group-operator/api/v1"
-	"github.com/juicedata/juicefs-cache-group-operator/pkg/common"
-	"github.com/juicedata/juicefs-cache-group-operator/pkg/utils"
+	juicefsiov1 "github.com/juicedata/juicefs-operator/api/v1"
+	"github.com/juicedata/juicefs-operator/pkg/common"
+	"github.com/juicedata/juicefs-operator/pkg/utils"
 )
 
 type JobBuilder struct {

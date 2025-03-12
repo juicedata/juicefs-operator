@@ -1,4 +1,4 @@
-module github.com/juicedata/juicefs-cache-group-operator
+module github.com/juicedata/juicefs-operator
 
 go 1.23.0
 

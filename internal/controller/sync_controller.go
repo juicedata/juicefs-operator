@@ -160,6 +160,17 @@ func (r *SyncReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		}
 	}
 
+	if sync.Status.Phase == juicefsiov1.SyncPhaseFailed {
+		labelSelector := client.MatchingLabels{
+			common.LabelSync:    sync.Name,
+			common.LabelAppType: common.LabelSyncWorkerValue,
+		}
+		if err := r.DeleteAllOf(ctx, &corev1.Pod{}, client.InNamespace(sync.Namespace), labelSelector); err != nil {
+			return ctrl.Result{}, client.IgnoreNotFound(err)
+		}
+		return ctrl.Result{}, nil
+	}
+
 	if sync.Status.Phase == juicefsiov1.SyncPhaseProgressing {
 		// get manager pod
 		managerPod := &corev1.Pod{}

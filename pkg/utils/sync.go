@@ -117,9 +117,6 @@ func parseJuiceFSSyncSink(jfs *juicefsiov1.SyncSinkJuiceFS, syncName, ref string
 	pss := &juicefsiov1.ParsedSyncSink{}
 	var err error
 	pss.FilesFrom = jfs.FilesFrom
-	if jfs.Path == "" {
-		jfs.Path = "/"
-	}
 	pss.Uri, err = url.JoinPath("jfs://", jfs.VolumeName, jfs.Path)
 	if err != nil {
 		return nil, err
@@ -196,6 +193,9 @@ func ParseSyncSink(sink juicefsiov1.SyncSink, syncName, ref string) (*juicefsiov
 		pss.PrepareCommand += "\n" + filesCmd
 	}
 	if pss.FilesFrom != nil && pss.FilesFrom.FilePath != "" {
+		if strings.HasSuffix(pss.FilesFrom.FilePath, "/") {
+			return nil, fmt.Errorf("invalid filesfrom filePath: %s", pss.FilesFrom.FilePath)
+		}
 		filePath, err := url.JoinPath(pss.Uri, pss.FilesFrom.FilePath)
 		if err != nil {
 			return nil, err

@@ -361,5 +361,18 @@ func TestParseLog(t *testing.T) {
 		"skipped":      0,
 		"copied_bytes": 159865896,
 	}
+
+	data2 := `
+2025/03/14 14:34:18.094621 juicefs[78113] <DEBUG>: Try 3 failed: directory not empty [sync.go:206]
+2025/03/14 14:34:22.095956 juicefs[78113] <ERROR>: Failed to copy data of  in 5.557595916s: directory not empty [sync.go:630]
+2025/03/14 14:34:22.096341 juicefs[78113] <ERROR>: Failed to copy object : directory not empty [sync.go:718]
+2025/03/14 14:34:22.112166 juicefs[78113] <INFO>: Found: 4, skipped: 0 (0 B), copied: 4 (152.46 MiB), failed: 0 [sync.go:1387]
+2025/03/14 14:34:22.113225 juicefs[78113] <FATAL>: failed to handle 1 objects [main.go:68]
+	`
+	result2, err := ParseLog(data2)
+	if err != nil {
+		t.Fatal(err)
+	}
 	assert.Equal(t, expected, result)
+	assert.Equal(t, expected, result2)
 }

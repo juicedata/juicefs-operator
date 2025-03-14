@@ -145,7 +145,7 @@ done
 			Affinity:                      s.sc.Spec.Affinity,
 			Tolerations:                   s.sc.Spec.Tolerations,
 			Resources:                     s.sc.Spec.Resources,
-			RestartPolicy:                 corev1.RestartPolicyOnFailure,
+			RestartPolicy:                 corev1.RestartPolicyNever,
 			TerminationGracePeriodSeconds: utils.ToPtr(int64(0)),
 			Containers: []corev1.Container{
 				{

@@ -183,16 +183,20 @@ func (r *SyncReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 func (r *SyncReconciler) calculateSyncStats(ctx context.Context, sync *juicefsiov1.Sync, managerPod *corev1.Pod) (juicefsiov1.SyncStatus, error) {
 	l := log.FromContext(ctx)
 	status := sync.Status
-	if managerPod.Status.Phase == corev1.PodSucceeded {
-		finishLog, err := utils.LogPod(ctx, sync.Namespace, common.GenSyncManagerName(sync.Name), common.SyncNamePrefix, 2)
+	if managerPod.Status.Phase == corev1.PodSucceeded || managerPod.Status.Phase == corev1.PodFailed {
+		finishLog, err := utils.LogPod(ctx, sync.Namespace, common.GenSyncManagerName(sync.Name), common.SyncNamePrefix, 5)
 		if err != nil {
 			l.Error(err, "failed to get manager pod last logs")
 			return status, err
 		}
 		if len(finishLog) > 0 {
-			status.FinishLog = strings.Split(finishLog, "\n")[0]
+			status.FinishLog = finishLog
 		}
-		status.Phase = juicefsiov1.SyncPhaseCompleted
+		if managerPod.Status.Phase == corev1.PodFailed {
+			status.Phase = juicefsiov1.SyncPhaseFailed
+		} else {
+			status.Phase = juicefsiov1.SyncPhaseCompleted
+		}
 		status.CompletedAt = &metav1.Time{Time: time.Now()}
 		statsMap, err := utils.ParseLog(status.FinishLog)
 		if err != nil {

@@ -261,7 +261,7 @@ func TestParseSyncSink(t *testing.T) {
 			syncName: "sync3",
 			ref:      "FROM",
 			want: &juicefsiov1.ParsedSyncSink{
-				Uri: "jfs://volume/",
+				Uri: "jfs://volume",
 				Envs: []corev1.EnvVar{
 					{
 						Name: "JUICEFS_FROM_TOKEN",

@@ -23,6 +23,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/samber/lo"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -301,11 +302,17 @@ func (r *SyncReconciler) prepareWorkerPod(ctx context.Context, sync *juicefsiov1
 		return err
 	}
 
-	if len(pods.Items) == 0 {
-		// create worker pod
+	if len(pods.Items) != int(*sync.Spec.Replicas)-1 {
 		workerPods := builder.NewWorkerPods()
+		existPods := lo.KeyBy(pods.Items, func(pod corev1.Pod) string {
+			return pod.Name
+		})
 		for _, pod := range workerPods {
-			if err := r.Create(ctx, &pod); err != nil {
+			if _, ok := existPods[pod.Name]; ok {
+				continue
+			}
+			err := r.Create(ctx, &pod)
+			if err != nil && !apierrors.IsAlreadyExists(err) {
 				return err
 			}
 		}

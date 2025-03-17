@@ -311,18 +311,22 @@ func parseBytes(s string) (int64, error) {
 
 // ParseLog parse log from sync manager pod
 func ParseLog(data string) (map[string]int64, error) {
+	logWithStats := ""
 	for _, line := range strings.Split(data, "\n") {
 		if strings.Contains(line, "<INFO>: Found") {
-			data = line
+			logWithStats = line
 			break
 		}
 	}
+	if logWithStats == "" {
+		return nil, fmt.Errorf("failed to log, cannot found stats log")
+	}
 	result := make(map[string]int64)
-	data = strings.Split(data, "<INFO>:")[1]
-	data = strings.Split(data, "[sync")[0]
-	data = strings.TrimSpace(data)
+	logWithStats = strings.Split(logWithStats, "<INFO>:")[1]
+	logWithStats = strings.Split(logWithStats, "[sync")[0]
+	logWithStats = strings.TrimSpace(logWithStats)
 
-	parts := strings.Split(data, ",")
+	parts := strings.Split(logWithStats, ",")
 
 	valRegex := regexp.MustCompile(`^(\d+)(?:\s+\((.*)\))?$`)
 	for _, part := range parts {

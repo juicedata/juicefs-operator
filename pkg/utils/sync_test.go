@@ -375,4 +375,10 @@ func TestParseLog(t *testing.T) {
 	}
 	assert.Equal(t, expected, result)
 	assert.Equal(t, expected, result2)
+
+	data3 := `error`
+	_, err = ParseLog(data3)
+	if err == nil {
+		t.Fatal("ParseLog() should return error")
+	}
 }

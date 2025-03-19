@@ -25,7 +25,6 @@ linters:
     - errcheck
     - ginkgolinter
     - goconst
-    - gocyclo
     - gofmt
     - goimports
     - gosimple

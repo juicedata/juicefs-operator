@@ -90,6 +90,11 @@ var (
 
 	DefaultBackupWorkerDuration = 10 * time.Minute
 	DefaultWaitingMaxDuration   = 1 * time.Hour
+
+	MaxSyncConcurrentReconciles = 10
+
+	K8sClientQPS   float32 = 30
+	K8sClientBurst int     = 20
 )
 
 func GenWorkerName(cgName string, nodeName string) string {

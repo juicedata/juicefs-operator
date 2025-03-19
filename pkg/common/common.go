@@ -90,6 +90,8 @@ var (
 
 	DefaultBackupWorkerDuration = 10 * time.Minute
 	DefaultWaitingMaxDuration   = 1 * time.Hour
+
+	MaxSyncConcurrentReconciles = 10
 )
 
 func GenWorkerName(cgName string, nodeName string) string {

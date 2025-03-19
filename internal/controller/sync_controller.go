@@ -119,16 +119,20 @@ func (r *SyncReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		}
 
 		builder := builder.NewSyncPodBuilder(sync, from, to)
+		l.Info("start to prepare sync worker pods", "replicas", sync.Spec.Replicas)
 		if err := r.prepareWorkerPod(ctx, sync, builder); err != nil {
 			l.Error(err, "failed to prepare worker pod")
 			return ctrl.Result{}, err
 		}
+		l.Info("prepare worker pod done", "replicas", sync.Spec.Replicas)
 
+		l.Info("start to prepare sync manager pod")
 		// prepare manager pod
 		if err := r.prepareManagerPod(ctx, sync, builder); err != nil {
 			l.Error(err, "failed to prepare manager pod")
 			return ctrl.Result{}, err
 		}
+		l.Info("prepare manager pod done, ready to start sync")
 
 		sync.Status.StartAt = &metav1.Time{Time: time.Now()}
 		sync.Status.Phase = juicefsiov1.SyncPhaseProgressing
@@ -174,10 +178,27 @@ func (r *SyncReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	}
 
 	if sync.Status.Phase == juicefsiov1.SyncPhaseProgressing {
+		// delete worker completed pod
+		labelSelector := client.MatchingLabels{
+			common.LabelSync:    sync.Name,
+			common.LabelAppType: common.LabelSyncWorkerValue,
+		}
+		fieldSelector := client.MatchingFields{
+			"status.phase": string(corev1.PodSucceeded),
+		}
+		if err := r.DeleteAllOf(
+			ctx, &corev1.Pod{},
+			client.InNamespace(sync.Namespace),
+			labelSelector,
+			fieldSelector,
+		); err != nil {
+			return ctrl.Result{}, err
+		}
 		// get manager pod
 		managerPod := &corev1.Pod{}
 		if err := r.Get(ctx, client.ObjectKey{Namespace: sync.Namespace, Name: common.GenSyncManagerName(sync.Name)}, managerPod); err != nil {
-			return ctrl.Result{}, client.IgnoreNotFound(err)
+			l.Error(err, "failed to get manager pod")
+			return ctrl.Result{}, err
 		}
 		status, err := r.calculateSyncStats(ctx, sync, managerPod)
 		if err != nil {
@@ -347,7 +368,7 @@ func (r *SyncReconciler) prepareWorkerPod(ctx context.Context, sync *juicefsiov1
 				}
 			}
 			if len(ips) == int(*sync.Spec.Replicas)-1 {
-				log.V(1).Info("sync worker pod ready", "ips", ips)
+				log.Info("sync worker pod ready", "ips", ips)
 				builder.UpdateWorkerIPs(ips)
 				return nil
 			}
@@ -373,8 +394,7 @@ func (r *SyncReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&juicefsiov1.Sync{}).
 		Owns(&corev1.Pod{}).
 		WithOptions(controller.Options{
-			// TODO: configable
-			MaxConcurrentReconciles: 5,
+			MaxConcurrentReconciles: common.MaxSyncConcurrentReconciles,
 		}).
 		Named("sync").
 		Complete(r)

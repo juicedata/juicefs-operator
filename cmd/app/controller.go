@@ -25,6 +25,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	"github.com/juicedata/juicefs-operator/internal/controller"
+	"github.com/juicedata/juicefs-operator/pkg/common"
+
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
@@ -48,6 +50,7 @@ func init() {
 	fs := flag.NewFlagSet("", flag.ExitOnError)
 	zapOpts.BindFlags(fs)
 	ControllerCmd.Flags().AddGoFlagSet(fs)
+	ControllerCmd.PersistentFlags().IntVarP(&common.MaxSyncConcurrentReconciles, "max-sync-concurrent-reconciles", "", 10, "max concurrent reconciles for sync")
 }
 
 func run() {

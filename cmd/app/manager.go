@@ -19,6 +19,7 @@ package app
 import (
 	"crypto/tls"
 
+	"github.com/juicedata/juicefs-operator/pkg/common"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
@@ -68,7 +69,11 @@ func NewManager() (ctrl.Manager, error) {
 		// https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.19.0/pkg/metrics/filters#WithAuthenticationAndAuthorization
 		metricsServerOptions.FilterProvider = filters.WithAuthenticationAndAuthorization
 	}
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
+
+	cfg := ctrl.GetConfigOrDie()
+	cfg.QPS = common.K8sClientQPS
+	cfg.Burst = common.K8sClientBurst
+	mgr, err := ctrl.NewManager(cfg, ctrl.Options{
 		Scheme:                 scheme,
 		Metrics:                metricsServerOptions,
 		HealthProbeBindAddress: probeAddr,

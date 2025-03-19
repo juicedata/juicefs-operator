@@ -132,7 +132,7 @@ func (r *SyncReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 			l.Error(err, "failed to prepare manager pod")
 			return ctrl.Result{}, err
 		}
-		l.Info("prepare manager pod done, ready to start sync")
+		l.Info("prepare manager pod done, ready to sync")
 
 		sync.Status.StartAt = &metav1.Time{Time: time.Now()}
 		sync.Status.Phase = juicefsiov1.SyncPhaseProgressing
@@ -143,13 +143,11 @@ func (r *SyncReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 
 	if sync.Status.Phase == juicefsiov1.SyncPhaseCompleted {
 		// delete worker pod
-		labelSelector := client.MatchingLabels{
-			common.LabelSync:    sync.Name,
-			common.LabelAppType: common.LabelSyncWorkerValue,
-		}
-		if err := r.DeleteAllOf(ctx, &corev1.Pod{}, client.InNamespace(sync.Namespace), labelSelector); err != nil {
+		if err := r.deleteWorkerPods(ctx, sync, true); err != nil {
+			l.Error(err, "failed to delete worker pods")
 			return ctrl.Result{}, err
 		}
+
 		if sync.Spec.TTLSecondsAfterFinished != nil {
 			completedAt := sync.Status.CompletedAt
 			if completedAt == nil {
@@ -167,39 +165,31 @@ func (r *SyncReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	}
 
 	if sync.Status.Phase == juicefsiov1.SyncPhaseFailed {
-		labelSelector := client.MatchingLabels{
-			common.LabelSync:    sync.Name,
-			common.LabelAppType: common.LabelSyncWorkerValue,
+		if err := r.deleteWorkerPods(ctx, sync, true); err != nil {
+			l.Error(err, "failed to delete worker pods")
+			return ctrl.Result{}, err
 		}
-		if err := r.DeleteAllOf(ctx, &corev1.Pod{}, client.InNamespace(sync.Namespace), labelSelector); err != nil {
-			return ctrl.Result{}, client.IgnoreNotFound(err)
-		}
-		return ctrl.Result{}, nil
 	}
 
 	if sync.Status.Phase == juicefsiov1.SyncPhaseProgressing {
-		// delete worker completed pod
-		labelSelector := client.MatchingLabels{
-			common.LabelSync:    sync.Name,
-			common.LabelAppType: common.LabelSyncWorkerValue,
-		}
-		fieldSelector := client.MatchingFields{
-			"status.phase": string(corev1.PodSucceeded),
-		}
-		if err := r.DeleteAllOf(
-			ctx, &corev1.Pod{},
-			client.InNamespace(sync.Namespace),
-			labelSelector,
-			fieldSelector,
-		); err != nil {
-			return ctrl.Result{}, err
-		}
 		// get manager pod
 		managerPod := &corev1.Pod{}
 		if err := r.Get(ctx, client.ObjectKey{Namespace: sync.Namespace, Name: common.GenSyncManagerName(sync.Name)}, managerPod); err != nil {
+			if apierrors.IsNotFound(err) {
+				sync.Status.Phase = juicefsiov1.SyncPhaseFailed
+				sync.Status.Reason = "manager pod not found"
+				return ctrl.Result{}, r.Status().Update(ctx, sync)
+			}
 			l.Error(err, "failed to get manager pod")
 			return ctrl.Result{}, err
 		}
+
+		// delete worker completed pod
+		if err := r.deleteWorkerPods(ctx, sync, false); err != nil {
+			l.Error(err, "failed to delete worker pods")
+			return ctrl.Result{}, err
+		}
+
 		status, err := r.calculateSyncStats(ctx, sync, managerPod)
 		if err != nil {
 			return ctrl.Result{}, err
@@ -377,15 +367,63 @@ func (r *SyncReconciler) prepareWorkerPod(ctx context.Context, sync *juicefsiov1
 	}
 }
 
+func (r *SyncReconciler) deleteWorkerPods(ctx context.Context, sync *juicefsiov1.Sync, all bool) error {
+	labelSelector := client.MatchingLabels{
+		common.LabelSync:    sync.Name,
+		common.LabelAppType: common.LabelSyncWorkerValue,
+	}
+	var fieldSelector client.MatchingFields
+	if !all {
+		fieldSelector = client.MatchingFields{
+			"status.phase": string(corev1.PodSucceeded),
+		}
+	}
+	return client.IgnoreNotFound(
+		r.DeleteAllOf(ctx, &corev1.Pod{},
+			client.InNamespace(sync.Namespace),
+			labelSelector,
+			fieldSelector,
+		))
+}
+
 func (r *SyncReconciler) prepareManagerPod(ctx context.Context, sync *juicefsiov1.Sync, builder *builder.SyncPodBuilder) error {
 	managerPod := builder.NewManagerPod()
-	if err := r.Get(ctx, client.ObjectKey{Namespace: sync.Namespace, Name: managerPod.Name}, &corev1.Pod{}); err != nil {
-		if apierrors.IsNotFound(err) {
-			return r.Create(ctx, managerPod)
-		}
+	err := r.Get(ctx, client.ObjectKey{Namespace: sync.Namespace, Name: managerPod.Name}, &corev1.Pod{})
+	if err != nil && !apierrors.IsNotFound(err) {
 		return err
 	}
-	return nil
+	if apierrors.IsNotFound(err) {
+		if err := r.Create(ctx, managerPod); err != nil {
+			return err
+		}
+	}
+	// waiting for manager pod ready
+	ctx, cancel := context.WithTimeout(ctx, 1*time.Minute)
+	defer cancel()
+	for {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("timeout waiting for manager pod ready")
+		default:
+			err := r.Get(ctx, client.ObjectKey{Namespace: sync.Namespace, Name: managerPod.Name}, managerPod)
+			if err != nil {
+				if apierrors.IsNotFound(err) {
+					time.Sleep(1 * time.Second)
+					continue
+				}
+				return err
+			}
+			if utils.IsPodReady(*managerPod) {
+				log.FromContext(ctx).Info("sync manager pod ready")
+				return nil
+			}
+			// It may have failed/successed immediately after starting, also returns success at this time.
+			if managerPod.Status.Phase == corev1.PodFailed || managerPod.Status.Phase == corev1.PodSucceeded {
+				return nil
+			}
+			time.Sleep(5 * time.Second)
+		}
+	}
 }
 
 // SetupWithManager sets up the controller with the Manager.

@@ -51,6 +51,8 @@ func init() {
 	zapOpts.BindFlags(fs)
 	ControllerCmd.Flags().AddGoFlagSet(fs)
 	ControllerCmd.PersistentFlags().IntVarP(&common.MaxSyncConcurrentReconciles, "max-sync-concurrent-reconciles", "", 10, "max concurrent reconciles for sync")
+	ControllerCmd.PersistentFlags().Float32VarP(&common.K8sClientQPS, "k8s-client-qps", "", 30, "QPS indicates the maximum QPS to the master from this client. Setting this to a negative value will disable client-side ratelimiting")
+	ControllerCmd.PersistentFlags().IntVarP(&common.K8sClientBurst, "k8s-client-burst", "", 20, "Maximum burst for throttle")
 }
 
 func run() {

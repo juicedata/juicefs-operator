@@ -193,7 +193,7 @@ func (r *SyncReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		status, err := r.calculateSyncStats(ctx, sync, managerPod)
 		if !reflect.DeepEqual(sync.Status, status) {
 			sync.Status = status
-			if err := utils.IgnoreConflict(r.Status().Update(ctx, sync)); err != nil {
+			if err := r.Status().Update(ctx, sync); err != nil {
 				return ctrl.Result{}, err
 			}
 		}

@@ -191,12 +191,14 @@ func (r *SyncReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		}
 
 		status, err := r.calculateSyncStats(ctx, sync, managerPod)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
 		if !reflect.DeepEqual(sync.Status, status) {
 			sync.Status = status
-			return ctrl.Result{RequeueAfter: 3 * time.Second}, utils.IgnoreConflict(r.Status().Update(ctx, sync))
+			if err := utils.IgnoreConflict(r.Status().Update(ctx, sync)); err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+		if err != nil {
+			return ctrl.Result{}, err
 		}
 		return ctrl.Result{RequeueAfter: 3 * time.Second}, nil
 	}
@@ -208,22 +210,24 @@ func (r *SyncReconciler) calculateSyncStats(ctx context.Context, sync *juicefsio
 	l := log.FromContext(ctx)
 	status := sync.Status
 	if managerPod.Status.Phase == corev1.PodSucceeded || managerPod.Status.Phase == corev1.PodFailed {
-		finishLog, err := utils.LogPod(ctx, sync.Namespace, common.GenSyncManagerName(sync.Name), common.SyncNamePrefix, 5)
-		if err != nil {
-			l.Error(err, "failed to get manager pod last logs")
-			return status, err
-		}
-		if len(finishLog) > 0 {
-			status.FinishLog = finishLog
-		}
 		if managerPod.Status.Phase == corev1.PodFailed {
 			status.Phase = juicefsiov1.SyncPhaseFailed
 		} else {
 			status.Phase = juicefsiov1.SyncPhaseCompleted
 		}
 		status.CompletedAt = &metav1.Time{Time: time.Now()}
+		finishLog, err := utils.LogPod(ctx, sync.Namespace, common.GenSyncManagerName(sync.Name), common.SyncNamePrefix, 5)
+		if err != nil {
+			status.Reason = "failed to get manager pod last logs\nerror: " + err.Error()
+			l.Error(err, "failed to get manager pod last logs")
+			return status, err
+		}
+		if len(finishLog) > 0 {
+			status.FinishLog = finishLog
+		}
 		statsMap, err := utils.ParseLog(status.FinishLog)
 		if err != nil {
+			status.Reason = "failed to parse log\nerror: " + err.Error()
 			l.Error(err, "failed to parse log")
 		} else {
 			stats := juicefsiov1.SyncStats{}

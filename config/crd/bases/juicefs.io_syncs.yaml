@@ -1341,12 +1341,32 @@ spec:
                     default: 0
                     format: int64
                     type: integer
+                  checkedBytes:
+                    format: int64
+                    type: integer
                   copied:
                     default: 0
                     format: int64
                     type: integer
                   copiedBytes:
+                    format: int64
+                    type: integer
+                  deleted:
                     default: 0
+                    format: int64
+                    type: integer
+                  excludeBytes:
+                    format: int64
+                    type: integer
+                  excluded:
+                    default: 0
+                    format: int64
+                    type: integer
+                  extra:
+                    default: 0
+                    format: int64
+                    type: integer
+                  extraBytes:
                     format: int64
                     type: integer
                   failed:
@@ -1364,12 +1384,19 @@ spec:
                     default: 0
                     format: int64
                     type: integer
+                  pending:
+                    default: 0
+                    format: int64
+                    type: integer
                   scanned:
                     default: 0
                     format: int64
                     type: integer
                   skipped:
                     default: 0
+                    format: int64
+                    type: integer
+                  skippedBytes:
                     format: int64
                     type: integer
                 type: object

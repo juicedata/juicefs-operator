@@ -152,10 +152,20 @@ type SyncStats struct {
 	Lost int64 `json:"lost,omitempty"`
 	// +kubebuilder:default=0
 	Scanned int64 `json:"scanned,omitempty"`
-
 	// +kubebuilder:default=0
+	Pending int64 `json:"pending,omitempty"`
+	// +kubebuilder:default=0
+	Deleted int64 `json:"deleted,omitempty"`
+	// +kubebuilder:default=0
+	Extra int64 `json:"extra,omitempty"`
+	// +kubebuilder:default=0
+	Excluded int64 `json:"excluded,omitempty"`
 
-	CopiedBytes int64 `json:"copiedBytes,omitempty"`
+	CopiedBytes  int64 `json:"copiedBytes,omitempty"`
+	CheckedBytes int64 `json:"checkedBytes,omitempty"`
+	SkippedBytes int64 `json:"skippedBytes,omitempty"`
+	ExtraBytes   int64 `json:"extraBytes,omitempty"`
+	ExcludeBytes int64 `json:"excludeBytes,omitempty"`
 
 	LastUpdated *metav1.Time `json:"lastUpdated,omitempty"`
 }

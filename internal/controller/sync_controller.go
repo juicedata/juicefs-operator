@@ -231,26 +231,29 @@ func (r *SyncReconciler) calculateSyncStats(ctx context.Context, sync *juicefsio
 			l.Error(err, "failed to parse log")
 		} else {
 			stats := juicefsiov1.SyncStats{}
-			if handled, ok := statsMap["found"]; ok {
-				stats.Handled = handled
+			fieldMappings := []struct {
+				key    string
+				target *int64
+			}{
+				{"found", &stats.Handled},
+				{"copied", &stats.Copied},
+				{"copied_bytes", &stats.CopiedBytes},
+				{"failed", &stats.Failed},
+				{"skipped", &stats.Skipped},
+				{"skipped_bytes", &stats.SkippedBytes},
+				{"checked", &stats.Checked},
+				{"checked_bytes", &stats.CheckedBytes},
+				{"lost", &stats.Lost},
+				{"deleted", &stats.Deleted},
+				{"excluded", &stats.Excluded},
+				{"exclude_bytes", &stats.ExcludeBytes},
+				{"extra", &stats.Extra},
+				{"extra_bytes", &stats.ExtraBytes},
 			}
-			if copied, ok := statsMap["copied"]; ok {
-				stats.Copied = copied
-			}
-			if failed, ok := statsMap["failed"]; ok {
-				stats.Failed = failed
-			}
-			if skipped, ok := statsMap["skipped"]; ok {
-				stats.Skipped = skipped
-			}
-			if copiedBytes, ok := statsMap["copied_bytes"]; ok {
-				stats.CopiedBytes = copiedBytes
-			}
-			if checked, ok := statsMap["checked"]; ok {
-				stats.Checked = checked
-			}
-			if lost, ok := statsMap["lost"]; ok {
-				stats.Lost = lost
+			for _, mapping := range fieldMappings {
+				if value, ok := statsMap[mapping.key]; ok {
+					*mapping.target = value
+				}
 			}
 			if stats.Lost > 0 || stats.Failed > 0 {
 				status.Phase = juicefsiov1.SyncPhaseFailed
@@ -258,6 +261,7 @@ func (r *SyncReconciler) calculateSyncStats(ctx context.Context, sync *juicefsio
 			if stats.Handled > 0 {
 				status.Progress = fmt.Sprintf("%.2f%%", float64(stats.Handled-stats.Failed-stats.Lost)/float64(stats.Handled)*100)
 			}
+			stats.Pending = 0
 			status.Stats = stats
 		}
 		return status, nil
@@ -271,14 +275,22 @@ func (r *SyncReconciler) calculateSyncStats(ctx context.Context, sync *juicefsio
 			return status, nil
 		}
 		stats := juicefsiov1.SyncStats{
-			Handled:     int64(metrics["juicefs_sync_handled"]),
-			Copied:      int64(metrics["juicefs_sync_copied"]),
-			Failed:      int64(metrics["juicefs_sync_failed"]),
-			Skipped:     int64(metrics["juicefs_sync_skipped"]),
-			Checked:     int64(metrics["juicefs_sync_checked"]),
-			CopiedBytes: int64(metrics["juicefs_sync_copied_bytes"]),
-			Scanned:     int64(metrics["juicefs_sync_scanned"]),
-			LastUpdated: &metav1.Time{Time: time.Now()},
+			Handled:      int64(metrics["juicefs_sync_handled"]),
+			Copied:       int64(metrics["juicefs_sync_copied"]),
+			Failed:       int64(metrics["juicefs_sync_failed"]),
+			Skipped:      int64(metrics["juicefs_sync_skipped"]),
+			Checked:      int64(metrics["juicefs_sync_checked"]),
+			CopiedBytes:  int64(metrics["juicefs_sync_copied_bytes"]),
+			Scanned:      int64(metrics["juicefs_sync_scanned"]),
+			Pending:      int64(metrics["juicefs_sync_pending"]),
+			Deleted:      int64(metrics["juicefs_sync_deleted"]),
+			Extra:        int64(metrics["juicefs_sync_extra"]),
+			Excluded:     int64(metrics["juicefs_sync_excluded"]),
+			CheckedBytes: int64(metrics["juicefs_sync_checked_bytes"]),
+			SkippedBytes: int64(metrics["juicefs_sync_skipped_bytes"]),
+			ExtraBytes:   int64(metrics["juicefs_sync_extra_bytes"]),
+			ExcludeBytes: int64(metrics["juicefs_sync_exclude_bytes"]),
+			LastUpdated:  &metav1.Time{Time: time.Now()},
 		}
 		if stats.Scanned > 0 {
 			status.Progress = fmt.Sprintf("%.2f%%", float64(stats.Handled)/float64(stats.Scanned)*100)

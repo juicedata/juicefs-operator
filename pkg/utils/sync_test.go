@@ -382,3 +382,45 @@ func TestParseLog(t *testing.T) {
 		t.Fatal("ParseLog() should return error")
 	}
 }
+
+func TestCalculateProgress(t *testing.T) {
+	tests := []struct {
+		name string
+		a    int64
+		b    int64
+		want string
+	}{
+		{
+			name: "Zero denominator",
+			a:    1,
+			b:    0,
+			want: "0.00%",
+		},
+		{
+			name: "Zero numerator",
+			a:    0,
+			b:    100,
+			want: "0.00%",
+		},
+		{
+			name: "Half progress",
+			a:    3333,
+			b:    10000,
+			want: "33.33%",
+		},
+		{
+			name: "Large numbers",
+			a:    9811548006 - 1,
+			b:    9811548006,
+			want: "99.99%",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := CalculateProgress(tt.a, tt.b); got != tt.want {
+				t.Errorf("CalculateProgress() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

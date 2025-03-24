@@ -4262,6 +4262,8 @@ spec:
             - to
             type: object
           status:
+            default:
+              phase: Pending
             properties:
               completedAt:
                 format: date-time

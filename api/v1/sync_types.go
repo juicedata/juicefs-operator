@@ -198,7 +198,8 @@ type Sync struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   SyncSpec   `json:"spec,omitempty"`
+	Spec SyncSpec `json:"spec,omitempty"`
+	// +kubebuilder:default={phase: Pending}
 	Status SyncStatus `json:"status,omitempty"`
 }
 

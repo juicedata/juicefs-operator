@@ -358,3 +358,11 @@ func ParseLog(data string) (map[string]int64, error) {
 
 	return result, nil
 }
+
+func CalculateProgress(a, b int64) string {
+	if b == 0 {
+		return "0.00%"
+	}
+	progress := math.Trunc((float64(a)/float64(b))*10000) / 100
+	return fmt.Sprintf("%.2f%%", progress)
+}

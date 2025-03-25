@@ -349,6 +349,7 @@ func (r *SyncReconciler) prepareWorkerPod(ctx context.Context, sync *juicefsiov1
 		case <-ctx.Done():
 			return fmt.Errorf("timeout waiting for worker pod ready")
 		default:
+			pods = &corev1.PodList{}
 			err := r.List(ctx, pods, labelSelector)
 			if err != nil {
 				log.Error(err, "failed to list worker pods")

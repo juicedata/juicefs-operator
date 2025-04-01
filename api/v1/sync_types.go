@@ -70,6 +70,15 @@ type SyncSinkJuiceFS struct {
 	ConsoleUrl string `json:"consoleUrl,omitempty"`
 }
 
+type SyncSinkJuiceFSCE struct {
+	// +kubebuilder:validation:Required
+	MetaURL      string        `json:"metaURL"`
+	MetaPassWord SyncSinkValue `json:"metaPassWord,omitempty"`
+	// +optional
+	Path      string         `json:"path,omitempty"`
+	FilesFrom *SyncFilesFrom `json:"filesFrom,omitempty"`
+}
+
 type SyncSinkPVC struct {
 	// +kubebuilder:validation:Required
 	Name string `json:"name,omitempty"`
@@ -81,8 +90,11 @@ type SyncSink struct {
 	// Sync from external source
 	External *SyncSinkExternal `json:"external,omitempty"`
 
-	// Sync from JuiceFS
+	// Sync from JuiceFS enterprise edition
 	JuiceFS *SyncSinkJuiceFS `json:"juicefs,omitempty"`
+
+	// Sync from JuiceFS community edition
+	JuiceFSCE *SyncSinkJuiceFSCE `json:"juicefsCE,omitempty"`
 
 	// Sync from PVC
 	PVC *SyncSinkPVC `json:"pvc,omitempty"`

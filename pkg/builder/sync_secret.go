@@ -60,6 +60,17 @@ func genExternalSecretData(external *juicefsiov1.SyncSinkExternal, suffix string
 	return data
 }
 
+func genJuiceFSCESecretData(juicefsCE *juicefsiov1.SyncSinkJuiceFSCE, suffix string) map[string]string {
+	if juicefsCE == nil {
+		return nil
+	}
+	data := make(map[string]string)
+	if juicefsCE.MetaPassWord.Value != "" {
+		data[fmt.Sprintf("%s_META_PASSWORD", suffix)] = juicefsCE.MetaPassWord.Value
+	}
+	return data
+}
+
 func NewSyncSecret(ctx context.Context, sync *juicefsiov1.Sync) (*corev1.Secret, error) {
 	secretName := common.GenSyncSecretName(sync.Name)
 	data := make(map[string]string)
@@ -76,6 +87,8 @@ func NewSyncSecret(ctx context.Context, sync *juicefsiov1.Sync) (*corev1.Secret,
 	maps.Copy(data, genJuiceFSSecretData(sync.Spec.To.JuiceFS, "JUICEFS_TO"))
 	maps.Copy(data, genExternalSecretData(sync.Spec.From.External, "EXTERNAL_FROM"))
 	maps.Copy(data, genExternalSecretData(sync.Spec.To.External, "EXTERNAL_TO"))
+	maps.Copy(data, genJuiceFSCESecretData(sync.Spec.To.JuiceFSCE, "JUICEFS_CE_TO"))
+	maps.Copy(data, genJuiceFSCESecretData(sync.Spec.From.JuiceFSCE, "JUICEFS_CE_FROM"))
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      secretName,

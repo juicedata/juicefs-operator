@@ -101,6 +101,37 @@ func TestParseSyncSink(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name: "juicefs ce sink",
+			sink: juicefsiov1.SyncSink{
+				JuiceFSCE: &juicefsiov1.SyncSinkJuiceFSCE{
+					MetaURL: "redis://127.0.0.1:6379",
+					MetaPassWord: juicefsiov1.SyncSinkValue{
+						Value: "password",
+					},
+				},
+			},
+			syncName: "sync1",
+			ref:      "FROM",
+			want: &juicefsiov1.ParsedSyncSink{
+				Uri: "jfs://JUICEFS_CE_FROM",
+				Envs: []corev1.EnvVar{
+					{
+						Name: "JUICEFS_CE_FROM_META_PASSWORD",
+						ValueFrom: &corev1.EnvVarSource{
+							SecretKeyRef: &corev1.SecretKeySelector{
+								LocalObjectReference: corev1.LocalObjectReference{
+									Name: common.GenSyncSecretName("sync1"),
+								},
+								Key: "JUICEFS_CE_FROM_META_PASSWORD",
+							},
+						},
+					},
+				},
+				PrepareCommand: "export JUICEFS_CE_FROM=redis://:$JUICEFS_CE_FROM_META_PASSWORD@127.0.0.1:6379",
+			},
+			wantErr: false,
+		},
+		{
 			name: "JuiceFS sink",
 			sink: juicefsiov1.SyncSink{
 				JuiceFS: &juicefsiov1.SyncSinkJuiceFS{

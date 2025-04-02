@@ -40,6 +40,10 @@ spec:
     #     configmap:
     #       name: sync-test-configmap
     #       key: files
+    # juicefsCE:
+    #   metaurl: redis://127.0.0.1:6379/0
+    #   metaPassword:
+    #     value: password
   to:
     juicefs:
       path: /sync-test/demo2/

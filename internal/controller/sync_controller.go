@@ -74,6 +74,14 @@ func (r *SyncReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		return ctrl.Result{}, nil
 	}
 
+	if (sync.Spec.From.JuiceFS != nil && sync.Spec.To.JuiceFSCE != nil) ||
+		(sync.Spec.To.JuiceFS != nil && sync.Spec.From.JuiceFSCE != nil) {
+		err := fmt.Errorf("%s", "Sync between the ce version and the ee version sync is not supported yet")
+		sync.Status.Phase = juicefsiov1.SyncPhaseFailed
+		sync.Status.Reason = err.Error()
+		return ctrl.Result{}, r.Status().Update(ctx, sync)
+	}
+
 	from, err := utils.ParseSyncSink(sync.Spec.From, sync.Name, "FROM")
 	if err != nil {
 		l.Error(err, "failed to parse from sink")

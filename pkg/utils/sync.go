@@ -164,6 +164,33 @@ func parseJuiceFSSyncSink(jfs *juicefsiov1.SyncSinkJuiceFS, syncName, ref string
 	return pss, nil
 }
 
+func parseJuiceFSCeSyncSink(jfs *juicefsiov1.SyncSinkJuiceFSCE, syncName, ref string) (*juicefsiov1.ParsedSyncSink, error) {
+	pss := &juicefsiov1.ParsedSyncSink{}
+	var err error
+	metaUrl, err := url.Parse(jfs.MetaURL)
+	volName := "JUICEFS_CE_" + strings.ToUpper(ref)
+	if err != nil {
+		return nil, err
+	}
+	if jfs.MetaPassWord.Value != "" || jfs.MetaPassWord.ValueFrom != nil {
+		username := ""
+		if metaUrl.User != nil {
+			username = metaUrl.User.Username()
+		}
+		password := fmt.Sprintf("JUICEFS_CE_%s_%s", strings.ToUpper(ref), "META_PASSWORD")
+		metaUrl.User = url.UserPassword(username, fmt.Sprintf("$%s", password))
+		pss.Envs = append(pss.Envs, parseSinkValueToEnv(jfs.MetaPassWord, syncName, password)...)
+	}
+	pss.PrepareCommand += fmt.Sprintf("export %s=%s", volName, metaUrl.String())
+	pss.FilesFrom = jfs.FilesFrom
+	pss.Uri, err = url.JoinPath("jfs://", volName, jfs.Path)
+
+	if err != nil {
+		return nil, err
+	}
+	return pss, nil
+}
+
 func ParseSyncSink(sink juicefsiov1.SyncSink, syncName, ref string) (*juicefsiov1.ParsedSyncSink, error) {
 	var pss *juicefsiov1.ParsedSyncSink
 	var err error
@@ -172,6 +199,9 @@ func ParseSyncSink(sink juicefsiov1.SyncSink, syncName, ref string) (*juicefsiov
 	}
 	if sink.JuiceFS != nil {
 		pss, err = parseJuiceFSSyncSink(sink.JuiceFS, syncName, ref)
+	}
+	if sink.JuiceFSCE != nil {
+		pss, err = parseJuiceFSCeSyncSink(sink.JuiceFSCE, syncName, ref)
 	}
 	if err != nil {
 		return nil, err

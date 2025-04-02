@@ -180,8 +180,8 @@ func parseJuiceFSCeSyncSink(jfs *juicefsiov1.SyncSinkJuiceFSCE, syncName, ref st
 		password := fmt.Sprintf("JUICEFS_CE_%s_%s", strings.ToUpper(ref), "META_PASSWORD")
 		metaUrl.User = url.UserPassword(username, fmt.Sprintf("$%s", password))
 		pss.Envs = append(pss.Envs, parseSinkValueToEnv(jfs.MetaPassWord, syncName, password)...)
-		pss.PrepareCommand += fmt.Sprintf("export %s=%s", volName, metaUrl.String())
 	}
+	pss.PrepareCommand += fmt.Sprintf("export %s=%s", volName, metaUrl.String())
 	pss.FilesFrom = jfs.FilesFrom
 	pss.Uri, err = url.JoinPath("jfs://", volName, jfs.Path)
 

@@ -29,6 +29,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"golang.org/x/crypto/ssh"
 
@@ -395,4 +396,8 @@ func CalculateProgress(a, b int64) string {
 	}
 	progress := math.Trunc((float64(a)/float64(b))*10000) / 100
 	return fmt.Sprintf("%.2f%%", progress)
+}
+
+func GenCronSyncJobName(cronName string, now time.Time) string {
+	return fmt.Sprintf("%s-%s", cronName, now.Format("20060102150405"))
 }

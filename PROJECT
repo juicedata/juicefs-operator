@@ -33,4 +33,12 @@ resources:
   kind: Sync
   path: github.com/juicedata/juicefs-operator/api/v1
   version: v1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: juicefs.io
+  kind: CronSync
+  path: github.com/juicedata/juicefs-operator/api/v1
+  version: v1
 version: "3"

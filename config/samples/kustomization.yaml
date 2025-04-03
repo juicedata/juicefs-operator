@@ -3,4 +3,5 @@ resources:
 - v1_cachegroup.yaml
 - juicefs.io_v1_warmup.yaml
 - v1_sync.yaml
+- v1_cronsync.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples

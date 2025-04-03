@@ -60,6 +60,7 @@ const (
 	LabelSync               = "juicefs.io/sync"
 	LabelSyncWorkerValue    = "juicefs-sync-worker"
 	LabelSyncManagerValue   = "juicefs-sync-manager"
+	LabelCronSync           = "juicefs.io/cron-sync"
 
 	AnnoBackupWorker        = "juicefs.io/backup-worker"
 	AnnoWaitingDeleteWorker = "juicefs.io/waiting-delete-worker"

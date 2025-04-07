@@ -343,7 +343,7 @@ func (p *PodBuilder) NewCacheGroupWorker(ctx context.Context) *corev1.Pod {
 	if spec.ImagePullSecrets != nil {
 		worker.Spec.ImagePullSecrets = spec.ImagePullSecrets
 	} else {
-		if common.OperatorPod != nil {
+		if common.OperatorPod != nil && common.OperatorPod.Namespace == worker.Namespace {
 			worker.Spec.ImagePullSecrets = common.OperatorPod.Spec.ImagePullSecrets
 		}
 	}

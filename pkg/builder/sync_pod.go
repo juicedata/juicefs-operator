@@ -165,7 +165,7 @@ done
 	if s.sc.Spec.ImagePullSecrets != nil {
 		pod.Spec.ImagePullSecrets = s.sc.Spec.ImagePullSecrets
 	} else {
-		if common.OperatorPod != nil {
+		if common.OperatorPod != nil && common.OperatorPod.Namespace == pod.Namespace {
 			pod.Spec.ImagePullSecrets = common.OperatorPod.Spec.ImagePullSecrets
 		}
 	}

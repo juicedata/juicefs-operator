@@ -17,12 +17,15 @@
 package app
 
 import (
+	"os"
+
 	"github.com/spf13/cobra"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 
 	juicefsiov1 "github.com/juicedata/juicefs-operator/api/v1"
+	"github.com/juicedata/juicefs-operator/pkg/common"
 )
 
 var (
@@ -42,6 +45,13 @@ var RootCmd = &cobra.Command{
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(juicefsiov1.AddToScheme(scheme))
+
+	if os.Getenv("OPERATOR_POD_NAME") != "" {
+		common.OperatorPodName = os.Getenv("OPERATOR_POD_NAME")
+	}
+	if os.Getenv("OPERATOR_POD_NAMESPACE") != "" {
+		common.OperatorPodNamespace = os.Getenv("OPERATOR_POD_NAMESPACE")
+	}
 
 	// +kubebuilder:scaffold:scheme
 	RootCmd.PersistentFlags().StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")

@@ -149,8 +149,9 @@ done
 			TerminationGracePeriodSeconds: utils.ToPtr(int64(0)),
 			Containers: []corev1.Container{
 				{
-					Name:  common.SyncNamePrefix,
-					Image: s.sc.Spec.Image,
+					Name:            common.SyncNamePrefix,
+					Image:           s.sc.Spec.Image,
+					ImagePullPolicy: s.sc.Spec.ImagePullPolicy,
 					Command: []string{
 						"sh",
 						"-c",
@@ -159,6 +160,14 @@ done
 				},
 			},
 		},
+	}
+
+	if s.sc.Spec.ImagePullSecrets != nil {
+		pod.Spec.ImagePullSecrets = s.sc.Spec.ImagePullSecrets
+	} else {
+		if common.OperatorPod != nil && common.OperatorPod.Namespace == pod.Namespace {
+			pod.Spec.ImagePullSecrets = common.OperatorPod.Spec.ImagePullSecrets
+		}
 	}
 
 	if pod.Spec.Affinity == nil {

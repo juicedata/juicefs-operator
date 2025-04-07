@@ -17,9 +17,13 @@
 package app
 
 import (
+	"context"
 	"crypto/tls"
+	"os"
 
 	"github.com/juicedata/juicefs-operator/pkg/common"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
@@ -105,6 +109,29 @@ func NewManager() (ctrl.Manager, error) {
 		setupLog.Error(err, "unable to set up ready check")
 		return nil, err
 	}
+
+	go func() {
+		// Ensure the cache is started before accessing it
+		if err := mgr.GetCache().WaitForCacheSync(context.Background()); !err {
+			setupLog.Error(nil, "cache not started")
+			os.Exit(1)
+		}
+		if common.OperatorPodName != "" && common.OperatorPodNamespace != "" {
+			pod := &corev1.Pod{}
+			if err := mgr.GetClient().Get(
+				context.Background(),
+				types.NamespacedName{
+					Name:      common.OperatorPodName,
+					Namespace: common.OperatorPodNamespace,
+				},
+				pod,
+			); err != nil {
+				setupLog.Error(err, "unable to get operator pod")
+			} else {
+				common.OperatorPod = pod
+			}
+		}
+	}()
 
 	return mgr, nil
 }

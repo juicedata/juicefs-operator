@@ -955,6 +955,17 @@ spec:
                 type: object
               image:
                 type: string
+              imagePullPolicy:
+                type: string
+              imagePullSecrets:
+                items:
+                  properties:
+                    name:
+                      default: ""
+                      type: string
+                  type: object
+                  x-kubernetes-map-type: atomic
+                type: array
               labels:
                 additionalProperties:
                   type: string

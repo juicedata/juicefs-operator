@@ -62,7 +62,6 @@ func run() {
 		setupLog.Error(err, "unable to create manager")
 		os.Exit(1)
 	}
-
 	if err := (&controller.CacheGroupReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),

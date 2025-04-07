@@ -173,6 +173,17 @@ spec:
                           type: boolean
                         image:
                           type: string
+                        imagePullPolicy:
+                          type: string
+                        imagePullSecrets:
+                          items:
+                            properties:
+                              name:
+                                default: ""
+                                type: string
+                            type: object
+                            x-kubernetes-map-type: atomic
+                          type: array
                         lifecycle:
                           properties:
                             postStart:
@@ -1581,6 +1592,17 @@ spec:
                         type: boolean
                       image:
                         type: string
+                      imagePullPolicy:
+                        type: string
+                      imagePullSecrets:
+                        items:
+                          properties:
+                            name:
+                              default: ""
+                              type: string
+                          type: object
+                          x-kubernetes-map-type: atomic
+                        type: array
                       lifecycle:
                         properties:
                           postStart:

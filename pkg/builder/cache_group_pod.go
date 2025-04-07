@@ -340,11 +340,19 @@ func (p *PodBuilder) NewCacheGroupWorker(ctx context.Context) *corev1.Pod {
 	if spec.DNSPolicy != nil {
 		worker.Spec.DNSPolicy = *spec.DNSPolicy
 	}
+	if spec.ImagePullSecrets != nil {
+		worker.Spec.ImagePullSecrets = spec.ImagePullSecrets
+	} else {
+		if common.OperatorPod != nil {
+			worker.Spec.ImagePullSecrets = common.OperatorPod.Spec.ImagePullSecrets
+		}
+	}
 	worker.Spec.Tolerations = spec.Tolerations
 	worker.Spec.SchedulerName = spec.SchedulerName
 	worker.Spec.ServiceAccountName = spec.ServiceAccountName
 	worker.Spec.Volumes = spec.Volumes
 	worker.Spec.Containers[0].Image = spec.Image
+	worker.Spec.Containers[0].ImagePullPolicy = spec.ImagePullPolicy
 	worker.Spec.Containers[0].Name = common.WorkerContainerName
 	worker.Spec.Containers[0].LivenessProbe = spec.LivenessProbe
 	worker.Spec.Containers[0].ReadinessProbe = spec.ReadinessProbe

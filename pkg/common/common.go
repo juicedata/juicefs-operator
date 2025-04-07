@@ -95,6 +95,10 @@ var (
 
 	K8sClientQPS   float32 = 30
 	K8sClientBurst int     = 20
+
+	OperatorPod          *corev1.Pod
+	OperatorPodName      = ""
+	OperatorPodNamespace = ""
 )
 
 func GenWorkerName(cgName string, nodeName string) string {

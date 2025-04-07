@@ -47,11 +47,13 @@ func (j *JobBuilder) NewWarmUpJob() *batchv1.Job {
 	job.Spec.Template.Spec.RestartPolicy = corev1.RestartPolicyNever
 	job.Spec.Template.Spec.Tolerations = j.wu.Spec.Tolerations
 	job.Spec.Template.Spec.NodeSelector = j.wu.Spec.NodeSelector
+	job.Spec.Template.Spec.ImagePullSecrets = j.worker.Spec.ImagePullSecrets
 	job.Spec.Template.Spec.Containers = []corev1.Container{{
-		Name:    common.WarmUpContainerName,
-		Image:   j.worker.Spec.Containers[0].Image,
-		Command: j.getWarmUpCommand(),
-		Env:     j.worker.Spec.Containers[0].Env,
+		Name:            common.WarmUpContainerName,
+		Image:           j.worker.Spec.Containers[0].Image,
+		ImagePullPolicy: j.worker.Spec.Containers[0].ImagePullPolicy,
+		Command:         j.getWarmUpCommand(),
+		Env:             j.worker.Spec.Containers[0].Env,
 		SecurityContext: &corev1.SecurityContext{
 			Privileged: utils.ToPtr(true),
 		},

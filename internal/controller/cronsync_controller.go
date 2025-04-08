@@ -44,6 +44,7 @@ type CronSyncReconciler struct {
 // +kubebuilder:rbac:groups=juicefs.io,resources=cronsyncs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=juicefs.io,resources=cronsyncs/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=juicefs.io,resources=cronsyncs/finalizers,verbs=update
+// +kubebuilder:rbac:groups=juicefs.io,resources=syncs,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -178,7 +179,7 @@ func (r *CronSyncReconciler) SyncHistory(ctx context.Context, cronSync *juicefsi
 			return nil
 		}
 		sort.Slice(jobs, func(i, j int) bool {
-			return jobs[i].Status.CompletedAt.Time.Before(jobs[j].Status.CompletedAt.Time)
+			return jobs[i].CreationTimestamp.Time.Before(jobs[j].CreationTimestamp.Time)
 		})
 		for _, job := range jobs[:len(jobs)-limit] {
 			log.V(1).Info("Deleting old sync job", "job", job.Name)

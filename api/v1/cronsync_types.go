@@ -17,7 +17,6 @@ limitations under the License.
 package v1
 
 import (
-	batchv1 "k8s.io/api/batch/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -50,11 +49,11 @@ type CronSyncSpec struct {
 	// +kubebuilder:default=1
 	FailedJobsHistoryLimit *int32 `json:"failedJobsHistoryLimit,omitempty"`
 
-	// Specifies how to treat concurrent executions of a Job.
-	// +optional
-	// +kubebuilder:default=Forbid
-	// +kubebuilder:validation:Enum=Allow;Forbid;Replace
-	ConcurrencyPolicy batchv1.ConcurrencyPolicy `json:"concurrencyPolicy,omitempty"`
+	// // Specifies how to treat concurrent executions of a Job.
+	// // +optional
+	// // +kubebuilder:default=Forbid
+	// // +kubebuilder:validation:Enum=Allow;Forbid;Replace
+	// ConcurrencyPolicy batchv1.ConcurrencyPolicy `json:"concurrencyPolicy,omitempty"`
 
 	// SyncSpec defines the sync configuration.
 	SyncSpec SyncSpec `json:"syncSpec,omitempty"`

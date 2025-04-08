@@ -36,13 +36,6 @@ spec:
             type: object
           spec:
             properties:
-              concurrencyPolicy:
-                default: Forbid
-                enum:
-                - Allow
-                - Forbid
-                - Replace
-                type: string
               failedJobsHistoryLimit:
                 default: 1
                 format: int32

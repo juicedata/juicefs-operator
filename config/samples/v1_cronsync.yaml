@@ -6,4 +6,9 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: cronsync-sample
 spec:
-  # TODO(user): Add fields here
+  suspend: false
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  schedule: "*/5 * * * *"
+  syncSpec:
+    ... # This is a placeholder for the actual syncSpec configuration.

@@ -27,6 +27,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
+	"maps"
+
 	juicefsiov1 "github.com/juicedata/juicefs-operator/api/v1"
 	"github.com/juicedata/juicefs-operator/pkg/common"
 	"github.com/juicedata/juicefs-operator/pkg/utils"
@@ -95,18 +97,17 @@ func (r *CronSyncReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	}
 
 	lastScheduledTime := cronSync.Status.LastScheduleTime.Time
-
 	// if this call is caused by an update (next schedule is earlier than now), ignore
 	if cronSchedule.Next(lastScheduledTime).After(now) {
 		log.V(1).Info("Scheduled next reconcile", "at", nextScheduleTime.Format(time.RFC3339))
-		return ctrl.Result{RequeueAfter: duration}, nil
+		return ctrl.Result{RequeueAfter: duration}, r.Status().Update(ctx, &cronSync)
 	}
 
 	syncJob := newSyncJob(&cronSync, now)
 	log.Info("Triggering sync job", "job", syncJob)
 	if err := r.Create(ctx, syncJob); err != nil {
 		log.Error(err, "unable to create sync job", "job", syncJob)
-		return ctrl.Result{}, err
+		return ctrl.Result{}, r.Status().Update(ctx, &cronSync)
 	}
 	log.Info("Sync job created", "job", syncJob.Name)
 
@@ -123,10 +124,12 @@ func (r *CronSyncReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 }
 
 func newSyncJob(cronSync *juicefsiov1.CronSync, now time.Time) *juicefsiov1.Sync {
-	return &juicefsiov1.Sync{
+	job := &juicefsiov1.Sync{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      utils.GenCronSyncJobName(cronSync.Name, now),
-			Namespace: cronSync.Namespace,
+			Name:        utils.GenCronSyncJobName(cronSync.Name, now),
+			Namespace:   cronSync.Namespace,
+			Annotations: map[string]string{},
+			Labels:      map[string]string{},
 			OwnerReferences: []metav1.OwnerReference{
 				{
 					APIVersion:         cronSync.APIVersion,
@@ -137,12 +140,13 @@ func newSyncJob(cronSync *juicefsiov1.CronSync, now time.Time) *juicefsiov1.Sync
 					BlockOwnerDeletion: lo.ToPtr(true),
 				},
 			},
-			Labels: map[string]string{
-				common.LabelCronSync: cronSync.Name,
-			},
 		},
-		Spec: cronSync.Spec.SyncSpec,
+		Spec: cronSync.Spec.SyncTemplate.Spec,
 	}
+	maps.Copy(job.Labels, cronSync.Spec.SyncTemplate.Labels)
+	maps.Copy(job.Annotations, cronSync.Spec.SyncTemplate.Annotations)
+	job.Labels[common.LabelCronSync] = cronSync.Name
+	return job
 }
 
 func (r *CronSyncReconciler) ListCronSyncJobs(ctx context.Context, cronSync *juicefsiov1.CronSync) ([]juicefsiov1.Sync, error) {
@@ -165,14 +169,20 @@ func (r *CronSyncReconciler) SyncHistory(ctx context.Context, cronSync *juicefsi
 		return err
 	}
 
-	// Delete old sync jobs
 	phaseJobMap := lo.GroupBy(syncJobs, func(syncJob juicefsiov1.Sync) string {
-		if syncJob.Status.Phase == "" || syncJob.Status.Phase == juicefsiov1.SyncPhasePreparing || syncJob.Status.Phase == juicefsiov1.SyncPhaseProgressing {
-			return "running"
-		}
 		return string(syncJob.Status.Phase)
 	})
 
+	// Update LastSuccessfulTime if there are completed jobs
+	if len(phaseJobMap[string(juicefsiov1.SyncPhaseCompleted)]) > 0 {
+		completedJobs := phaseJobMap[string(juicefsiov1.SyncPhaseCompleted)]
+		sort.Slice(completedJobs, func(i, j int) bool {
+			return completedJobs[i].Status.CompletedAt.Time.After(completedJobs[j].Status.CompletedAt.Time)
+		})
+		cronSync.Status.LastSuccessfulTime = &metav1.Time{Time: completedJobs[0].Status.CompletedAt.Time}
+	}
+
+	// Delete old sync jobs
 	checkAndDelete := func(phase string, limit int) error {
 		jobs := phaseJobMap[phase]
 		if len(jobs) < limit {

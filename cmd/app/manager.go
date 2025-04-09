@@ -24,6 +24,7 @@ import (
 	"github.com/juicedata/juicefs-operator/pkg/common"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
@@ -77,6 +78,8 @@ func NewManager() (ctrl.Manager, error) {
 	cfg := ctrl.GetConfigOrDie()
 	cfg.QPS = common.K8sClientQPS
 	cfg.Burst = common.K8sClientBurst
+	// ref: https://github.com/kubernetes-sigs/controller-runtime/issues/2956
+	cfg.WarningHandler = rest.NoWarnings{}
 	mgr, err := ctrl.NewManager(cfg, ctrl.Options{
 		Scheme:                 scheme,
 		Metrics:                metricsServerOptions,

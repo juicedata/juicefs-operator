@@ -23,6 +23,17 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
+// SyncTemplateSpec describes the template for a Sync object.
+type SyncTemplateSpec struct {
+	// Standard object's metadata of the sync created from this template.
+	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+	// +optional
+	metav1.ObjectMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
+
+	// Spec defines the desired state of the Sync object.
+	Spec SyncSpec `json:"spec,omitempty"`
+}
+
 // CronSyncSpec defines the desired state of CronSync.
 type CronSyncSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
@@ -41,12 +52,14 @@ type CronSyncSpec struct {
 	// Defaults to 3.
 	// +optional
 	// +kubebuilder:default=3
+	// +kubebuilder:validation:Minimum=0
 	SuccessfulJobsHistoryLimit *int32 `json:"successfulJobsHistoryLimit,omitempty"`
 
 	// The number of failed finished jobs to retain. Value must be non-negative integer.
 	// Defaults to 1.
 	// +optional
 	// +kubebuilder:default=1
+	// +kubebuilder:validation:Minimum=0
 	FailedJobsHistoryLimit *int32 `json:"failedJobsHistoryLimit,omitempty"`
 
 	// // Specifies how to treat concurrent executions of a Job.
@@ -56,15 +69,17 @@ type CronSyncSpec struct {
 	// ConcurrencyPolicy batchv1.ConcurrencyPolicy `json:"concurrencyPolicy,omitempty"`
 
 	// SyncSpec defines the sync configuration.
-	SyncSpec SyncSpec `json:"syncSpec,omitempty"`
+	// +kubebuilder:validation:Required
+	SyncTemplate SyncTemplateSpec `json:"syncTemplate,omitempty"`
 }
 
 // CronSyncStatus defines the observed state of CronSync.
 type CronSyncStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
-	LastScheduleTime *metav1.Time `json:"lastScheduleTime,omitempty"`
-	NextScheduleTime *metav1.Time `json:"nextScheduleTime,omitempty"`
+	LastScheduleTime   *metav1.Time `json:"lastScheduleTime,omitempty"`
+	NextScheduleTime   *metav1.Time `json:"nextScheduleTime,omitempty"`
+	LastSuccessfulTime *metav1.Time `json:"lastSuccessfulTime,omitempty"`
 }
 
 // +kubebuilder:object:root=true

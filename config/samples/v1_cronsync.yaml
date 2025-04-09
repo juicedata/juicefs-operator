@@ -10,5 +10,9 @@ spec:
   successfulJobsHistoryLimit: 3
   failedJobsHistoryLimit: 1
   schedule: "*/5 * * * *"
-  syncSpec:
-    ... # This is a placeholder for the actual syncSpec configuration.
+  syncTemplate:
+    metadata:
+      labels:
+        test: test
+    spec:
+      ... # This is a placeholder for the actual syncSpec configuration.

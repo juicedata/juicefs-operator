@@ -1,0 +1,18 @@
+apiVersion: juicefs.io/v1
+kind: CronSync
+metadata:
+  labels:
+    app.kubernetes.io/name: juicefs-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: cronsync-sample
+spec:
+  suspend: false
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  schedule: "*/5 * * * *"
+  syncTemplate:
+    metadata:
+      labels:
+        test: test
+    spec:
+      ... # This is a placeholder for the actual syncSpec configuration.

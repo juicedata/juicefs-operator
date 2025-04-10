@@ -31,6 +31,9 @@ resources:
 # default, aiding admins in cluster management. Those roles are
 # not used by the {{ .ProjectName }} itself. You can comment the following lines
 # if you do not want those helpers be installed with your Project.
+- cronsync_admin_role.yaml
+- cronsync_editor_role.yaml
+- cronsync_viewer_role.yaml
 - sync_admin_role.yaml
 - sync_editor_role.yaml
 - sync_viewer_role.yaml

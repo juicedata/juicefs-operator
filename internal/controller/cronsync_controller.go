@@ -34,6 +34,7 @@ import (
 	"github.com/juicedata/juicefs-operator/pkg/utils"
 	"github.com/robfig/cron/v3"
 	"github.com/samber/lo"
+	batchv1 "k8s.io/api/batch/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -91,7 +92,13 @@ func (r *CronSyncReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		}
 	}
 
-	if err := r.SyncHistory(ctx, &cronSync); err != nil {
+	historyJobs, err := r.ListCronSyncJobs(ctx, &cronSync)
+	if err != nil {
+		log.Error(err, "unable to list sync jobs")
+		return ctrl.Result{}, err
+	}
+
+	if err := r.SyncHistory(ctx, &cronSync, historyJobs); err != nil {
 		log.Error(err, "unable to sync history")
 		return ctrl.Result{}, err
 	}
@@ -101,6 +108,32 @@ func (r *CronSyncReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	if cronSchedule.Next(lastScheduledTime).After(now) {
 		log.V(1).Info("Scheduled next reconcile", "at", nextScheduleTime.Format(time.RFC3339))
 		return ctrl.Result{RequeueAfter: duration}, r.Status().Update(ctx, &cronSync)
+	}
+
+	runningJobs := lo.Filter(historyJobs, func(job juicefsiov1.Sync, _ int) bool {
+		return job.Status.Phase == juicefsiov1.SyncPhasePending ||
+			job.Status.Phase == juicefsiov1.SyncPhasePreparing ||
+			job.Status.Phase == juicefsiov1.SyncPhaseProgressing
+	})
+
+	switch cronSync.Spec.ConcurrencyPolicy {
+	case batchv1.AllowConcurrent:
+	// do nothing
+	case batchv1.ForbidConcurrent:
+		if len(runningJobs) > 0 {
+			log.V(1).Info("CronSync is running, skipping reconciliation")
+			return ctrl.Result{}, nil
+		}
+	case batchv1.ReplaceConcurrent:
+		if len(runningJobs) > 0 {
+			for _, job := range runningJobs {
+				log.V(1).Info("Deleting old sync job", "job", job.Name)
+				if err := r.Delete(ctx, &job); err != nil {
+					log.Error(err, "unable to delete old sync job", "job", job.Name)
+					return ctrl.Result{}, err
+				}
+			}
+		}
 	}
 
 	syncJob := newSyncJob(&cronSync, now)
@@ -160,15 +193,8 @@ func (r *CronSyncReconciler) ListCronSyncJobs(ctx context.Context, cronSync *jui
 	return syncList.Items, nil
 }
 
-func (r *CronSyncReconciler) SyncHistory(ctx context.Context, cronSync *juicefsiov1.CronSync) error {
+func (r *CronSyncReconciler) SyncHistory(ctx context.Context, cronSync *juicefsiov1.CronSync, syncJobs []juicefsiov1.Sync) error {
 	log := log.FromContext(ctx)
-	// List all sync jobs
-	syncJobs, err := r.ListCronSyncJobs(ctx, cronSync)
-	if err != nil {
-		log.Error(err, "unable to list sync jobs")
-		return err
-	}
-
 	phaseJobMap := lo.GroupBy(syncJobs, func(syncJob juicefsiov1.Sync) string {
 		return string(syncJob.Status.Phase)
 	})

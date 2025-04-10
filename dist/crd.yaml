@@ -923,6 +923,23 @@ spec:
                                   volumeClaimTemplate:
                                     properties:
                                       metadata:
+                                        properties:
+                                          annotations:
+                                            additionalProperties:
+                                              type: string
+                                            type: object
+                                          finalizers:
+                                            items:
+                                              type: string
+                                            type: array
+                                          labels:
+                                            additionalProperties:
+                                              type: string
+                                            type: object
+                                          name:
+                                            type: string
+                                          namespace:
+                                            type: string
                                         type: object
                                       spec:
                                         properties:
@@ -2338,6 +2355,23 @@ spec:
                                 volumeClaimTemplate:
                                   properties:
                                     metadata:
+                                      properties:
+                                        annotations:
+                                          additionalProperties:
+                                            type: string
+                                          type: object
+                                        finalizers:
+                                          items:
+                                            type: string
+                                          type: array
+                                        labels:
+                                          additionalProperties:
+                                            type: string
+                                          type: object
+                                        name:
+                                          type: string
+                                        namespace:
+                                          type: string
                                       type: object
                                     spec:
                                       properties:
@@ -3001,6 +3035,13 @@ spec:
             type: object
           spec:
             properties:
+              concurrencyPolicy:
+                default: Allow
+                enum:
+                - Allow
+                - Forbid
+                - Replace
+                type: string
               failedJobsHistoryLimit:
                 default: 1
                 format: int32
@@ -3018,6 +3059,23 @@ spec:
               syncTemplate:
                 properties:
                   metadata:
+                    properties:
+                      annotations:
+                        additionalProperties:
+                          type: string
+                        type: object
+                      finalizers:
+                        items:
+                          type: string
+                        type: array
+                      labels:
+                        additionalProperties:
+                          type: string
+                        type: object
+                      name:
+                        type: string
+                      namespace:
+                        type: string
                     type: object
                   spec:
                     properties:

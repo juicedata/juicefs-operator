@@ -247,20 +247,29 @@ func IsDistributed(sync *juicefsiov1.Sync) bool {
 	return sync.Spec.Replicas != nil && *sync.Spec.Replicas > 1
 }
 
-func FetchMetrics(ctx context.Context, sync *juicefsiov1.Sync) (map[string]float64, error) {
-	// parse metrics options
+func GetMetricsPortWithOptions(opts []string) int32 {
 	port := 9567
-	for _, opt := range sync.Spec.Options {
+	for _, opt := range opts {
 		if strings.Contains(opt, "metrics") {
 			parts := strings.SplitN(opt, "=", 2)
 			if len(parts) == 2 {
 				metrics := strings.Split(parts[1], ":")
 				if len(metrics) == 2 {
 					port, _ = strconv.Atoi(metrics[1])
+					if port == 0 {
+						port = 9567
+					}
+					break
 				}
 			}
 		}
 	}
+	return int32(port)
+}
+
+func FetchMetrics(ctx context.Context, sync *juicefsiov1.Sync) (map[string]float64, error) {
+	// parse metrics options
+	port := GetMetricsPortWithOptions(sync.Spec.Options)
 	stdout, stderr, err := ExecInPod(ctx,
 		sync.Namespace,
 		common.GenSyncManagerName(sync.Name),

@@ -455,3 +455,49 @@ func TestCalculateProgress(t *testing.T) {
 		})
 	}
 }
+func TestGetMetricsPortWithOptions(t *testing.T) {
+	tests := []struct {
+		name string
+		opts []string
+		want int32
+	}{
+		{
+			name: "Default port when no metrics option",
+			opts: []string{"option1=value1", "option2=value2"},
+			want: 9567,
+		},
+		{
+			name: "Custom port from metrics option",
+			opts: []string{"option1=value1", "metrics=localhost:12345"},
+			want: 12345,
+		},
+		{
+			name: "Invalid metrics option format",
+			opts: []string{"metrics=localhost"},
+			want: 9567,
+		},
+		{
+			name: "Empty options",
+			opts: []string{},
+			want: 9567,
+		},
+		{
+			name: "Multiple metrics options, use first valid",
+			opts: []string{"metrics=localhost:12345", "metrics=localhost:67890"},
+			want: 12345,
+		},
+		{
+			name: "Invalid port in metrics option",
+			opts: []string{"metrics=localhost:invalid"},
+			want: 9567,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := GetMetricsPortWithOptions(tt.opts); got != tt.want {
+				t.Errorf("GetMetricsPortWithOptions() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

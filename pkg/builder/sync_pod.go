@@ -203,6 +203,11 @@ done
 		pod.Spec.Volumes = volumes
 		pod.Spec.Containers[0].VolumeMounts = volumeMounts
 	}
+	metricsPort := utils.GetMetricsPortWithOptions(s.sc.Spec.Options)
+	pod.Spec.Containers[0].Ports = append(pod.Spec.Containers[0].Ports, corev1.ContainerPort{
+		ContainerPort: metricsPort,
+		Name:          "metrics",
+	})
 	return pod
 }
 

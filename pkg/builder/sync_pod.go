@@ -127,7 +127,7 @@ done
 			Namespace:   s.sc.Namespace,
 			Annotations: map[string]string{},
 			Labels: map[string]string{
-				common.LabelSync:    s.sc.Name,
+				common.LabelSync:    utils.TruncateSyncName(s.sc.Name),
 				common.LabelAppType: common.LabelSyncWorkerValue,
 			},
 			OwnerReferences: []metav1.OwnerReference{
@@ -179,7 +179,7 @@ done
 						PodAffinityTerm: corev1.PodAffinityTerm{
 							LabelSelector: &metav1.LabelSelector{
 								MatchLabels: map[string]string{
-									common.LabelSync: s.sc.Name,
+									common.LabelSync: utils.TruncateSyncName(s.sc.Name),
 								},
 							},
 							Namespaces:  []string{s.sc.Namespace},

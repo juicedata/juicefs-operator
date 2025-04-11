@@ -410,3 +410,21 @@ func CalculateProgress(a, b int64) string {
 func GenCronSyncJobName(cronName string, now time.Time) string {
 	return fmt.Sprintf("%s-%s", cronName, now.Format("20060102150405"))
 }
+
+// TruncateSyncName truncates the input string to ensure its length does not
+// exceed the maximum allowed length defined by `common.LabelMaxLength`.
+//
+// If the input string is longer than the maximum length, it computes an MD5 hash of
+// the string, and appends it to the input string
+func TruncateSyncName(s string) string {
+	length := common.LabelMaxLength
+	if len(s) <= length {
+		return s
+	}
+	md5string := CalMD5(s)
+	if len(md5string) > length {
+		md5string = md5string[:length]
+	}
+	s = s[:length-len(md5string)-1] + "-" + md5string
+	return s
+}

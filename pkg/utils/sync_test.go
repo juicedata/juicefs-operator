@@ -501,3 +501,34 @@ func TestGetMetricsPortWithOptions(t *testing.T) {
 		})
 	}
 }
+
+func TestTruncateSyncName(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "short",
+			input: "short-name",
+			want:  "short-name",
+		},
+		{
+			name:  "equal max length",
+			input: "sync-name-12345678901234567890-12345678901234567890-12345678901",
+			want:  "sync-name-12345678901234567890-12345678901234567890-12345678901",
+		},
+		{
+			name:  "longer max length",
+			input: "sync-name-12345678901234567890-12345678901234567890-1234567890-1234567890",
+			want:  "sync-name-12345678901234567890-e5340e3d9269b90a5c7fa969fc6e0d2c",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := TruncateSyncName(tt.input)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}

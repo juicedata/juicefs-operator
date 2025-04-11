@@ -140,3 +140,18 @@ func MustParseWorkerMountCmds(cmds string) (volName string, options []string) {
 	options = strings.Split(parts[5], ",")
 	return volName, options
 }
+
+func PodNotReadyReason(pod corev1.Pod) string {
+	if pod.Status.Phase == corev1.PodFailed {
+		return "PodFailed"
+	}
+	for _, cond := range pod.Status.ContainerStatuses {
+		if cond.State.Waiting != nil {
+			return cond.State.Waiting.Reason
+		}
+		if cond.State.Terminated != nil {
+			return cond.State.Terminated.Reason
+		}
+	}
+	return "Unknown"
+}

@@ -210,6 +210,38 @@ func TestParseYamlOrJson(t *testing.T) {
 	}
 }
 
+func TestCalMD5(t *testing.T) {
+	tests := []struct {
+		name   string
+		object interface{}
+		want   string
+	}{
+		{
+			name:   "Test with string",
+			object: "test string",
+			want:   "520a193597c1170fc7f00c6e77df571f",
+		},
+		{
+			name:   "Test with int",
+			object: 12345,
+			want:   "827ccb0eea8a706c4c34a16891f84e7b",
+		},
+		{
+			name:   "Test with struct",
+			object: struct{ Name string }{Name: "test"},
+			want:   "d462f35941c3d3c17b89cc22092ada89",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := CalMD5(tt.object); got != tt.want {
+				t.Errorf("CalMD5() = %v, want = %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func equalMaps(a, b map[string]interface{}) bool {
 	if len(a) != len(b) {
 		return false

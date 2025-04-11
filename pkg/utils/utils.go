@@ -15,6 +15,7 @@
 package utils
 
 import (
+	"crypto/md5"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -54,6 +55,12 @@ func NodeSelectorContains(expect, target map[string]string) bool {
 func GenHash(object interface{}) string {
 	data, _ := json.Marshal(object)
 	hash := sha256.Sum256(data)
+	return hex.EncodeToString(hash[:])
+}
+
+func CalMD5(object interface{}) string {
+	data, _ := json.Marshal(object)
+	hash := md5.Sum(data)
 	return hex.EncodeToString(hash[:])
 }
 

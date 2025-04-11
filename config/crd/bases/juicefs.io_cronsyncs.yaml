@@ -1019,6 +1019,9 @@ spec:
                         items:
                           type: string
                         type: array
+                      preparingTimeout:
+                        format: int32
+                        type: integer
                       replicas:
                         default: 1
                         format: int32

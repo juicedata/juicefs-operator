@@ -428,3 +428,50 @@ func TruncateSyncName(s string) string {
 	s = s[:length-len(md5string)-1] + "-" + md5string
 	return s
 }
+
+func TruncateSyncAffinityIfNeeded(affinity *corev1.Affinity) {
+	if affinity == nil {
+		return
+	}
+
+	handleTerm := func(term *corev1.PodAffinityTerm) {
+		if term == nil {
+			return
+		}
+		if term.LabelSelector == nil {
+			return
+		}
+		if term.LabelSelector.MatchLabels != nil {
+			for k, v := range term.LabelSelector.MatchLabels {
+				if strings.Contains(k, common.LabelSync) {
+					term.LabelSelector.MatchLabels[k] = TruncateSyncName(v)
+				}
+			}
+		}
+		if term.LabelSelector.MatchExpressions != nil {
+			for j, expr := range term.LabelSelector.MatchExpressions {
+				if expr.Key == common.LabelSync {
+					term.LabelSelector.MatchExpressions[j].Values = []string{TruncateSyncName(expr.Values[0])}
+				}
+			}
+		}
+	}
+
+	if affinity.PodAntiAffinity != nil {
+		for _, term := range affinity.PodAntiAffinity.PreferredDuringSchedulingIgnoredDuringExecution {
+			handleTerm(&term.PodAffinityTerm)
+		}
+		for _, term := range affinity.PodAntiAffinity.RequiredDuringSchedulingIgnoredDuringExecution {
+			handleTerm(&term)
+		}
+	}
+
+	if affinity.PodAffinity != nil {
+		for _, term := range affinity.PodAffinity.PreferredDuringSchedulingIgnoredDuringExecution {
+			handleTerm(&term.PodAffinityTerm)
+		}
+		for _, term := range affinity.PodAffinity.RequiredDuringSchedulingIgnoredDuringExecution {
+			handleTerm(&term)
+		}
+	}
+}

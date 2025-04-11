@@ -114,12 +114,23 @@ func (r *SyncReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 
 	if sync.Status.Phase == juicefsiov1.SyncPhasePending || sync.Status.Phase == "" {
 		sync.Status.Phase = juicefsiov1.SyncPhasePreparing
+		sync.Status.PreparingAt = &metav1.Time{Time: time.Now()}
 		if err := r.Status().Update(ctx, sync); err != nil {
 			return ctrl.Result{}, err
 		}
 	}
 
 	if sync.Status.Phase == juicefsiov1.SyncPhasePreparing {
+		if sync.Spec.PreparingTimeout != nil {
+			preparingTimeout := *sync.Spec.PreparingTimeout
+			if sync.Status.PreparingAt != nil && time.Since(sync.Status.PreparingAt.Time) > time.Duration(preparingTimeout)*time.Second {
+				l.Info("sync preparing phase timed out", "timeout", preparingTimeout)
+				sync.Status.Phase = juicefsiov1.SyncPhaseFailed
+				sync.Status.Reason = fmt.Sprintf("Preparing phase timed out after %d seconds", preparingTimeout)
+				return ctrl.Result{}, r.Status().Update(ctx, sync)
+			}
+		}
+
 		// prepare secrets
 		if err := r.prepareSyncSecrets(ctx, sync); err != nil {
 			l.Error(err, "failed to prepare sync secrets")
@@ -374,7 +385,7 @@ func (r *SyncReconciler) prepareWorkerPod(ctx context.Context, sync *juicefsiov1
 				if utils.IsPodReady(pod) {
 					ips = append(ips, pod.Status.PodIP)
 				} else {
-					log.Info("worker pod not ready", "pod", pod.Name, "status", pod.Status.Phase)
+					log.Info("worker pod not ready", "pod", pod.Name, "status", pod.Status.Phase, "reason", utils.PodNotReadyReason(pod))
 					break
 				}
 			}

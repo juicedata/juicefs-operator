@@ -24,6 +24,7 @@ import (
 	"github.com/juicedata/juicefs-operator/pkg/common"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func TestGenSshKeys(t *testing.T) {
@@ -529,6 +530,124 @@ func TestTruncateSyncName(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got := TruncateSyncName(tt.input)
 			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestTruncateAffinityIfNeeded(t *testing.T) {
+	tests := []struct {
+		name     string
+		affinity *corev1.Affinity
+		want     *corev1.Affinity
+	}{
+		{
+			name:     "Nil affinity",
+			affinity: nil,
+			want:     nil,
+		},
+		{
+			name:     "No PodAntiAffinity",
+			affinity: &corev1.Affinity{},
+			want:     &corev1.Affinity{},
+		},
+		{
+			name: "PodAntiAffinity with MatchLabels",
+			affinity: &corev1.Affinity{
+				PodAntiAffinity: &corev1.PodAntiAffinity{
+					PreferredDuringSchedulingIgnoredDuringExecution: []corev1.WeightedPodAffinityTerm{
+						{
+							PodAffinityTerm: corev1.PodAffinityTerm{
+								LabelSelector: &metav1.LabelSelector{
+									MatchLabels: map[string]string{
+										common.LabelSync: "sync-name-12345678901234567890-12345678901234567890-1234567890-1234567890",
+									},
+								},
+							},
+						},
+					},
+					RequiredDuringSchedulingIgnoredDuringExecution: []corev1.PodAffinityTerm{
+						{
+							LabelSelector: &metav1.LabelSelector{
+								MatchLabels: map[string]string{
+									common.LabelSync: "sync-name-12345678901234567890-12345678901234567890-1234567890-1234567890",
+								},
+							},
+						},
+					},
+				},
+			},
+			want: &corev1.Affinity{
+				PodAntiAffinity: &corev1.PodAntiAffinity{
+					PreferredDuringSchedulingIgnoredDuringExecution: []corev1.WeightedPodAffinityTerm{
+						{
+							PodAffinityTerm: corev1.PodAffinityTerm{
+								LabelSelector: &metav1.LabelSelector{
+									MatchLabels: map[string]string{
+										common.LabelSync: "sync-name-12345678901234567890-e5340e3d9269b90a5c7fa969fc6e0d2c",
+									},
+								},
+							},
+						},
+					},
+					RequiredDuringSchedulingIgnoredDuringExecution: []corev1.PodAffinityTerm{
+						{
+							LabelSelector: &metav1.LabelSelector{
+								MatchLabels: map[string]string{
+									common.LabelSync: "sync-name-12345678901234567890-e5340e3d9269b90a5c7fa969fc6e0d2c",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "PodAntiAffinity with MatchExpressions",
+			affinity: &corev1.Affinity{
+				PodAntiAffinity: &corev1.PodAntiAffinity{
+					PreferredDuringSchedulingIgnoredDuringExecution: []corev1.WeightedPodAffinityTerm{
+						{
+							PodAffinityTerm: corev1.PodAffinityTerm{
+								LabelSelector: &metav1.LabelSelector{
+									MatchExpressions: []metav1.LabelSelectorRequirement{
+										{
+											Key:      common.LabelSync,
+											Operator: metav1.LabelSelectorOpIn,
+											Values:   []string{"sync-name-12345678901234567890-12345678901234567890-1234567890-1234567890"},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			want: &corev1.Affinity{
+				PodAntiAffinity: &corev1.PodAntiAffinity{
+					PreferredDuringSchedulingIgnoredDuringExecution: []corev1.WeightedPodAffinityTerm{
+						{
+							PodAffinityTerm: corev1.PodAffinityTerm{
+								LabelSelector: &metav1.LabelSelector{
+									MatchExpressions: []metav1.LabelSelectorRequirement{
+										{
+											Key:      common.LabelSync,
+											Operator: metav1.LabelSelectorOpIn,
+											Values:   []string{"sync-name-12345678901234567890-e5340e3d9269b90a5c7fa969fc6e0d2c"},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			TruncateSyncAffinityIfNeeded(tt.affinity)
+			assert.Equal(t, tt.want, tt.affinity)
 		})
 	}
 }

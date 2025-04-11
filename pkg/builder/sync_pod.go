@@ -179,7 +179,7 @@ done
 						PodAffinityTerm: corev1.PodAffinityTerm{
 							LabelSelector: &metav1.LabelSelector{
 								MatchLabels: map[string]string{
-									common.LabelSync: utils.TruncateSyncName(s.sc.Name),
+									common.LabelSync: s.sc.Name,
 								},
 							},
 							Namespaces:  []string{s.sc.Namespace},
@@ -191,6 +191,8 @@ done
 		}
 	}
 
+	// user will custom the affinity, we need to truncate it
+	utils.TruncateSyncAffinityIfNeeded(pod.Spec.Affinity)
 	maps.Copy(pod.Labels, s.sc.Spec.Labels)
 	maps.Copy(pod.Annotations, s.sc.Spec.Annotations)
 

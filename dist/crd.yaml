@@ -4018,6 +4018,9 @@ spec:
                         items:
                           type: string
                         type: array
+                      preparingTimeout:
+                        format: int32
+                        type: integer
                       replicas:
                         default: 1
                         format: int32
@@ -5553,6 +5556,9 @@ spec:
                 items:
                   type: string
                 type: array
+              preparingTimeout:
+                format: int32
+                type: integer
               replicas:
                 default: 1
                 format: int32
@@ -6097,6 +6103,9 @@ spec:
                 type: string
               phase:
                 default: Pending
+                type: string
+              preparingAt:
+                format: date-time
                 type: string
               progress:
                 type: string

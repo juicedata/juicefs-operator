@@ -100,6 +100,16 @@ type SyncSink struct {
 	PVC *SyncSinkPVC `json:"pvc,omitempty"`
 }
 
+type SyncPodMonitor struct {
+	// Enable or disable PodMonitor creation
+	// +kubebuilder:default=false
+	Enabled bool `json:"enabled,omitempty"`
+	// Labels for PodMonitor
+	Labels map[string]string `json:"labels,omitempty"`
+	// Namespace for PodMonitor
+	Namespace string `json:"namespace,omitempty"`
+}
+
 // SyncSpec defines the desired state of Sync.
 type SyncSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
@@ -145,6 +155,11 @@ type SyncSpec struct {
 
 	// +optional
 	TTLSecondsAfterFinished *int32 `json:"ttlSecondsAfterFinished,omitempty"`
+
+	// Monitor configuration for creating PodMonitor
+	// Disabled by default
+	// +optional
+	PodMonitor *SyncPodMonitor `json:"podMonitor,omitempty"`
 }
 
 type SyncPhase string

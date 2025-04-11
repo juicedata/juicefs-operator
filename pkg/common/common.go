@@ -125,3 +125,7 @@ func GenSyncWorkerName(syncJobName string, i int) string {
 func GenSyncManagerName(syncJobName string) string {
 	return fmt.Sprintf("%s-%s-manager", SyncNamePrefix, syncJobName)
 }
+
+func GenSyncPodMonitorName(syncJobName string) string {
+	return fmt.Sprintf("%s-%s-monitor", SyncNamePrefix, syncJobName)
+}

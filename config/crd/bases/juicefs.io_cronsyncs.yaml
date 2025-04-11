@@ -1019,6 +1019,18 @@ spec:
                         items:
                           type: string
                         type: array
+                      podMonitor:
+                        properties:
+                          enabled:
+                            default: false
+                            type: boolean
+                          labels:
+                            additionalProperties:
+                              type: string
+                            type: object
+                          namespace:
+                            type: string
+                        type: object
                       replicas:
                         default: 1
                         format: int32

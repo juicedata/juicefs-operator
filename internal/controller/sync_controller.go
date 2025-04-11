@@ -26,7 +26,9 @@ import (
 	"github.com/samber/lo"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -36,7 +38,7 @@ import (
 	"github.com/juicedata/juicefs-operator/pkg/builder"
 	"github.com/juicedata/juicefs-operator/pkg/common"
 	"github.com/juicedata/juicefs-operator/pkg/utils"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 )
 
 // SyncReconciler reconciles a Sync object
@@ -52,6 +54,7 @@ type SyncReconciler struct {
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;delete;create;watch;update
 // +kubebuilder:rbac:groups="",resources=pods/log,verbs=get
 // +kubebuilder:rbac:groups="",resources=pods/exec,verbs=create
+// +kubebuilder:rbac:groups=monitoring.coreos.com,resources=podmonitors,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -141,6 +144,12 @@ func (r *SyncReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 			return ctrl.Result{}, err
 		}
 		l.Info("prepare manager pod done, ready to sync")
+
+		// create or update PodMonitor
+		if err := r.preParePodMonitor(ctx, sync); err != nil {
+			l.Error(err, "failed to create or update PodMonitor")
+			return ctrl.Result{}, err
+		}
 
 		sync.Status.StartAt = &metav1.Time{Time: time.Now()}
 		sync.Status.Phase = juicefsiov1.SyncPhaseProgressing
@@ -445,6 +454,28 @@ func (r *SyncReconciler) prepareManagerPod(ctx context.Context, sync *juicefsiov
 			time.Sleep(5 * time.Second)
 		}
 	}
+}
+
+func (r *SyncReconciler) preParePodMonitor(ctx context.Context, sync *juicefsiov1.Sync) error {
+	if sync.Spec.PodMonitor == nil || !sync.Spec.PodMonitor.Enabled {
+		return nil
+	}
+	l := log.FromContext(ctx)
+	podMonitorName := common.GenSyncPodMonitorName(sync.Name)
+	podMonitorNamespace := sync.Namespace
+	if sync.Spec.PodMonitor.Namespace != "" {
+		podMonitorNamespace = sync.Spec.PodMonitor.Namespace
+	}
+	existing := &monitoringv1.PodMonitor{}
+	err := r.Get(ctx, types.NamespacedName{Name: podMonitorName, Namespace: podMonitorNamespace}, existing)
+	if err == nil {
+		return nil
+	} else if !apierrors.IsNotFound(err) {
+		l.Error(err, "failed to get PodMonitor")
+		return err
+	}
+	podMonitor := builder.NewSyncPodMonitor(sync)
+	return r.Create(ctx, podMonitor)
 }
 
 // SetupWithManager sets up the controller with the Manager.

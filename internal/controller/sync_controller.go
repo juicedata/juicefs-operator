@@ -121,12 +121,12 @@ func (r *SyncReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	}
 
 	if sync.Status.Phase == juicefsiov1.SyncPhasePreparing {
-		if sync.Spec.PreparingTimeout != nil {
-			preparingTimeout := *sync.Spec.PreparingTimeout
-			if sync.Status.PreparingAt != nil && time.Since(sync.Status.PreparingAt.Time) > time.Duration(preparingTimeout)*time.Second {
-				l.Info("sync preparing phase timed out", "timeout", preparingTimeout)
+		if sync.Spec.PreparingTimeoutSeconds != nil {
+			PreparingTimeoutSeconds := *sync.Spec.PreparingTimeoutSeconds
+			if sync.Status.PreparingAt != nil && time.Since(sync.Status.PreparingAt.Time) > time.Duration(PreparingTimeoutSeconds)*time.Second {
+				l.Info("sync preparing phase timed out", "timeout", PreparingTimeoutSeconds)
 				sync.Status.Phase = juicefsiov1.SyncPhaseFailed
-				sync.Status.Reason = fmt.Sprintf("Preparing phase timed out after %d seconds", preparingTimeout)
+				sync.Status.Reason = fmt.Sprintf("Preparing phase timed out after %d seconds", PreparingTimeoutSeconds)
 				return ctrl.Result{}, r.Status().Update(ctx, sync)
 			}
 		}

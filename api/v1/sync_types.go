@@ -146,10 +146,10 @@ type SyncSpec struct {
 	// +optional
 	TTLSecondsAfterFinished *int32 `json:"ttlSecondsAfterFinished,omitempty"`
 
-	// PreparingTimeout defines the timeout duration for the Preparing phase.
+	// PreparingTimeoutSeconds defines the timeout duration for the Preparing phase.
 	// If the Preparing phase exceeds this duration, the sync will be marked as Failed.
 	// +optional
-	PreparingTimeout *int32 `json:"preparingTimeout,omitempty"`
+	PreparingTimeoutSeconds *int32 `json:"PreparingTimeoutSeconds,omitempty"`
 }
 
 type SyncPhase string

@@ -842,8 +842,8 @@ func (in *SyncSpec) DeepCopyInto(out *SyncSpec) {
 		*out = new(int32)
 		**out = **in
 	}
-	if in.PreparingTimeout != nil {
-		in, out := &in.PreparingTimeout, &out.PreparingTimeout
+	if in.PreparingTimeoutSeconds != nil {
+		in, out := &in.PreparingTimeoutSeconds, &out.PreparingTimeoutSeconds
 		*out = new(int32)
 		**out = **in
 	}

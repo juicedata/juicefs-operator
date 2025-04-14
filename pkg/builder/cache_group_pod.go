@@ -307,13 +307,13 @@ func (p *PodBuilder) genInitConfigVolumes() {
 		return
 	}
 	p.spec.Volumes = append(p.spec.Volumes, corev1.Volume{
-		Name: "init-config",
+		Name: common.InitConfigVolumeName,
 		VolumeSource: corev1.VolumeSource{
 			Secret: &corev1.SecretVolumeSource{
 				SecretName: p.cg.Spec.SecretRef.Name,
 				Items: []corev1.KeyToPath{
 					{
-						Key:  "initconfig",
+						Key:  common.InitConfigVolumeKey,
 						Path: p.volName + ".conf",
 					},
 				},
@@ -322,8 +322,8 @@ func (p *PodBuilder) genInitConfigVolumes() {
 	})
 
 	p.spec.VolumeMounts = append(p.spec.VolumeMounts, corev1.VolumeMount{
-		Name:      "init-config",
-		MountPath: "/etc/juicefs",
+		Name:      common.InitConfigVolumeName,
+		MountPath: common.InitConfigMountPath,
 	})
 }
 

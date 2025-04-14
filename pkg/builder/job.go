@@ -69,6 +69,9 @@ func (j *JobBuilder) NewWarmUpJob() *batchv1.Job {
 			},
 		},
 	}}
+	volumes, volumeMounts := j.getWarmupVolumes()
+	job.Spec.Template.Spec.Volumes = volumes
+	job.Spec.Template.Spec.Containers[0].VolumeMounts = volumeMounts
 	return job
 }
 
@@ -183,6 +186,26 @@ func (j *JobBuilder) getWarmUpCommand() []string {
 			targetsCmd + "\n" +
 			strings.Join(cmds, " "),
 	}
+}
+
+func (j *JobBuilder) getWarmupVolumes() ([]corev1.Volume, []corev1.VolumeMount) {
+	volumes := []corev1.Volume{}
+	volumeMounts := []corev1.VolumeMount{}
+	for _, volume := range j.worker.Spec.Volumes {
+		if volume.Name == common.InitConfigVolumeName {
+			volumes = append(volumes, volume)
+			break
+		}
+	}
+	for _, mount := range j.worker.Spec.Containers[0].VolumeMounts {
+		if mount.Name == common.InitConfigVolumeName {
+			volumeMounts = append(volumeMounts, mount)
+			break
+		}
+	}
+
+	// FIXME: we need to mount the config volume for object storage. like ceph
+	return volumes, volumeMounts
 }
 
 func GetWarmUpOwnerReference(wu *juicefsiov1.WarmUp) []metav1.OwnerReference {

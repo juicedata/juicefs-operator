@@ -203,6 +203,8 @@ func (j *JobBuilder) getWarmupVolumes() ([]corev1.Volume, []corev1.VolumeMount) 
 			break
 		}
 	}
+
+	// FIXME: we need to mount the config volume for object storage. like ceph
 	return volumes, volumeMounts
 }
 

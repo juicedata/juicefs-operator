@@ -123,7 +123,7 @@ func (o *onceHandler) sync(ctx context.Context, wu *juicefsiov1.WarmUp) (err err
 		if utils.IsNotFound(err) {
 			// create a new job
 			podList := &corev1.PodList{}
-			if err := o.List(ctx, podList, client.MatchingLabels{common.LabelCacheGroup: wu.Spec.CacheGroupName}, &client.ListOptions{
+			if err := o.List(ctx, podList, client.MatchingLabels{common.LabelCacheGroup: utils.TruncateLabelValue(wu.Spec.CacheGroupName)}, &client.ListOptions{
 				Limit: 1,
 			}); err != nil {
 				l.Error(err, "list pod error", "cache group", wu.Spec.CacheGroupName)
@@ -200,7 +200,7 @@ func (c *cronHandler) sync(ctx context.Context, wu *juicefsiov1.WarmUp) (err err
 	l := log.FromContext(ctx)
 	var cronjob batchv1.CronJob
 	podList := &corev1.PodList{}
-	if err := c.List(ctx, podList, client.MatchingLabels{common.LabelCacheGroup: wu.Spec.CacheGroupName}, &client.ListOptions{Limit: 1}); err != nil {
+	if err := c.List(ctx, podList, client.MatchingLabels{common.LabelCacheGroup: utils.TruncateLabelValue(wu.Spec.CacheGroupName)}, &client.ListOptions{Limit: 1}); err != nil {
 		l.Error(err, "list pod error", "cache group", wu.Spec.CacheGroupName)
 		return err
 	}

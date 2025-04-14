@@ -411,24 +411,6 @@ func GenCronSyncJobName(cronName string, now time.Time) string {
 	return fmt.Sprintf("%s-%s", cronName, now.Format("20060102150405"))
 }
 
-// TruncateSyncName truncates the input string to ensure its length does not
-// exceed the maximum allowed length defined by `common.LabelMaxLength`.
-//
-// If the input string is longer than the maximum length, it computes an MD5 hash of
-// the string, and appends it to the input string
-func TruncateSyncName(s string) string {
-	length := common.LabelMaxLength
-	if len(s) <= length {
-		return s
-	}
-	md5string := CalMD5(s)
-	if len(md5string) > length {
-		md5string = md5string[:length]
-	}
-	s = s[:length-len(md5string)-1] + "-" + md5string
-	return s
-}
-
 func TruncateSyncAffinityIfNeeded(affinity *corev1.Affinity) {
 	if affinity == nil {
 		return
@@ -444,14 +426,14 @@ func TruncateSyncAffinityIfNeeded(affinity *corev1.Affinity) {
 		if term.LabelSelector.MatchLabels != nil {
 			for k, v := range term.LabelSelector.MatchLabels {
 				if strings.Contains(k, common.LabelSync) {
-					term.LabelSelector.MatchLabels[k] = TruncateSyncName(v)
+					term.LabelSelector.MatchLabels[k] = TruncateLabelValue(v)
 				}
 			}
 		}
 		if term.LabelSelector.MatchExpressions != nil {
 			for j, expr := range term.LabelSelector.MatchExpressions {
 				if expr.Key == common.LabelSync {
-					term.LabelSelector.MatchExpressions[j].Values = []string{TruncateSyncName(expr.Values[0])}
+					term.LabelSelector.MatchExpressions[j].Values = []string{TruncateLabelValue(expr.Values[0])}
 				}
 			}
 		}

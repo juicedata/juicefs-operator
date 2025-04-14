@@ -336,7 +336,7 @@ func (r *SyncReconciler) prepareWorkerPod(ctx context.Context, sync *juicefsiov1
 	}
 	log := log.FromContext(ctx)
 	labelSelector := client.MatchingLabels{
-		common.LabelSync:    utils.TruncateSyncName(sync.Name),
+		common.LabelSync:    utils.TruncateLabelValue(sync.Name),
 		common.LabelAppType: common.LabelSyncWorkerValue,
 	}
 	pods := &corev1.PodList{}
@@ -401,7 +401,7 @@ func (r *SyncReconciler) prepareWorkerPod(ctx context.Context, sync *juicefsiov1
 
 func (r *SyncReconciler) deleteWorkerPods(ctx context.Context, sync *juicefsiov1.Sync, all bool) error {
 	labelSelector := client.MatchingLabels{
-		common.LabelSync:    utils.TruncateSyncName(sync.Name),
+		common.LabelSync:    utils.TruncateLabelValue(sync.Name),
 		common.LabelAppType: common.LabelSyncWorkerValue,
 	}
 	var fieldSelector client.MatchingFields

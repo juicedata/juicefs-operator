@@ -220,7 +220,7 @@ func NewCleanCacheJob(cg juicefsiov1.CacheGroup, worker corev1.Pod) *batchv1.Job
 			Namespace: worker.Namespace,
 			Labels: map[string]string{
 				common.LabelAppType:    common.LableCleanCacheJobValue,
-				common.LabelCacheGroup: cg.Name,
+				common.LabelCacheGroup: utils.TruncateLabelValue(cg.Name),
 			},
 		},
 		Spec: batchv1.JobSpec{
@@ -231,7 +231,7 @@ func NewCleanCacheJob(cg juicefsiov1.CacheGroup, worker corev1.Pod) *batchv1.Job
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: map[string]string{
 						common.LabelAppType:    common.LableCleanCacheJobValue,
-						common.LabelCacheGroup: cg.Name,
+						common.LabelCacheGroup: utils.TruncateLabelValue(cg.Name),
 					},
 				},
 				Spec: corev1.PodSpec{

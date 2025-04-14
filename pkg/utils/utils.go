@@ -135,3 +135,21 @@ func ParseYamlOrJson(source string) (map[string]interface{}, error) {
 	}
 	return dst, nil
 }
+
+// TruncateLabelValue truncates the input string to ensure its length does not
+// exceed the maximum allowed length defined by `common.LabelMaxLength`.
+//
+// If the input string is longer than the maximum length, it computes an MD5 hash of
+// the string, and appends it to the input string
+func TruncateLabelValue(s string) string {
+	length := common.LabelMaxLength
+	if len(s) <= length {
+		return s
+	}
+	md5string := CalMD5(s)
+	if len(md5string) > length {
+		md5string = md5string[:length]
+	}
+	s = s[:length-len(md5string)-1] + "-" + md5string
+	return s
+}

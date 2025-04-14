@@ -3079,6 +3079,9 @@ spec:
                     type: object
                   spec:
                     properties:
+                      PreparingTimeoutSeconds:
+                        format: int32
+                        type: integer
                       affinity:
                         properties:
                           nodeAffinity:
@@ -4614,6 +4617,9 @@ spec:
             type: object
           spec:
             properties:
+              PreparingTimeoutSeconds:
+                format: int32
+                type: integer
               affinity:
                 properties:
                   nodeAffinity:
@@ -6097,6 +6103,9 @@ spec:
                 type: string
               phase:
                 default: Pending
+                type: string
+              preparingAt:
+                format: date-time
                 type: string
               progress:
                 type: string

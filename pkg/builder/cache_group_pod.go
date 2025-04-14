@@ -101,7 +101,7 @@ func newBasicPod(cg *juicefsiov1.CacheGroup, nodeName string) *corev1.Pod {
 			Namespace:   cg.Namespace,
 			Annotations: map[string]string{},
 			Labels: map[string]string{
-				common.LabelCacheGroup: cg.Name,
+				common.LabelCacheGroup: utils.TruncateLabelValue(cg.Name),
 				common.LabelWorker:     common.LabelWorkerValue,
 			},
 			OwnerReferences: []metav1.OwnerReference{

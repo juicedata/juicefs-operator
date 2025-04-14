@@ -145,6 +145,11 @@ type SyncSpec struct {
 
 	// +optional
 	TTLSecondsAfterFinished *int32 `json:"ttlSecondsAfterFinished,omitempty"`
+
+	// PreparingTimeoutSeconds defines the timeout duration for the Preparing phase.
+	// If the Preparing phase exceeds this duration, the sync will be marked as Failed.
+	// +optional
+	PreparingTimeoutSeconds *int32 `json:"PreparingTimeoutSeconds,omitempty"`
 }
 
 type SyncPhase string
@@ -198,9 +203,14 @@ type SyncStatus struct {
 	// +kubebuilder:default=Pending
 	Phase SyncPhase `json:"phase,omitempty"`
 
-	Progress    string       `json:"progress,omitempty"`
-	Stats       SyncStats    `json:"stats,omitempty"`
-	StartAt     *metav1.Time `json:"startAt,omitempty"`
+	Progress string    `json:"progress,omitempty"`
+	Stats    SyncStats `json:"stats,omitempty"`
+
+	// preparing start at
+	PreparingAt *metav1.Time `json:"preparingAt,omitempty"`
+	// sync start at
+	StartAt *metav1.Time `json:"startAt,omitempty"`
+	// sync complete at
 	CompletedAt *metav1.Time `json:"completedAt,omitempty"`
 	// +optional
 	Reason    string `json:"reason,omitempty"`

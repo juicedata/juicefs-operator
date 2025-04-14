@@ -306,7 +306,7 @@ func (r *CacheGroupReconciler) deleteCacheGroupWorker(ctx context.Context, worke
 
 func (r *CacheGroupReconciler) listActualWorkers(ctx context.Context, cg *juicefsiov1.CacheGroup) ([]corev1.Pod, error) {
 	workers := corev1.PodList{}
-	if err := r.List(ctx, &workers, client.MatchingLabels(map[string]string{common.LabelCacheGroup: cg.Name})); err != nil {
+	if err := r.List(ctx, &workers, client.MatchingLabels(map[string]string{common.LabelCacheGroup: utils.TruncateLabelValue(cg.Name)})); err != nil {
 		return nil, err
 	}
 	return workers.Items, nil

@@ -410,3 +410,50 @@ func CalculateProgress(a, b int64) string {
 func GenCronSyncJobName(cronName string, now time.Time) string {
 	return fmt.Sprintf("%s-%s", cronName, now.Format("20060102150405"))
 }
+
+func TruncateSyncAffinityIfNeeded(affinity *corev1.Affinity) {
+	if affinity == nil {
+		return
+	}
+
+	handleTerm := func(term *corev1.PodAffinityTerm) {
+		if term == nil {
+			return
+		}
+		if term.LabelSelector == nil {
+			return
+		}
+		if term.LabelSelector.MatchLabels != nil {
+			for k, v := range term.LabelSelector.MatchLabels {
+				if strings.Contains(k, common.LabelSync) {
+					term.LabelSelector.MatchLabels[k] = TruncateLabelValue(v)
+				}
+			}
+		}
+		if term.LabelSelector.MatchExpressions != nil {
+			for j, expr := range term.LabelSelector.MatchExpressions {
+				if expr.Key == common.LabelSync {
+					term.LabelSelector.MatchExpressions[j].Values = []string{TruncateLabelValue(expr.Values[0])}
+				}
+			}
+		}
+	}
+
+	if affinity.PodAntiAffinity != nil {
+		for _, term := range affinity.PodAntiAffinity.PreferredDuringSchedulingIgnoredDuringExecution {
+			handleTerm(&term.PodAffinityTerm)
+		}
+		for _, term := range affinity.PodAntiAffinity.RequiredDuringSchedulingIgnoredDuringExecution {
+			handleTerm(&term)
+		}
+	}
+
+	if affinity.PodAffinity != nil {
+		for _, term := range affinity.PodAffinity.PreferredDuringSchedulingIgnoredDuringExecution {
+			handleTerm(&term.PodAffinityTerm)
+		}
+		for _, term := range affinity.PodAffinity.RequiredDuringSchedulingIgnoredDuringExecution {
+			handleTerm(&term)
+		}
+	}
+}

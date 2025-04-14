@@ -178,14 +178,14 @@ func newSyncJob(cronSync *juicefsiov1.CronSync, now time.Time) *juicefsiov1.Sync
 	}
 	maps.Copy(job.Labels, cronSync.Spec.SyncTemplate.Labels)
 	maps.Copy(job.Annotations, cronSync.Spec.SyncTemplate.Annotations)
-	job.Labels[common.LabelCronSync] = cronSync.Name
+	job.Labels[common.LabelCronSync] = utils.TruncateLabelValue(cronSync.Name)
 	return job
 }
 
 func (r *CronSyncReconciler) ListCronSyncJobs(ctx context.Context, cronSync *juicefsiov1.CronSync) ([]juicefsiov1.Sync, error) {
 	var syncList juicefsiov1.SyncList
 	labelSelector := client.MatchingLabels{
-		common.LabelCronSync: cronSync.Name,
+		common.LabelCronSync: utils.TruncateLabelValue(cronSync.Name),
 	}
 	if err := r.List(ctx, &syncList, client.InNamespace(cronSync.Namespace), labelSelector); err != nil {
 		return nil, err

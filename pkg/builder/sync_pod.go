@@ -127,7 +127,7 @@ done
 			Namespace:   s.sc.Namespace,
 			Annotations: map[string]string{},
 			Labels: map[string]string{
-				common.LabelSync:    s.sc.Name,
+				common.LabelSync:    utils.TruncateLabelValue(s.sc.Name),
 				common.LabelAppType: common.LabelSyncWorkerValue,
 			},
 			OwnerReferences: []metav1.OwnerReference{
@@ -191,6 +191,8 @@ done
 		}
 	}
 
+	// user will custom the affinity, we need to truncate it
+	utils.TruncateSyncAffinityIfNeeded(pod.Spec.Affinity)
 	maps.Copy(pod.Labels, s.sc.Spec.Labels)
 	maps.Copy(pod.Annotations, s.sc.Spec.Annotations)
 

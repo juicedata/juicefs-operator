@@ -80,6 +80,9 @@ spec:
                     type: object
                   spec:
                     properties:
+                      PreparingTimeoutSeconds:
+                        format: int32
+                        type: integer
                       affinity:
                         properties:
                           nodeAffinity:

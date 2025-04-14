@@ -65,6 +65,8 @@ const (
 	AnnoBackupWorker        = "juicefs.io/backup-worker"
 	AnnoWaitingDeleteWorker = "juicefs.io/waiting-delete-worker"
 
+	LabelMaxLength = 63
+
 	InitConfigVolumeName = "init-config"
 	InitConfigVolumeKey  = "initconfig"
 	InitConfigMountPath  = "/etc/juicefs"

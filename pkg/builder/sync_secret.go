@@ -93,6 +93,9 @@ func NewSyncSecret(ctx context.Context, sync *juicefsiov1.Sync) (*corev1.Secret,
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      secretName,
 			Namespace: sync.Namespace,
+			Labels: map[string]string{
+				common.LabelManagedBy: common.LabelManagedByValue,
+			},
 		},
 		StringData: data,
 	}

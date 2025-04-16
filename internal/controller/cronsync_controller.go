@@ -162,7 +162,9 @@ func newSyncJob(cronSync *juicefsiov1.CronSync, now time.Time) *juicefsiov1.Sync
 			Name:        utils.GenCronSyncJobName(cronSync.Name, now),
 			Namespace:   cronSync.Namespace,
 			Annotations: map[string]string{},
-			Labels:      map[string]string{},
+			Labels: map[string]string{
+				common.LabelManagedBy: common.LabelManagedByValue,
+			},
 			OwnerReferences: []metav1.OwnerReference{
 				{
 					APIVersion:         cronSync.APIVersion,

@@ -135,6 +135,9 @@ func (j *JobBuilder) genBaseJob() *batchv1.Job {
 			},
 		},
 	}
+	if job.Spec.Template.Labels == nil {
+		job.Spec.Template.Labels = make(map[string]string)
+	}
 	maps.Copy(job.Spec.Template.Labels, map[string]string{
 		common.LabelManagedBy: common.LabelManagedByValue,
 	})

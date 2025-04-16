@@ -18,6 +18,7 @@ package builder
 
 import (
 	"fmt"
+	"maps"
 	"path"
 	"strings"
 
@@ -84,7 +85,8 @@ func (j *JobBuilder) NewWarmUpCronJob() *batchv1.CronJob {
 			Namespace:       j.wu.Namespace,
 			OwnerReferences: GetWarmUpOwnerReference(j.wu),
 			Labels: map[string]string{
-				common.LabelAppType: common.LabelCronJobValue,
+				common.LabelAppType:   common.LabelCronJobValue,
+				common.LabelManagedBy: common.LabelManagedByValue,
 			},
 		},
 		Spec: batchv1.CronJobSpec{
@@ -92,6 +94,11 @@ func (j *JobBuilder) NewWarmUpCronJob() *batchv1.CronJob {
 			Schedule:          j.wu.Spec.Policy.Cron.Schedule,
 			Suspend:           j.wu.Spec.Policy.Cron.Suspend,
 			JobTemplate: batchv1.JobTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						common.LabelManagedBy: common.LabelManagedByValue,
+					},
+				},
 				Spec: job.Spec,
 			},
 		},
@@ -106,13 +113,14 @@ func (j *JobBuilder) NewWarmUpCronJob() *batchv1.CronJob {
 }
 
 func (j *JobBuilder) genBaseJob() *batchv1.Job {
-	return &batchv1.Job{
+	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            common.GenJobName(j.wu.Name),
 			Namespace:       j.wu.Namespace,
 			OwnerReferences: GetWarmUpOwnerReference(j.wu),
 			Labels: map[string]string{
-				common.LabelAppType: common.LabelJobValue,
+				common.LabelAppType:   common.LabelJobValue,
+				common.LabelManagedBy: common.LabelManagedByValue,
 			},
 		},
 		Spec: batchv1.JobSpec{
@@ -127,6 +135,10 @@ func (j *JobBuilder) genBaseJob() *batchv1.Job {
 			},
 		},
 	}
+	maps.Copy(job.Spec.Template.Labels, map[string]string{
+		common.LabelManagedBy: common.LabelManagedByValue,
+	})
+	return job
 }
 
 func (j *JobBuilder) getWarmUpCommand() []string {
@@ -242,8 +254,9 @@ func NewCleanCacheJob(cg juicefsiov1.CacheGroup, worker corev1.Pod) *batchv1.Job
 			Name:      common.GenCleanCacheJobName(worker.Spec.NodeName),
 			Namespace: worker.Namespace,
 			Labels: map[string]string{
-				common.LabelAppType:    common.LableCleanCacheJobValue,
+				common.LabelAppType:    common.LabelCleanCacheJobValue,
 				common.LabelCacheGroup: utils.TruncateLabelValue(cg.Name),
+				common.LabelManagedBy:  common.LabelManagedByValue,
 			},
 		},
 		Spec: batchv1.JobSpec{
@@ -253,8 +266,9 @@ func NewCleanCacheJob(cg juicefsiov1.CacheGroup, worker corev1.Pod) *batchv1.Job
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: map[string]string{
-						common.LabelAppType:    common.LableCleanCacheJobValue,
+						common.LabelAppType:    common.LabelCleanCacheJobValue,
 						common.LabelCacheGroup: utils.TruncateLabelValue(cg.Name),
+						common.LabelManagedBy:  common.LabelManagedByValue,
 					},
 				},
 				Spec: corev1.PodSpec{

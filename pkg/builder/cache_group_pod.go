@@ -391,6 +391,7 @@ func (p *PodBuilder) NewCacheGroupWorker(ctx context.Context) *corev1.Pod {
 
 	hash := utils.GenHash(worker)
 
+	worker.Labels[common.LabelManagedBy] = common.LabelManagedByValue
 	// The following fields do not participate in the hash calculation.
 	worker.Annotations[common.LabelWorkerHash] = hash
 	if p.groupBackup {

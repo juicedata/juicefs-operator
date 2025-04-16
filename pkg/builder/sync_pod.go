@@ -127,8 +127,9 @@ done
 			Namespace:   s.sc.Namespace,
 			Annotations: map[string]string{},
 			Labels: map[string]string{
-				common.LabelSync:    utils.TruncateLabelValue(s.sc.Name),
-				common.LabelAppType: common.LabelSyncWorkerValue,
+				common.LabelSync:      utils.TruncateLabelValue(s.sc.Name),
+				common.LabelAppType:   common.LabelSyncWorkerValue,
+				common.LabelManagedBy: common.LabelManagedByValue,
 			},
 			OwnerReferences: []metav1.OwnerReference{
 				{

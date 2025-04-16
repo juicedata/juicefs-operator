@@ -49,6 +49,8 @@ const (
 	SyncFileFromName              = "files"
 
 	// label keys
+	LabelManagedBy          = "app.kubernetes.io/managed-by"
+	LabelManagedByValue     = "juicefs-operator"
 	LabelCacheGroup         = "juicefs.io/cache-group"
 	LabelWorkerHash         = "juicefs.io/worker-hash"
 	LabelWorker             = "app.kubernetes.io/name"
@@ -56,7 +58,7 @@ const (
 	LabelAppType            = "app.kubernetes.io/name"
 	LabelJobValue           = "juicefs-warmup-job"
 	LabelCronJobValue       = "juicefs-warmup-cron-job"
-	LableCleanCacheJobValue = "juicefs-clean-cache-job"
+	LabelCleanCacheJobValue = "juicefs-clean-cache-job"
 	LabelSync               = "juicefs.io/sync"
 	LabelSyncWorkerValue    = "juicefs-sync-worker"
 	LabelSyncManagerValue   = "juicefs-sync-manager"

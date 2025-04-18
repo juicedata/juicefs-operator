@@ -253,6 +253,41 @@ func (s *SyncPodBuilder) genSyncVolumes(isManager bool) ([]corev1.Volume, []core
 		})
 	}
 
+	// Mount PVC if source or destination is a PVC
+	if isManager {
+		// Add PVC volume and mount for FROM source if it's a PVC
+		if s.sc.Spec.From.PVC != nil {
+			volumes = append(volumes, corev1.Volume{
+				Name: "pvc-from",
+				VolumeSource: corev1.VolumeSource{
+					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+						ClaimName: s.sc.Spec.From.PVC.Name,
+					},
+				},
+			})
+			volumeMounts = append(volumeMounts, corev1.VolumeMount{
+				Name:      "pvc-from",
+				MountPath: fmt.Sprintf("/mnt/pvc-from-%s", s.sc.Spec.From.PVC.Name),
+			})
+		}
+
+		// Add PVC volume and mount for TO destination if it's a PVC
+		if s.sc.Spec.To.PVC != nil {
+			volumes = append(volumes, corev1.Volume{
+				Name: "pvc-to",
+				VolumeSource: corev1.VolumeSource{
+					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+						ClaimName: s.sc.Spec.To.PVC.Name,
+					},
+				},
+			})
+			volumeMounts = append(volumeMounts, corev1.VolumeMount{
+				Name:      "pvc-to",
+				MountPath: fmt.Sprintf("/mnt/pvc-to-%s", s.sc.Spec.To.PVC.Name),
+			})
+		}
+	}
+
 	if !s.IsDistributed {
 		return volumes, volumeMounts
 	}

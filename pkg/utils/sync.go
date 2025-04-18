@@ -192,6 +192,18 @@ func parseJuiceFSCeSyncSink(jfs *juicefsiov1.SyncSinkJuiceFSCE, syncName, ref st
 	return pss, nil
 }
 
+// parsePVCSyncSink parses a PVC sync sink
+func parsePVCSyncSink(pvc *juicefsiov1.SyncSinkPVC, syncName, ref string) (*juicefsiov1.ParsedSyncSink, error) {
+	if pvc.Name == "" {
+		return nil, fmt.Errorf("pvc name is required")
+	}
+	pss := &juicefsiov1.ParsedSyncSink{}
+	mountPath := fmt.Sprintf("/mnt/pvc-%s-%s", strings.ToLower(ref), pvc.Name)
+	pss.Uri, _ = url.JoinPath(mountPath, pvc.Path)
+	pss.FilesFrom = pvc.FilesFrom
+	return pss, nil
+}
+
 func ParseSyncSink(sink juicefsiov1.SyncSink, syncName, ref string) (*juicefsiov1.ParsedSyncSink, error) {
 	var pss *juicefsiov1.ParsedSyncSink
 	var err error
@@ -203,6 +215,9 @@ func ParseSyncSink(sink juicefsiov1.SyncSink, syncName, ref string) (*juicefsiov
 	}
 	if sink.JuiceFSCE != nil {
 		pss, err = parseJuiceFSCeSyncSink(sink.JuiceFSCE, syncName, ref)
+	}
+	if sink.PVC != nil {
+		pss, err = parsePVCSyncSink(sink.PVC, syncName, ref)
 	}
 	if err != nil {
 		return nil, err

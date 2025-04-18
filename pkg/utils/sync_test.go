@@ -315,6 +315,34 @@ func TestParseSyncSink(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name: "PVC sink FROM",
+			sink: juicefsiov1.SyncSink{
+				PVC: &juicefsiov1.SyncSinkPVC{
+					Name: "data-pvc",
+				},
+			},
+			syncName: "sync-pvc",
+			ref:      "FROM",
+			want: &juicefsiov1.ParsedSyncSink{
+				Uri: "/mnt/pvc-from",
+			},
+			wantErr: false,
+		},
+		{
+			name: "PVC sink TO",
+			sink: juicefsiov1.SyncSink{
+				PVC: &juicefsiov1.SyncSinkPVC{
+					Name: "backup-pvc",
+				},
+			},
+			syncName: "sync-pvc",
+			ref:      "TO",
+			want: &juicefsiov1.ParsedSyncSink{
+				Uri: "/mnt/pvc-to",
+			},
+			wantErr: false,
+		},
+		{
 			name:     "Invalid sink",
 			sink:     juicefsiov1.SyncSink{},
 			syncName: "sync3",
@@ -333,6 +361,55 @@ func TestParseSyncSink(t *testing.T) {
 			}
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("ParseSyncSink() got = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestParsePVCSyncSink(t *testing.T) {
+	tests := []struct {
+		name     string
+		pvc      *juicefsiov1.SyncSinkPVC
+		syncName string
+		ref      string
+		want     *juicefsiov1.ParsedSyncSink
+		wantErr  bool
+	}{
+		{
+			name: "Basic PVC sync sink FROM",
+			pvc: &juicefsiov1.SyncSinkPVC{
+				Name: "test-pvc",
+			},
+			syncName: "sync-pvc",
+			ref:      "FROM",
+			want: &juicefsiov1.ParsedSyncSink{
+				Uri: "/mnt/pvc-from",
+			},
+			wantErr: false,
+		},
+		{
+			name: "Basic PVC sync sink TO",
+			pvc: &juicefsiov1.SyncSinkPVC{
+				Name: "test-pvc",
+			},
+			syncName: "sync-pvc",
+			ref:      "TO",
+			want: &juicefsiov1.ParsedSyncSink{
+				Uri: "/mnt/pvc-to",
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := parsePVCSyncSink(tt.pvc, tt.syncName, tt.ref)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("parsePVCSyncSink() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("parsePVCSyncSink() got = %v, want %v", got, tt.want)
 			}
 		})
 	}

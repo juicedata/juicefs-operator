@@ -3987,13 +3987,34 @@ spec:
                             type: object
                           pvc:
                             properties:
+                              filesFrom:
+                                properties:
+                                  configMap:
+                                    properties:
+                                      key:
+                                        type: string
+                                      name:
+                                        default: ""
+                                        type: string
+                                      optional:
+                                        type: boolean
+                                    required:
+                                    - key
+                                    type: object
+                                    x-kubernetes-map-type: atomic
+                                  filePath:
+                                    type: string
+                                  files:
+                                    items:
+                                      type: string
+                                    type: array
+                                type: object
                               name:
                                 type: string
-                              namespace:
+                              path:
                                 type: string
                             required:
                             - name
-                            - namespace
                             type: object
                         type: object
                       image:
@@ -4521,13 +4542,34 @@ spec:
                             type: object
                           pvc:
                             properties:
+                              filesFrom:
+                                properties:
+                                  configMap:
+                                    properties:
+                                      key:
+                                        type: string
+                                      name:
+                                        default: ""
+                                        type: string
+                                      optional:
+                                        type: boolean
+                                    required:
+                                    - key
+                                    type: object
+                                    x-kubernetes-map-type: atomic
+                                  filePath:
+                                    type: string
+                                  files:
+                                    items:
+                                      type: string
+                                    type: array
+                                type: object
                               name:
                                 type: string
-                              namespace:
+                              path:
                                 type: string
                             required:
                             - name
-                            - namespace
                             type: object
                         type: object
                       tolerations:
@@ -5525,13 +5567,34 @@ spec:
                     type: object
                   pvc:
                     properties:
+                      filesFrom:
+                        properties:
+                          configMap:
+                            properties:
+                              key:
+                                type: string
+                              name:
+                                default: ""
+                                type: string
+                              optional:
+                                type: boolean
+                            required:
+                            - key
+                            type: object
+                            x-kubernetes-map-type: atomic
+                          filePath:
+                            type: string
+                          files:
+                            items:
+                              type: string
+                            type: array
+                        type: object
                       name:
                         type: string
-                      namespace:
+                      path:
                         type: string
                     required:
                     - name
-                    - namespace
                     type: object
                 type: object
               image:
@@ -6059,13 +6122,34 @@ spec:
                     type: object
                   pvc:
                     properties:
+                      filesFrom:
+                        properties:
+                          configMap:
+                            properties:
+                              key:
+                                type: string
+                              name:
+                                default: ""
+                                type: string
+                              optional:
+                                type: boolean
+                            required:
+                            - key
+                            type: object
+                            x-kubernetes-map-type: atomic
+                          filePath:
+                            type: string
+                          files:
+                            items:
+                              type: string
+                            type: array
+                        type: object
                       name:
                         type: string
-                      namespace:
+                      path:
                         type: string
                     required:
                     - name
-                    - namespace
                     type: object
                 type: object
               tolerations:

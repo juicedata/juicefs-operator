@@ -82,8 +82,10 @@ type SyncSinkJuiceFSCE struct {
 type SyncSinkPVC struct {
 	// +kubebuilder:validation:Required
 	Name string `json:"name,omitempty"`
-	// +kubebuilder:validation:Required
-	Namespace string `json:"namespace,omitempty"`
+
+	// +optional
+	Path      string         `json:"path,omitempty"`
+	FilesFrom *SyncFilesFrom `json:"filesFrom,omitempty"`
 }
 
 type SyncSink struct {

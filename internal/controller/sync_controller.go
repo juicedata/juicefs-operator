@@ -37,6 +37,7 @@ import (
 	"github.com/juicedata/juicefs-operator/pkg/common"
 	"github.com/juicedata/juicefs-operator/pkg/utils"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/util/retry"
 )
 
 // SyncReconciler reconciles a Sync object
@@ -79,7 +80,7 @@ func (r *SyncReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		err := fmt.Errorf("%s", "Sync between the ce version and the ee version sync is not supported yet")
 		sync.Status.Phase = juicefsiov1.SyncPhaseFailed
 		sync.Status.Reason = err.Error()
-		return ctrl.Result{}, r.Status().Update(ctx, sync)
+		return ctrl.Result{}, r.updateStatus(ctx, sync)
 	}
 
 	from, err := utils.ParseSyncSink(sync.Spec.From, sync.Name, "FROM")
@@ -87,21 +88,21 @@ func (r *SyncReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		l.Error(err, "failed to parse from sink")
 		sync.Status.Phase = juicefsiov1.SyncPhaseFailed
 		sync.Status.Reason = err.Error()
-		return ctrl.Result{}, r.Status().Update(ctx, sync)
+		return ctrl.Result{}, r.updateStatus(ctx, sync)
 	}
 	if from.FilesFrom != nil && utils.CompareEEImageVersion(sync.Spec.Image, "5.1.10") < 0 {
 		err := fmt.Errorf("filesFrom is only supported in JuiceFS EE 5.1.10 or later")
 		l.Error(err, "")
 		sync.Status.Phase = juicefsiov1.SyncPhaseFailed
 		sync.Status.Reason = err.Error()
-		return ctrl.Result{}, r.Status().Update(ctx, sync)
+		return ctrl.Result{}, r.updateStatus(ctx, sync)
 	}
 	to, err := utils.ParseSyncSink(sync.Spec.To, sync.Name, "TO")
 	if err != nil {
 		l.Error(err, "failed to parse to sink")
 		sync.Status.Phase = juicefsiov1.SyncPhaseFailed
 		sync.Status.Reason = err.Error()
-		return ctrl.Result{}, r.Status().Update(ctx, sync)
+		return ctrl.Result{}, r.updateStatus(ctx, sync)
 	}
 
 	if strings.HasSuffix(from.Uri, "/") != strings.HasSuffix(to.Uri, "/") {
@@ -109,13 +110,13 @@ func (r *SyncReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		l.Error(err, "")
 		sync.Status.Phase = juicefsiov1.SyncPhaseFailed
 		sync.Status.Reason = err.Error()
-		return ctrl.Result{}, r.Status().Update(ctx, sync)
+		return ctrl.Result{}, r.updateStatus(ctx, sync)
 	}
 
 	if sync.Status.Phase == juicefsiov1.SyncPhasePending || sync.Status.Phase == "" {
 		sync.Status.Phase = juicefsiov1.SyncPhasePreparing
 		sync.Status.PreparingAt = &metav1.Time{Time: time.Now()}
-		if err := r.Status().Update(ctx, sync); err != nil {
+		if err := r.updateStatus(ctx, sync); err != nil {
 			return ctrl.Result{}, err
 		}
 	}
@@ -127,7 +128,7 @@ func (r *SyncReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 				l.Info("sync preparing phase timed out", "timeout", PreparingTimeoutSeconds)
 				sync.Status.Phase = juicefsiov1.SyncPhaseFailed
 				sync.Status.Reason = fmt.Sprintf("Preparing phase timed out after %d seconds", PreparingTimeoutSeconds)
-				return ctrl.Result{}, r.Status().Update(ctx, sync)
+				return ctrl.Result{}, r.updateStatus(ctx, sync)
 			}
 		}
 
@@ -155,7 +156,7 @@ func (r *SyncReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 
 		sync.Status.StartAt = &metav1.Time{Time: time.Now()}
 		sync.Status.Phase = juicefsiov1.SyncPhaseProgressing
-		if err := r.Status().Update(ctx, sync); err != nil {
+		if err := r.updateStatus(ctx, sync); err != nil {
 			return ctrl.Result{}, err
 		}
 	}
@@ -197,7 +198,7 @@ func (r *SyncReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 			if apierrors.IsNotFound(err) {
 				sync.Status.Phase = juicefsiov1.SyncPhaseFailed
 				sync.Status.Reason = "manager pod not found"
-				return ctrl.Result{}, r.Status().Update(ctx, sync)
+				return ctrl.Result{}, r.updateStatus(ctx, sync)
 			}
 			l.Error(err, "failed to get manager pod")
 			return ctrl.Result{}, err
@@ -212,7 +213,7 @@ func (r *SyncReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		status, err := r.calculateSyncStats(ctx, sync, managerPod)
 		if !reflect.DeepEqual(sync.Status, status) {
 			sync.Status = status
-			if err := r.Status().Update(ctx, sync); err != nil {
+			if err := r.updateStatus(ctx, sync); err != nil {
 				return ctrl.Result{}, err
 			}
 		}
@@ -382,7 +383,9 @@ func (r *SyncReconciler) prepareWorkerPod(ctx context.Context, sync *juicefsiov1
 			}
 			ips := make([]string, 0, len(pods.Items))
 			for _, pod := range pods.Items {
-				if utils.IsPodReady(pod) {
+				// If the pod is in a succeeded phase here, may be the sync has been completed
+				// and the status update error by conflict, we can ignore it.
+				if utils.IsPodReady(pod) || pod.Status.Phase == corev1.PodSucceeded {
 					ips = append(ips, pod.Status.PodIP)
 				} else {
 					log.Info("worker pod not ready", "pod", pod.Name, "status", pod.Status.Phase, "reason", utils.PodNotReadyReason(pod))
@@ -456,6 +459,15 @@ func (r *SyncReconciler) prepareManagerPod(ctx context.Context, sync *juicefsiov
 			time.Sleep(5 * time.Second)
 		}
 	}
+}
+
+func (r *SyncReconciler) updateStatus(ctx context.Context, sync *juicefsiov1.Sync) error {
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		if err := r.Get(ctx, client.ObjectKey{Namespace: sync.Namespace, Name: sync.Name}, sync); err != nil {
+			return err
+		}
+		return r.Status().Update(ctx, sync)
+	})
 }
 
 // SetupWithManager sets up the controller with the Manager.

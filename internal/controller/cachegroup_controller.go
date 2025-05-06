@@ -209,6 +209,10 @@ func (r *CacheGroupReconciler) actualShouldbeUpdate(updateStrategyType appsv1.Da
 	if updateStrategyType == appsv1.OnDeleteDaemonSetStrategyType {
 		return false
 	}
+	// pod may be evicted or some exit without restarting., so we need to recreate it
+	if actual.Status.Phase == corev1.PodFailed || actual.Status.Phase == corev1.PodUnknown || actual.Status.Phase == corev1.PodSucceeded {
+		return true
+	}
 	if expect.Annotations[common.LabelWorkerHash] != actual.Annotations[common.LabelWorkerHash] {
 		return true
 	}

@@ -26,6 +26,8 @@ type ParsedSyncSink struct {
 	Envs           []corev1.EnvVar
 	PrepareCommand string
 	FilesFrom      *SyncFilesFrom `json:"filesFrom,omitempty"`
+
+	ExtraSecretVolumes map[string]string `json:"extraSecretVolumes,omitempty"`
 }
 
 type SyncSinkValue struct {
@@ -66,6 +68,11 @@ type SyncSinkJuiceFS struct {
 	AuthOptions []string       `json:"authOptions,omitempty"`
 	FilesFrom   *SyncFilesFrom `json:"filesFrom,omitempty"`
 
+	// +optional
+	// for ceph object storage
+	// [secretName]: [mountPath]
+	ExtraSecretVolumes map[string]string `json:"extraSecretVolumes,omitempty"`
+
 	// Required in on-premise environment
 	ConsoleUrl string `json:"consoleUrl,omitempty"`
 }
@@ -77,6 +84,11 @@ type SyncSinkJuiceFSCE struct {
 	// +optional
 	Path      string         `json:"path,omitempty"`
 	FilesFrom *SyncFilesFrom `json:"filesFrom,omitempty"`
+
+	// +optional
+	// for ceph object storage
+	// [secretName]: [mountPath]
+	ExtraSecretVolumes map[string]string `json:"extraSecretVolumes,omitempty"`
 }
 
 type SyncSinkPVC struct {

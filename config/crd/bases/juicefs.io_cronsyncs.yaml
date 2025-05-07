@@ -745,6 +745,10 @@ spec:
                                 type: array
                               consoleUrl:
                                 type: string
+                              extraSecretVolumes:
+                                additionalProperties:
+                                  type: string
+                                type: object
                               filesFrom:
                                 properties:
                                   configMap:
@@ -897,6 +901,10 @@ spec:
                             type: object
                           juicefsCE:
                             properties:
+                              extraSecretVolumes:
+                                additionalProperties:
+                                  type: string
+                                type: object
                               filesFrom:
                                 properties:
                                   configMap:
@@ -1279,6 +1287,10 @@ spec:
                                 type: array
                               consoleUrl:
                                 type: string
+                              extraSecretVolumes:
+                                additionalProperties:
+                                  type: string
+                                type: object
                               filesFrom:
                                 properties:
                                   configMap:
@@ -1431,6 +1443,10 @@ spec:
                             type: object
                           juicefsCE:
                             properties:
+                              extraSecretVolumes:
+                                additionalProperties:
+                                  type: string
+                                type: object
                               filesFrom:
                                 properties:
                                   configMap:

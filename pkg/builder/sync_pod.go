@@ -25,6 +25,7 @@ import (
 	juicefsiov1 "github.com/juicedata/juicefs-operator/api/v1"
 	"github.com/juicedata/juicefs-operator/pkg/common"
 	"github.com/juicedata/juicefs-operator/pkg/utils"
+	"github.com/samber/lo"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -250,6 +251,41 @@ func (s *SyncPodBuilder) genSyncVolumes(isManager bool) ([]corev1.Volume, []core
 		volumeMounts = append(volumeMounts, corev1.VolumeMount{
 			Name:      "files-from",
 			MountPath: common.SyncFileFromPath,
+		})
+	}
+
+	for secretName, mp := range s.from.ExtraSecretVolumes {
+		volumes = append(volumes, corev1.Volume{
+			Name: secretName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: mp,
+				},
+			},
+		})
+		volumeMounts = append(volumeMounts, corev1.VolumeMount{
+			Name:      secretName,
+			MountPath: mp,
+		})
+	}
+
+	for secretName, mp := range s.to.ExtraSecretVolumes {
+		if lo.ContainsBy(volumes, func(v corev1.Volume) bool {
+			return v.Name == secretName
+		}) {
+			continue
+		}
+		volumes = append(volumes, corev1.Volume{
+			Name: secretName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: mp,
+				},
+			},
+		})
+		volumeMounts = append(volumeMounts, corev1.VolumeMount{
+			Name:      secretName,
+			MountPath: mp,
 		})
 	}
 

@@ -25,6 +25,7 @@ import (
 	juicefsiov1 "github.com/juicedata/juicefs-operator/api/v1"
 	"github.com/juicedata/juicefs-operator/pkg/common"
 	"github.com/juicedata/juicefs-operator/pkg/utils"
+	"github.com/samber/lo"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -251,6 +252,48 @@ func (s *SyncPodBuilder) genSyncVolumes(isManager bool) ([]corev1.Volume, []core
 			Name:      "files-from",
 			MountPath: common.SyncFileFromPath,
 		})
+	}
+
+	extraVolumes := []juicefsiov1.ExtraVolume{}
+	if s.from.ExtraVolumes != nil {
+		extraVolumes = append(extraVolumes, s.from.ExtraVolumes...)
+	}
+	if s.to.ExtraVolumes != nil {
+		extraVolumes = append(extraVolumes, s.to.ExtraVolumes...)
+	}
+	for _, extraVolume := range extraVolumes {
+		if extraVolume.ConfigMap != nil {
+			if lo.ContainsBy(volumes, func(v corev1.Volume) bool { return v.Name == extraVolume.ConfigMap.Name }) {
+				continue
+			}
+			volumes = append(volumes, corev1.Volume{
+				Name: extraVolume.ConfigMap.Name,
+				VolumeSource: corev1.VolumeSource{
+					ConfigMap: &corev1.ConfigMapVolumeSource{
+						LocalObjectReference: corev1.LocalObjectReference{Name: extraVolume.ConfigMap.Name},
+					}},
+			})
+			volumeMounts = append(volumeMounts, corev1.VolumeMount{
+				Name:      extraVolume.ConfigMap.Name,
+				MountPath: extraVolume.ConfigMap.MountPath,
+			})
+		}
+		if extraVolume.Secret != nil {
+			if lo.ContainsBy(volumes, func(v corev1.Volume) bool { return v.Name == extraVolume.Secret.Name }) {
+				continue
+			}
+			volumes = append(volumes, corev1.Volume{
+				Name: extraVolume.Secret.Name,
+				VolumeSource: corev1.VolumeSource{
+					Secret: &corev1.SecretVolumeSource{
+						SecretName: extraVolume.Secret.Name,
+					}},
+			})
+			volumeMounts = append(volumeMounts, corev1.VolumeMount{
+				Name:      extraVolume.Secret.Name,
+				MountPath: extraVolume.Secret.MountPath,
+			})
+		}
 	}
 
 	if !s.IsDistributed {

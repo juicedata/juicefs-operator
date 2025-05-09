@@ -36,6 +36,13 @@ spec:
     #         name: sync-test-secret
     #         key: token
     #   volumeName: sync-test
+    #   extraVolumes:
+    #     - configMap:
+    #         name: sync-test-configmap
+    #         mountPath: /sync-test
+    #     - secret:
+    #         name: sync-test-secret
+    #         mountPath: /sync-test
     #   filesFrom:
     #     configmap:
     #       name: sync-test-configmap
@@ -44,6 +51,13 @@ spec:
     #   metaurl: redis://127.0.0.1:6379/0
     #   metaPassword:
     #     value: password
+    #   extraVolumes:
+    #     - configMap:
+    #         name: sync-test-configmap
+    #         mountPath: /sync-test
+    #     - secret:
+    #         name: sync-test-secret
+    #         mountPath: /sync-test
   to:
     juicefs:
       path: /sync-test/demo2/

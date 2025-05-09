@@ -66,12 +66,15 @@ type SyncReconciler struct {
 func (r *SyncReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	l := log.FromContext(ctx)
 
+	l.Info("sync reconcile", "name", req.Name, "namespace", req.Namespace)
 	sync := &juicefsiov1.Sync{}
 	if err := r.Get(ctx, req.NamespacedName, sync); err != nil {
+		l.Error(err, "failed to get sync")
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
 	if !sync.GetDeletionTimestamp().IsZero() {
+		l.Info("sync is being deleted")
 		return ctrl.Result{}, nil
 	}
 
@@ -116,6 +119,7 @@ func (r *SyncReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	if sync.Status.Phase == juicefsiov1.SyncPhasePending || sync.Status.Phase == "" {
 		sync.Status.Phase = juicefsiov1.SyncPhasePreparing
 		sync.Status.PreparingAt = &metav1.Time{Time: time.Now()}
+		l.Info("sync phase is pending, set to preparing")
 		if err := r.updateStatus(ctx, sync); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -463,9 +467,11 @@ func (r *SyncReconciler) prepareManagerPod(ctx context.Context, sync *juicefsiov
 
 func (r *SyncReconciler) updateStatus(ctx context.Context, sync *juicefsiov1.Sync) error {
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		if err := r.Get(ctx, client.ObjectKey{Namespace: sync.Namespace, Name: sync.Name}, sync); err != nil {
+		newSync := &juicefsiov1.Sync{}
+		if err := r.Get(ctx, client.ObjectKey{Namespace: sync.Namespace, Name: sync.Name}, newSync); err != nil {
 			return err
 		}
+		newSync.Status = sync.Status
 		return r.Status().Update(ctx, sync)
 	})
 }

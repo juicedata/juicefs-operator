@@ -254,14 +254,14 @@ func (s *SyncPodBuilder) genSyncVolumes(isManager bool) ([]corev1.Volume, []core
 		})
 	}
 
-	extraVolume := []juicefsiov1.ExtraVolume{}
+	extraVolumes := []juicefsiov1.ExtraVolume{}
 	if s.from.ExtraVolumes != nil {
-		extraVolume = append(extraVolume, s.from.ExtraVolumes...)
+		extraVolumes = append(extraVolumes, s.from.ExtraVolumes...)
 	}
 	if s.to.ExtraVolumes != nil {
-		extraVolume = append(extraVolume, s.to.ExtraVolumes...)
+		extraVolumes = append(extraVolumes, s.to.ExtraVolumes...)
 	}
-	for _, extraVolume := range extraVolume {
+	for _, extraVolume := range extraVolumes {
 		if extraVolume.ConfigMap != nil {
 			if lo.ContainsBy(volumes, func(v corev1.Volume) bool { return v.Name == extraVolume.ConfigMap.Name }) {
 				continue

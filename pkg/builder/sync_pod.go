@@ -254,39 +254,46 @@ func (s *SyncPodBuilder) genSyncVolumes(isManager bool) ([]corev1.Volume, []core
 		})
 	}
 
-	for secretName, mp := range s.from.ExtraSecretVolumes {
-		volumes = append(volumes, corev1.Volume{
-			Name: secretName,
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName: mp,
-				},
-			},
-		})
-		volumeMounts = append(volumeMounts, corev1.VolumeMount{
-			Name:      secretName,
-			MountPath: mp,
-		})
+	extraVolume := []juicefsiov1.ExtraVolume{}
+	if s.from.ExtraVolumes != nil {
+		extraVolume = append(extraVolume, s.from.ExtraVolumes...)
 	}
-
-	for secretName, mp := range s.to.ExtraSecretVolumes {
-		if lo.ContainsBy(volumes, func(v corev1.Volume) bool {
-			return v.Name == secretName
-		}) {
-			continue
+	if s.to.ExtraVolumes != nil {
+		extraVolume = append(extraVolume, s.to.ExtraVolumes...)
+	}
+	for _, extraVolume := range extraVolume {
+		if extraVolume.ConfigMap != nil {
+			if lo.ContainsBy(volumes, func(v corev1.Volume) bool { return v.Name == extraVolume.ConfigMap.Name }) {
+				continue
+			}
+			volumes = append(volumes, corev1.Volume{
+				Name: extraVolume.ConfigMap.Name,
+				VolumeSource: corev1.VolumeSource{
+					ConfigMap: &corev1.ConfigMapVolumeSource{
+						LocalObjectReference: corev1.LocalObjectReference{Name: extraVolume.ConfigMap.Name},
+					}},
+			})
+			volumeMounts = append(volumeMounts, corev1.VolumeMount{
+				Name:      extraVolume.ConfigMap.Name,
+				MountPath: extraVolume.ConfigMap.MountPath,
+			})
 		}
-		volumes = append(volumes, corev1.Volume{
-			Name: secretName,
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName: mp,
-				},
-			},
-		})
-		volumeMounts = append(volumeMounts, corev1.VolumeMount{
-			Name:      secretName,
-			MountPath: mp,
-		})
+		if extraVolume.Secret != nil {
+			if lo.ContainsBy(volumes, func(v corev1.Volume) bool { return v.Name == extraVolume.Secret.Name }) {
+				continue
+			}
+			volumes = append(volumes, corev1.Volume{
+				Name: extraVolume.Secret.Name,
+				VolumeSource: corev1.VolumeSource{
+					Secret: &corev1.SecretVolumeSource{
+						SecretName: extraVolume.Secret.Name,
+					}},
+			})
+			volumeMounts = append(volumeMounts, corev1.VolumeMount{
+				Name:      extraVolume.Secret.Name,
+				MountPath: extraVolume.Secret.MountPath,
+			})
+		}
 	}
 
 	if !s.IsDistributed {

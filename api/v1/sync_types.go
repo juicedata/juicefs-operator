@@ -21,13 +21,23 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+type nameMountPath struct {
+	Name      string `json:"name"`
+	MountPath string `json:"mountPath"`
+}
+
+type ExtraVolume struct {
+	ConfigMap *nameMountPath `json:"configMap,omitempty"`
+	Secret    *nameMountPath `json:"secret,omitempty"`
+}
+
 type ParsedSyncSink struct {
 	Uri            string
 	Envs           []corev1.EnvVar
 	PrepareCommand string
 	FilesFrom      *SyncFilesFrom `json:"filesFrom,omitempty"`
 
-	ExtraSecretVolumes map[string]string `json:"extraSecretVolumes,omitempty"`
+	ExtraVolumes []ExtraVolume `json:"extraVolumes,omitempty"`
 }
 
 type SyncSinkValue struct {
@@ -69,9 +79,7 @@ type SyncSinkJuiceFS struct {
 	FilesFrom   *SyncFilesFrom `json:"filesFrom,omitempty"`
 
 	// +optional
-	// for ceph object storage
-	// [secretName]: [mountPath]
-	ExtraSecretVolumes map[string]string `json:"extraSecretVolumes,omitempty"`
+	ExtraVolumes []ExtraVolume `json:"extraVolumes,omitempty"`
 
 	// Required in on-premise environment
 	ConsoleUrl string `json:"consoleUrl,omitempty"`
@@ -86,9 +94,7 @@ type SyncSinkJuiceFSCE struct {
 	FilesFrom *SyncFilesFrom `json:"filesFrom,omitempty"`
 
 	// +optional
-	// for ceph object storage
-	// [secretName]: [mountPath]
-	ExtraSecretVolumes map[string]string `json:"extraSecretVolumes,omitempty"`
+	ExtraVolumes []ExtraVolume `json:"extraVolumes,omitempty"`
 }
 
 type SyncSinkPVC struct {

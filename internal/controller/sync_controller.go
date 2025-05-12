@@ -66,7 +66,7 @@ type SyncReconciler struct {
 func (r *SyncReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	l := log.FromContext(ctx)
 
-	l.Info("sync reconcile", "name", req.Name, "namespace", req.Namespace)
+	l.V(1).Info("sync reconcile")
 	sync := &juicefsiov1.Sync{}
 	if err := r.Get(ctx, req.NamespacedName, sync); err != nil {
 		l.Error(err, "failed to get sync")
@@ -74,7 +74,7 @@ func (r *SyncReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	}
 
 	if !sync.GetDeletionTimestamp().IsZero() {
-		l.Info("sync is being deleted")
+		l.V(1).Info("sync is being deleted")
 		return ctrl.Result{}, nil
 	}
 
@@ -119,7 +119,6 @@ func (r *SyncReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	if sync.Status.Phase == juicefsiov1.SyncPhasePending || sync.Status.Phase == "" {
 		sync.Status.Phase = juicefsiov1.SyncPhasePreparing
 		sync.Status.PreparingAt = &metav1.Time{Time: time.Now()}
-		l.Info("sync phase is pending, set to preparing")
 		if err := r.updateStatus(ctx, sync); err != nil {
 			return ctrl.Result{}, err
 		}

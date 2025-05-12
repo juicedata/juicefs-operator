@@ -704,6 +704,31 @@ spec:
                         type: array
                       consoleUrl:
                         type: string
+                      extraVolumes:
+                        items:
+                          properties:
+                            configMap:
+                              properties:
+                                mountPath:
+                                  type: string
+                                name:
+                                  type: string
+                              required:
+                              - mountPath
+                              - name
+                              type: object
+                            secret:
+                              properties:
+                                mountPath:
+                                  type: string
+                                name:
+                                  type: string
+                              required:
+                              - mountPath
+                              - name
+                              type: object
+                          type: object
+                        type: array
                       filesFrom:
                         properties:
                           configMap:
@@ -856,6 +881,31 @@ spec:
                     type: object
                   juicefsCE:
                     properties:
+                      extraVolumes:
+                        items:
+                          properties:
+                            configMap:
+                              properties:
+                                mountPath:
+                                  type: string
+                                name:
+                                  type: string
+                              required:
+                              - mountPath
+                              - name
+                              type: object
+                            secret:
+                              properties:
+                                mountPath:
+                                  type: string
+                                name:
+                                  type: string
+                              required:
+                              - mountPath
+                              - name
+                              type: object
+                          type: object
+                        type: array
                       filesFrom:
                         properties:
                           configMap:
@@ -1238,6 +1288,31 @@ spec:
                         type: array
                       consoleUrl:
                         type: string
+                      extraVolumes:
+                        items:
+                          properties:
+                            configMap:
+                              properties:
+                                mountPath:
+                                  type: string
+                                name:
+                                  type: string
+                              required:
+                              - mountPath
+                              - name
+                              type: object
+                            secret:
+                              properties:
+                                mountPath:
+                                  type: string
+                                name:
+                                  type: string
+                              required:
+                              - mountPath
+                              - name
+                              type: object
+                          type: object
+                        type: array
                       filesFrom:
                         properties:
                           configMap:
@@ -1390,6 +1465,31 @@ spec:
                     type: object
                   juicefsCE:
                     properties:
+                      extraVolumes:
+                        items:
+                          properties:
+                            configMap:
+                              properties:
+                                mountPath:
+                                  type: string
+                                name:
+                                  type: string
+                              required:
+                              - mountPath
+                              - name
+                              type: object
+                            secret:
+                              properties:
+                                mountPath:
+                                  type: string
+                                name:
+                                  type: string
+                              required:
+                              - mountPath
+                              - name
+                              type: object
+                          type: object
+                        type: array
                       filesFrom:
                         properties:
                           configMap:

@@ -162,6 +162,7 @@ func parseJuiceFSSyncSink(jfs *juicefsiov1.SyncSinkJuiceFS, syncName, ref string
 		authCmd = append(authCmd, "--"+pair[0])
 	}
 	pss.PrepareCommand += strings.Join(authCmd, " ")
+	pss.ExtraVolumes = jfs.ExtraVolumes
 	return pss, nil
 }
 
@@ -189,6 +190,7 @@ func parseJuiceFSCeSyncSink(jfs *juicefsiov1.SyncSinkJuiceFSCE, syncName, ref st
 	if err != nil {
 		return nil, err
 	}
+	pss.ExtraVolumes = jfs.ExtraVolumes
 	return pss, nil
 }
 

@@ -252,15 +252,19 @@ func NewCleanCacheJob(cg juicefsiov1.CacheGroup, worker corev1.Pod) *batchv1.Job
 			MountPath: fmt.Sprintf("/var/jfsCache/%s", volume.Name),
 		})
 	}
+
+	labels := map[string]string{}
+	maps.Copy(labels, cg.Labels)
+	labels[common.LabelAppType] = common.LabelCleanCacheJobValue
+	labels[common.LabelCacheGroup] = utils.TruncateLabelValue(cg.Name)
+	labels[common.LabelManagedBy] = common.LabelManagedByValue
+
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      common.GenCleanCacheJobName(worker.Spec.NodeName),
-			Namespace: worker.Namespace,
-			Labels: map[string]string{
-				common.LabelAppType:    common.LabelCleanCacheJobValue,
-				common.LabelCacheGroup: utils.TruncateLabelValue(cg.Name),
-				common.LabelManagedBy:  common.LabelManagedByValue,
-			},
+			Name:        common.GenCleanCacheJobName(worker.Spec.NodeName),
+			Namespace:   worker.Namespace,
+			Labels:      labels,
+			Annotations: cg.Annotations,
 		},
 		Spec: batchv1.JobSpec{
 			Parallelism:             utils.ToPtr(int32(1)),

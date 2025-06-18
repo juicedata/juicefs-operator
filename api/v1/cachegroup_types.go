@@ -45,13 +45,14 @@ type CacheDir struct {
 
 // CacheGroupWorkerTemplate defines cache group worker template
 type CacheGroupWorkerTemplate struct {
+	Labels             map[string]string   `json:"labels,omitempty" protobuf:"bytes,11,rep,name=labels"`
+	Annotations        map[string]string   `json:"annotations,omitempty" protobuf:"bytes,12,rep,name=annotations"`
 	NodeSelector       map[string]string   `json:"nodeSelector,omitempty"`
 	ServiceAccountName string              `json:"serviceAccountName,omitempty"`
 	HostNetwork        *bool               `json:"hostNetwork,omitempty"`
 	SchedulerName      string              `json:"schedulerName,omitempty"`
 	Tolerations        []corev1.Toleration `json:"tolerations,omitempty"`
 	CacheDirs          []CacheDir          `json:"cacheDirs,omitempty"`
-
 	// Container image.
 	// More info: https://kubernetes.io/docs/concepts/containers/images
 	// This field is optional to allow higher level config management to default or override
@@ -129,6 +130,7 @@ type CacheGroupWorkerOverwrite struct {
 }
 
 type CacheGroupWorkerSpec struct {
+	// +kubebuilder:validation:Required
 	Template  CacheGroupWorkerTemplate    `json:"template,omitempty"`
 	Overwrite []CacheGroupWorkerOverwrite `json:"overwrite,omitempty"`
 }

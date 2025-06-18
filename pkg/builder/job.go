@@ -253,18 +253,19 @@ func NewCleanCacheJob(cg juicefsiov1.CacheGroup, worker corev1.Pod) *batchv1.Job
 		})
 	}
 
-	labels := map[string]string{}
-	maps.Copy(labels, cg.Labels)
-	labels[common.LabelAppType] = common.LabelCleanCacheJobValue
-	labels[common.LabelCacheGroup] = utils.TruncateLabelValue(cg.Name)
-	labels[common.LabelManagedBy] = common.LabelManagedByValue
+	podAnnotations := maps.Clone(worker.Annotations)
+	podLabels := maps.Clone(worker.Labels)
+	podLabels[common.LabelAppType] = common.LabelCleanCacheJobValue
 
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        common.GenCleanCacheJobName(worker.Spec.NodeName),
-			Namespace:   worker.Namespace,
-			Labels:      labels,
-			Annotations: cg.Annotations,
+			Name:      common.GenCleanCacheJobName(cg.Name, worker.Spec.NodeName),
+			Namespace: worker.Namespace,
+			Labels: map[string]string{
+				common.LabelAppType:    common.LabelCleanCacheJobValue,
+				common.LabelCacheGroup: utils.TruncateLabelValue(cg.Name),
+				common.LabelManagedBy:  common.LabelManagedByValue,
+			},
 		},
 		Spec: batchv1.JobSpec{
 			Parallelism:             utils.ToPtr(int32(1)),
@@ -272,11 +273,8 @@ func NewCleanCacheJob(cg juicefsiov1.CacheGroup, worker corev1.Pod) *batchv1.Job
 			TTLSecondsAfterFinished: utils.ToPtr(int32(60)),
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{
-						common.LabelAppType:    common.LabelCleanCacheJobValue,
-						common.LabelCacheGroup: utils.TruncateLabelValue(cg.Name),
-						common.LabelManagedBy:  common.LabelManagedByValue,
-					},
+					Labels:      podLabels,
+					Annotations: podAnnotations,
 				},
 				Spec: corev1.PodSpec{
 					RestartPolicy: corev1.RestartPolicyNever,

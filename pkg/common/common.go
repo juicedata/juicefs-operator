@@ -53,9 +53,8 @@ const (
 	LabelManagedByValue     = "juicefs-operator"
 	LabelCacheGroup         = "juicefs.io/cache-group"
 	LabelWorkerHash         = "juicefs.io/worker-hash"
-	LabelWorker             = "app.kubernetes.io/name"
-	LabelWorkerValue        = "juicefs-cache-group-worker"
 	LabelAppType            = "app.kubernetes.io/name"
+	LabelWorkerValue        = "juicefs-cache-group-worker"
 	LabelJobValue           = "juicefs-warmup-job"
 	LabelCronJobValue       = "juicefs-warmup-cron-job"
 	LabelCleanCacheJobValue = "juicefs-clean-cache-job"
@@ -118,8 +117,8 @@ func GenJobName(wuName string) string {
 	return fmt.Sprintf("%s-%s", WarmUpNamePrefix, wuName)
 }
 
-func GenCleanCacheJobName(nodeName string) string {
-	return fmt.Sprintf("%s-%s", CleanCacheContainerName, nodeName)
+func GenCleanCacheJobName(cgName, nodeName string) string {
+	return fmt.Sprintf("%s-%s-%s", CleanCacheContainerName, cgName, nodeName)
 }
 
 func GenSyncSecretName(syncJobName string) string {

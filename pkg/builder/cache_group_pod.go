@@ -17,6 +17,7 @@ package builder
 import (
 	"context"
 	"fmt"
+	"maps"
 	"regexp"
 	"sort"
 	"strings"
@@ -102,7 +103,7 @@ func newBasicPod(cg *juicefsiov1.CacheGroup, nodeName string) *corev1.Pod {
 			Annotations: map[string]string{},
 			Labels: map[string]string{
 				common.LabelCacheGroup: utils.TruncateLabelValue(cg.Name),
-				common.LabelWorker:     common.LabelWorkerValue,
+				common.LabelAppType:    common.LabelWorkerValue,
 			},
 			OwnerReferences: []metav1.OwnerReference{
 				{
@@ -347,6 +348,8 @@ func (p *PodBuilder) NewCacheGroupWorker(ctx context.Context) *corev1.Pod {
 			worker.Spec.ImagePullSecrets = common.OperatorPod.Spec.ImagePullSecrets
 		}
 	}
+	maps.Copy(worker.Labels, spec.Labels)
+	maps.Copy(worker.Annotations, spec.Annotations)
 	worker.Spec.Tolerations = spec.Tolerations
 	worker.Spec.SchedulerName = spec.SchedulerName
 	worker.Spec.ServiceAccountName = spec.ServiceAccountName

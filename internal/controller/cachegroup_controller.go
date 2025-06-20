@@ -92,7 +92,6 @@ func (r *CacheGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, nil
 	}
 
-	// TODO(user): your logic here
 	// compare the state specified by the CacheGroup object against the actual cluster state
 	expectStates, err := r.parseExpectState(ctx, cg)
 	if err != nil {
@@ -161,7 +160,7 @@ func (r *CacheGroupReconciler) sync(ctx context.Context, cg *juicefsiov1.CacheGr
 				}
 				// Wait for the worker to be ready
 				if err := r.waitForWorkerReady(ctx, cg, expectWorker.Name); err != nil {
-					log.Error(err, "failed to wait for worker to be ready", "worker", expectWorker.Name)
+					log.Info("worker is not ready, waiting for next reconciler", "worker", expectWorker.Name, "err", err)
 					errCh <- err
 					return
 				}
@@ -520,14 +519,20 @@ func (r *CacheGroupReconciler) HandleFinalizer(ctx context.Context, cg *juicefsi
 	if !cg.Spec.CleanCache {
 		return nil
 	}
-	workers, err := r.listActualWorkers(ctx, cg)
+	expectStates, err := r.parseExpectState(ctx, cg)
 	if err != nil {
-		log.Error(err, "failed to list actual worker nodes")
 		return err
 	}
-	for _, worker := range workers {
-		if err := r.cleanWorkerCache(ctx, cg, worker); err != nil {
-			log.Error(err, "failed to clean worker cache", "worker", worker.Name)
+	secret := &corev1.Secret{}
+	if err := r.Get(ctx, client.ObjectKey{Namespace: cg.Namespace, Name: cg.Spec.SecretRef.Name}, secret); err != nil {
+		log.Error(err, "failed to get secret", "secret", cg.Spec.SecretRef.Name)
+		return err
+	}
+	for node, expectState := range expectStates {
+		podBuilder := builder.NewPodBuilder(cg, secret, node, expectState, false)
+		expectWorker := podBuilder.NewCacheGroupWorker(ctx)
+		if err := r.cleanWorkerCache(ctx, cg, *expectWorker); err != nil {
+			log.Error(err, "failed to clean worker cache", "worker", expectWorker.Name)
 		}
 	}
 	return nil

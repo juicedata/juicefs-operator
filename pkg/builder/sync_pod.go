@@ -261,7 +261,7 @@ func (s *SyncPodBuilder) genSyncVolumes(isManager bool) ([]corev1.Volume, []core
 	if s.to.ExtraVolumes != nil {
 		extraVolumes = append(extraVolumes, s.to.ExtraVolumes...)
 	}
-	for _, extraVolume := range extraVolumes {
+	for i, extraVolume := range extraVolumes {
 		if extraVolume.ConfigMap != nil {
 			if lo.ContainsBy(volumes, func(v corev1.Volume) bool { return v.Name == extraVolume.ConfigMap.Name }) {
 				continue
@@ -292,6 +292,21 @@ func (s *SyncPodBuilder) genSyncVolumes(isManager bool) ([]corev1.Volume, []core
 			volumeMounts = append(volumeMounts, corev1.VolumeMount{
 				Name:      extraVolume.Secret.Name,
 				MountPath: extraVolume.Secret.MountPath,
+			})
+		}
+		if extraVolume.HostPath != nil {
+			volumes = append(volumes, corev1.Volume{
+				Name: fmt.Sprintf("hostpath-%d", i),
+				VolumeSource: corev1.VolumeSource{
+					HostPath: &corev1.HostPathVolumeSource{
+						Path: extraVolume.HostPath.Path,
+						Type: extraVolume.HostPath.Type,
+					},
+				},
+			})
+			volumeMounts = append(volumeMounts, corev1.VolumeMount{
+				Name:      fmt.Sprintf("hostpath-%d", i),
+				MountPath: extraVolume.HostPath.MountPath,
 			})
 		}
 	}

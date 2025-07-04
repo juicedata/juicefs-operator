@@ -26,9 +26,16 @@ type nameMountPath struct {
 	MountPath string `json:"mountPath"`
 }
 
+type HostPath struct {
+	Path      string               `json:"path"`
+	Type      *corev1.HostPathType `json:"type,omitempty"`
+	MountPath string               `json:"mountPath"`
+}
+
 type ExtraVolume struct {
 	ConfigMap *nameMountPath `json:"configMap,omitempty"`
 	Secret    *nameMountPath `json:"secret,omitempty"`
+	HostPath  *HostPath      `json:"hostPath,omitempty"`
 }
 
 type ParsedSyncSink struct {
@@ -57,6 +64,8 @@ type SyncSinkExternal struct {
 	AccessKey SyncSinkValue  `json:"accessKey,omitempty"`
 	SecretKey SyncSinkValue  `json:"secretKey,omitempty"`
 	FilesFrom *SyncFilesFrom `json:"filesFrom,omitempty"`
+
+	ExtraVolumes []ExtraVolume `json:"extraVolumes,omitempty"`
 }
 
 type SyncFilesFrom struct {

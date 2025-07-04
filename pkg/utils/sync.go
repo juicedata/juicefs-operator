@@ -111,6 +111,7 @@ func parseExternalSyncSink(external *juicefsiov1.SyncSinkExternal, syncName, ref
 		ep.User = url.UserPassword(fmt.Sprintf("$%s", ak), fmt.Sprintf("$%s", sk))
 	}
 	pss.Uri = ep.String()
+	pss.ExtraVolumes = external.ExtraVolumes
 	return pss, nil
 }
 

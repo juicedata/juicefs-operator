@@ -22,14 +22,18 @@ import (
 )
 
 type nameMountPath struct {
-	Name      string `json:"name"`
+	// +kubebuilder:validation:Required
+	Name string `json:"name"`
+	// +kubebuilder:validation:Required
 	MountPath string `json:"mountPath"`
 }
 
 type HostPath struct {
-	Path      string               `json:"path"`
-	Type      *corev1.HostPathType `json:"type,omitempty"`
-	MountPath string               `json:"mountPath"`
+	// +kubebuilder:validation:Required
+	Path string               `json:"path"`
+	Type *corev1.HostPathType `json:"type,omitempty"`
+	// +kubebuilder:validation:Required
+	MountPath string `json:"mountPath"`
 }
 
 type ExtraVolume struct {

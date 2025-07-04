@@ -22,13 +22,24 @@ import (
 )
 
 type nameMountPath struct {
-	Name      string `json:"name"`
+	// +kubebuilder:validation:Required
+	Name string `json:"name"`
+	// +kubebuilder:validation:Required
+	MountPath string `json:"mountPath"`
+}
+
+type HostPath struct {
+	// +kubebuilder:validation:Required
+	Path string               `json:"path"`
+	Type *corev1.HostPathType `json:"type,omitempty"`
+	// +kubebuilder:validation:Required
 	MountPath string `json:"mountPath"`
 }
 
 type ExtraVolume struct {
 	ConfigMap *nameMountPath `json:"configMap,omitempty"`
 	Secret    *nameMountPath `json:"secret,omitempty"`
+	HostPath  *HostPath      `json:"hostPath,omitempty"`
 }
 
 type ParsedSyncSink struct {
@@ -57,6 +68,8 @@ type SyncSinkExternal struct {
 	AccessKey SyncSinkValue  `json:"accessKey,omitempty"`
 	SecretKey SyncSinkValue  `json:"secretKey,omitempty"`
 	FilesFrom *SyncFilesFrom `json:"filesFrom,omitempty"`
+
+	ExtraVolumes []ExtraVolume `json:"extraVolumes,omitempty"`
 }
 
 type SyncFilesFrom struct {

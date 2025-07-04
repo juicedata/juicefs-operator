@@ -58,6 +58,14 @@ spec:
     #     - secret:
     #         name: sync-test-secret
     #         mountPath: /sync-test
+    # external:
+    #   # support sync from/to hostPath, ensuring the path exists on each node.
+    #   uri: file:///data/jfs/
+    #   extraVolumes:
+    #     - hostPath:
+    #         path: /data/jfs/
+    #         type: Directory
+    #         mountPath: /data/jfs/
   to:
     juicefs:
       path: /sync-test/demo2/

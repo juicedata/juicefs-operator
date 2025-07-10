@@ -130,6 +130,11 @@ func (in *CacheGroupSpec) DeepCopyInto(out *CacheGroupSpec) {
 		*out = new(corev1.SecretEnvSource)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.Replicas != nil {
+		in, out := &in.Replicas, &out.Replicas
+		*out = new(int32)
+		**out = **in
+	}
 	in.Worker.DeepCopyInto(&out.Worker)
 	if in.BackupDuration != nil {
 		in, out := &in.BackupDuration, &out.BackupDuration

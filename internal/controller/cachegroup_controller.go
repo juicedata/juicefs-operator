@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -222,6 +223,22 @@ func (r *CacheGroupReconciler) actualShouldbeUpdate(updateStrategyType appsv1.Da
 }
 
 func (r *CacheGroupReconciler) parseExpectState(ctx context.Context, cg *juicefsiov1.CacheGroup) (map[string]juicefsiov1.CacheGroupWorkerTemplate, error) {
+	if cg.Spec.Replicas != nil {
+		return r.parseExpectStateByReplicas(cg), nil
+	}
+	return r.parseExpectStateByNodeSelector(ctx, cg)
+}
+
+func (r *CacheGroupReconciler) parseExpectStateByReplicas(cg *juicefsiov1.CacheGroup) map[string]juicefsiov1.CacheGroupWorkerTemplate {
+	expectStates := map[string]juicefsiov1.CacheGroupWorkerTemplate{}
+	for i := 0; i < int(*cg.Spec.Replicas); i++ {
+		workerName := fmt.Sprintf("%s-%s-%d", common.WorkerNamePrefix, cg.Name, i)
+		expectStates[workerName] = *cg.Spec.Worker.Template.DeepCopy()
+	}
+	return expectStates
+}
+
+func (r *CacheGroupReconciler) parseExpectStateByNodeSelector(ctx context.Context, cg *juicefsiov1.CacheGroup) (map[string]juicefsiov1.CacheGroupWorkerTemplate, error) {
 	expectAppliedNodes := corev1.NodeList{}
 	err := r.List(ctx, &expectAppliedNodes, client.MatchingLabels(cg.Spec.Worker.Template.NodeSelector))
 	if err != nil {
@@ -241,9 +258,15 @@ func (r *CacheGroupReconciler) parseExpectState(ctx context.Context, cg *juicefs
 	return expectStates, nil
 }
 
-func (r *CacheGroupReconciler) getActualState(ctx context.Context, cg *juicefsiov1.CacheGroup, nodename string) (*corev1.Pod, error) {
+func (r *CacheGroupReconciler) getActualState(ctx context.Context, cg *juicefsiov1.CacheGroup, workerName string) (*corev1.Pod, error) {
 	worker := &corev1.Pod{}
-	if err := r.Get(ctx, client.ObjectKey{Namespace: cg.Namespace, Name: common.GenWorkerName(cg.Name, nodename)}, worker); err != nil {
+	var podName string
+	if cg.Spec.Replicas != nil {
+		podName = workerName
+	} else {
+		podName = common.GenWorkerName(cg.Name, workerName)
+	}
+	if err := r.Get(ctx, client.ObjectKey{Namespace: cg.Namespace, Name: podName}, worker); err != nil {
 		return nil, err
 	}
 	return worker, nil
@@ -326,7 +349,13 @@ func (r *CacheGroupReconciler) removeRedundantWorkers(
 	actualWorks []corev1.Pod) error {
 	log := log.FromContext(ctx)
 	for _, worker := range actualWorks {
-		if _, ok := expectStates[worker.Spec.NodeName]; ok {
+		var workerKey string
+		if cg.Spec.Replicas != nil {
+			workerKey = worker.Name
+		} else {
+			workerKey = worker.Spec.NodeName
+		}
+		if _, ok := expectStates[workerKey]; ok {
 			continue
 		}
 		if worker.DeletionTimestamp != nil {
@@ -517,6 +546,10 @@ func (r *CacheGroupReconciler) cleanWorkerCache(ctx context.Context, cg *juicefs
 func (r *CacheGroupReconciler) HandleFinalizer(ctx context.Context, cg *juicefsiov1.CacheGroup) error {
 	log := log.FromContext(ctx)
 	if !cg.Spec.CleanCache {
+		return nil
+	}
+	if cg.Spec.Replicas != nil {
+		klog.Warningf("CacheGroup %s has replicas, clean cache job will not be created", cg.Name)
 		return nil
 	}
 	expectStates, err := r.parseExpectState(ctx, cg)

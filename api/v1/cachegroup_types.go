@@ -143,7 +143,10 @@ type CacheGroupSpec struct {
 	SecretRef      *corev1.SecretEnvSource         `json:"secretRef,omitempty"`
 	CleanCache     bool                            `json:"cleanCache,omitempty"`
 	CacheGroup     string                          `json:"cacheGroup,omitempty"`
-	Worker         CacheGroupWorkerSpec            `json:"worker,omitempty"`
+	// Replicas is the number of desired Pods.
+	// +kubebuilder:validation:Optional
+	Replicas *int32               `json:"replicas,omitempty"`
+	Worker   CacheGroupWorkerSpec `json:"worker,omitempty"`
 	// Duration for new node to join cluster with group-backup option
 	// Default is 10 minutes
 	// +optional

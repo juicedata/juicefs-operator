@@ -53,6 +53,9 @@ spec:
                 type: string
               cleanCache:
                 type: boolean
+              replicas:
+                format: int32
+                type: integer
               secretRef:
                 properties:
                   name:

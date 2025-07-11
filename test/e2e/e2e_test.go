@@ -565,6 +565,83 @@ var _ = Describe("controller", Ordered, func() {
 			}
 			Eventually(verifyWorkerWeightToZero, time.Minute, time.Second).Should(Succeed())
 		})
+
+		It("should reconcile the CacheGroup with replicas", func() {
+			cgName := "e2e-test-cachegroup-replicas"
+			cmd := exec.Command("kubectl", "apply", "-f", "test/e2e/config/e2e-test-cachegroup.replicas.yaml", "-n", namespace)
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("validating that the CacheGroup resource is reconciled")
+			verifyCacheGroupReconciled := func() error {
+				cmd := exec.Command("kubectl", "get", "cachegroups.juicefs.io", cgName, "-o", "jsonpath={.status.phase}", "-n", namespace)
+				status, err := utils.Run(cmd)
+				ExpectWithOffset(1, err).NotTo(HaveOccurred())
+
+				if string(status) != "Ready" {
+					return fmt.Errorf("CacheGroup resource in %s status", status)
+				}
+				return nil
+			}
+			Eventually(verifyCacheGroupReconciled, 5*time.Minute, 5*time.Second).Should(Succeed())
+
+			By("validating cache group workers created")
+			verifyWorkerCreated := func(replicas int) error {
+				cmd = exec.Command("kubectl", "get", "pods", "-l", "juicefs.io/cache-group="+cgName, "-n", namespace, "--no-headers")
+				result, err := utils.Run(cmd)
+				if err != nil {
+					return fmt.Errorf("worker pods not created")
+				}
+				if len(utils.GetNonEmptyLines(string(result))) != replicas {
+					return fmt.Errorf("expect %d worker pods created, but got %d", replicas, len(utils.GetNonEmptyLines(string(result))))
+				}
+				return nil
+			}
+			Eventually(func() error { return verifyWorkerCreated(2) }, 5*time.Minute, 3*time.Second).Should(Succeed())
+
+			By("validating cg status is up to date")
+			verifyCgStatusUpToDate := func(replicas int) error {
+				cmd := exec.Command("kubectl", "get",
+					"cachegroups.juicefs.io", cgName, "-o", "jsonpath={.status.readyWorker}",
+					"-n", namespace,
+				)
+				readyWorker, err := utils.Run(cmd)
+				ExpectWithOffset(1, err).NotTo(HaveOccurred())
+				if string(readyWorker) != fmt.Sprintf("%d", replicas) {
+					return fmt.Errorf("cg expect has %d readyWorker status, but got %s", replicas, readyWorker)
+				}
+				cmd = exec.Command("kubectl", "get",
+					"cachegroups.juicefs.io", cgName, "-o", "jsonpath={.status.expectWorker}",
+					"-n", namespace,
+				)
+				expectWorker, err := utils.Run(cmd)
+				ExpectWithOffset(1, err).NotTo(HaveOccurred())
+				if string(expectWorker) != fmt.Sprintf("%d", replicas) {
+					return fmt.Errorf("cg expect has %d expectWorker status, but got %s", replicas, expectWorker)
+				}
+				return nil
+			}
+			Eventually(func() error { return verifyCgStatusUpToDate(2) }, time.Minute, time.Second).Should(Succeed())
+
+			By("scaling up the cache group")
+			cmd = exec.Command("kubectl", "patch", "cachegroup", cgName, "-n", namespace, "--type", "merge", "-p", `{"spec":{"replicas":3}}`)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+			Eventually(func() error { return verifyWorkerCreated(3) }, 5*time.Minute, 3*time.Second).Should(Succeed())
+			Eventually(func() error { return verifyCgStatusUpToDate(3) }, time.Minute, time.Second).Should(Succeed())
+
+			By("scaling down the cache group")
+			cmd = exec.Command("kubectl", "patch", "cachegroup", cgName, "-n", namespace, "--type", "merge", "-p", `{"spec":{"replicas":1}}`)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+			Eventually(func() error { return verifyWorkerCreated(1) }, 5*time.Minute, 3*time.Second).Should(Succeed())
+			Eventually(func() error { return verifyCgStatusUpToDate(1) }, time.Minute, time.Second).Should(Succeed())
+
+			By("deleting the cache group")
+			cmd = exec.Command("kubectl", "delete", "cachegroups.juicefs.io", cgName, "-n", namespace)
+			_, err = utils.Run(cmd)
+			ExpectWithOffset(1, err).NotTo(HaveOccurred())
+		})
 	})
 
 	Context("WarmUp Controller", func() {

@@ -16,6 +16,10 @@ metadata:
   name: cachegroup-sample
   namespace: default
 spec:
+  # Number of desired cache-group pods.
+  # If not specified, a cache-group pod will be created on all nodes that match `worker.template.nodeSelector`
+  # If this field is used, it must be ensured that pod-ip can be fixed, and the cache disk can follow the pod to other nodes.
+  # replicas: 10
   secretRef:
     name: juicefs-secret
   # Duration for new node to join cluster with group-backup option

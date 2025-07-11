@@ -9,6 +9,7 @@ spec:
   worker:
     template:
       image: registry.cn-hangzhou.aliyuncs.com/juicedata/mount:ee-5.1.2-59d9736
+      dnsPolicy: ClusterFirstWithHostNet
       hostNetwork: true
       tolerations:
       - key: node-role.kubernetes.io/control-plane

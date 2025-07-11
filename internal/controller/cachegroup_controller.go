@@ -39,6 +39,7 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 )
 
@@ -54,6 +55,7 @@ type CacheGroupReconciler struct {
 // +kubebuilder:rbac:groups="",resources=nodes,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;delete;create;watch
 // +kubebuilder:rbac:groups="",resources=pods/exec,verbs=create
+// +kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=create;delete;get;list;update;watch
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
@@ -154,7 +156,7 @@ func (r *CacheGroupReconciler) sync(ctx context.Context, cg *juicefsiov1.CacheGr
 				if groupBackUp {
 					log.V(1).Info("new worker added, add group-backup option", "worker", expectWorker.Name)
 				}
-				if err := r.createOrUpdateWorker(ctx, actualState, expectWorker); err != nil {
+				if err := r.createOrUpdateWorker(ctx, cg, expectState, actualState, expectWorker); err != nil {
 					log.Error(err, "failed to create or update worker", "worker", expectWorker.Name)
 					errCh <- err
 					return
@@ -272,16 +274,32 @@ func (r *CacheGroupReconciler) getActualState(ctx context.Context, cg *juicefsio
 	return worker, nil
 }
 
-func (r *CacheGroupReconciler) createOrUpdateWorker(ctx context.Context, actual, expect *corev1.Pod) error {
+func (r *CacheGroupReconciler) createOrUpdateWorker(ctx context.Context, cg *juicefsiov1.CacheGroup, spec juicefsiov1.CacheGroupWorkerTemplate, actual, expect *corev1.Pod) error {
 	log := log.FromContext(ctx).WithValues("worker", expect.Name)
 	if actual == nil {
 		log.Info("create worker")
-		return r.createCacheGroupWorker(ctx, expect)
+		return r.createCacheGroupWorker(ctx, cg, spec, expect)
 	}
 	return r.updateCacheGroupWorker(ctx, actual, expect)
 }
 
-func (r *CacheGroupReconciler) createCacheGroupWorker(ctx context.Context, expectWorker *corev1.Pod) error {
+// ensurePVCsForWorker ensures all PVCs for a worker are created
+func (r *CacheGroupReconciler) ensurePVCsForWorker(ctx context.Context, cg *juicefsiov1.CacheGroup, workerName string, spec juicefsiov1.CacheGroupWorkerTemplate) error {
+	for i, cacheDir := range spec.CacheDirs {
+		if cacheDir.Type == juicefsiov1.CacheDirTypeVolumeClaimTemplates {
+			if err := r.createPVCForVolumeClaimTemplate(ctx, cg, workerName, cacheDir.VolumeClaimTemplate); err != nil {
+				return fmt.Errorf("failed to create PVC for cache dir %d: %w", i, err)
+			}
+		}
+	}
+	return nil
+}
+
+func (r *CacheGroupReconciler) createCacheGroupWorker(ctx context.Context, cg *juicefsiov1.CacheGroup, spec juicefsiov1.CacheGroupWorkerTemplate, expectWorker *corev1.Pod) error {
+	if err := r.ensurePVCsForWorker(ctx, cg, expectWorker.Name, spec); err != nil {
+		return fmt.Errorf("failed to ensure PVCs for worker %s: %w", expectWorker.Name, err)
+	}
+
 	err := r.Create(ctx, expectWorker)
 	if err != nil {
 		if apierrors.IsAlreadyExists(err) {
@@ -543,8 +561,60 @@ func (r *CacheGroupReconciler) cleanWorkerCache(ctx context.Context, cg *juicefs
 	return nil
 }
 
+// createPVCForVolumeClaimTemplate creates a PVC for a VolumeClaimTemplate
+func (r *CacheGroupReconciler) createPVCForVolumeClaimTemplate(ctx context.Context, cg *juicefsiov1.CacheGroup, workerName string, vct *corev1.PersistentVolumeClaim) error {
+	if vct == nil {
+		return fmt.Errorf("volumeClaimTemplate is required for VolumeClaimTemplates type")
+	}
+
+	pvcName := fmt.Sprintf("%s-%s", vct.Name, workerName)
+
+	// Check if PVC already exists
+	pvc := &corev1.PersistentVolumeClaim{}
+	err := r.Get(ctx, client.ObjectKey{Namespace: cg.Namespace, Name: pvcName}, pvc)
+	if err == nil {
+		// PVC already exists, no need to create
+		return nil
+	}
+	if !apierrors.IsNotFound(err) {
+		return err
+	}
+
+	// Create new PVC based on the template
+	pvc = &corev1.PersistentVolumeClaim{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pvcName,
+			Namespace: cg.Namespace,
+			Labels: map[string]string{
+				common.LabelCacheGroup: utils.TruncateLabelValue(cg.Name),
+				common.LabelManagedBy:  common.LabelManagedByValue,
+			},
+			Annotations: vct.Annotations,
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion: cg.APIVersion,
+					Kind:       cg.Kind,
+					Name:       cg.Name,
+					UID:        cg.UID,
+					Controller: utils.ToPtr(true),
+				},
+			},
+		},
+		Spec: vct.Spec,
+	}
+
+	return r.Create(ctx, pvc)
+}
+
 func (r *CacheGroupReconciler) HandleFinalizer(ctx context.Context, cg *juicefsiov1.CacheGroup) error {
 	log := log.FromContext(ctx)
+
+	// Delete PVCs created by VolumeClaimTemplates
+	if err := r.deletePVCsForCacheGroup(ctx, cg); err != nil {
+		log.Error(err, "failed to delete PVCs for cache group")
+		return err
+	}
+
 	if !cg.Spec.CleanCache {
 		return nil
 	}
@@ -571,11 +641,38 @@ func (r *CacheGroupReconciler) HandleFinalizer(ctx context.Context, cg *juicefsi
 	return nil
 }
 
+// deletePVCsForCacheGroup deletes all PVCs created by VolumeClaimTemplates for a cache group
+func (r *CacheGroupReconciler) deletePVCsForCacheGroup(ctx context.Context, cg *juicefsiov1.CacheGroup) error {
+	log := log.FromContext(ctx)
+
+	// List all PVCs with the cache group label
+	pvcList := &corev1.PersistentVolumeClaimList{}
+	if err := r.List(ctx, pvcList, client.MatchingLabels(map[string]string{
+		common.LabelCacheGroup: utils.TruncateLabelValue(cg.Name),
+		common.LabelManagedBy:  common.LabelManagedByValue,
+	})); err != nil {
+		return err
+	}
+
+	for _, pvc := range pvcList.Items {
+		log.Info("deleting PVC for cache group", "pvc", pvc.Name, "cacheGroup", cg.Name)
+		if err := r.Delete(ctx, &pvc); err != nil {
+			if !apierrors.IsNotFound(err) {
+				log.Error(err, "failed to delete PVC", "pvc", pvc.Name)
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *CacheGroupReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&juicefsiov1.CacheGroup{}).
 		Owns(&corev1.Pod{}).
+		Owns(&corev1.PersistentVolumeClaim{}).
 		Watches(&corev1.Node{}, r.enqueueRequestForNode()).
 		Complete(r)
 }

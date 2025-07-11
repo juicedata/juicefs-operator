@@ -267,6 +267,16 @@ func (p *PodBuilder) genCacheDirs() {
 					},
 				},
 			})
+		case juicefsiov1.CacheDirTypeVolumeClaimTemplates:
+			pvcName := fmt.Sprintf("%s-%s", dir.VolumeClaimTemplate.Name, p.node)
+			p.spec.Volumes = append(p.spec.Volumes, corev1.Volume{
+				Name: volumeName,
+				VolumeSource: corev1.VolumeSource{
+					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+						ClaimName: pvcName,
+					},
+				},
+			})
 		}
 		p.cacheDirsInContainer = append(p.cacheDirsInContainer, cachePathInContainer)
 	}

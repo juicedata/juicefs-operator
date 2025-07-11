@@ -36,6 +36,7 @@ const (
 	namespace = "juicefs-operator-system"
 	running   = "Running"
 	trueValue = "true"
+	ReadyStr  = "Ready"
 	image     = "registry.cn-hangzhou.aliyuncs.com/juicedata/mount:ee-5.1.2-59d9736"
 )
 
@@ -297,7 +298,7 @@ var _ = Describe("controller", Ordered, func() {
 				)
 				status, err := utils.Run(cmd)
 				ExpectWithOffset(1, err).NotTo(HaveOccurred())
-				if string(status) != "Ready" {
+				if string(status) != ReadyStr {
 					return fmt.Errorf("cg expect Ready status, but got %s", status)
 				}
 
@@ -578,7 +579,7 @@ var _ = Describe("controller", Ordered, func() {
 				status, err := utils.Run(cmd)
 				ExpectWithOffset(1, err).NotTo(HaveOccurred())
 
-				if string(status) != "Ready" {
+				if string(status) != ReadyStr {
 					return fmt.Errorf("CacheGroup resource in %s status", status)
 				}
 				return nil
@@ -683,7 +684,7 @@ var _ = Describe("controller", Ordered, func() {
 				)
 				status, err := utils.Run(cmd)
 				ExpectWithOffset(1, err).NotTo(HaveOccurred())
-				if string(status) != "Ready" {
+				if string(status) != ReadyStr {
 					return fmt.Errorf("cg expect Ready status, but got %s", status)
 				}
 				return nil

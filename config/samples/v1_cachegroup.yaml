@@ -53,6 +53,17 @@ spec:
       cacheDirs:
         - path: /var/jfsCache-0
           type: HostPath
+        # - type: VolumeClaimTemplates
+        #   volumeClaimTemplate:
+        #     metadata:
+        #       name: jfs
+        #     spec:
+        #       accessModes:
+        #       - ReadWriteOnce
+        #       resources:
+        #         requests:
+        #           storage: 20Gi
+        #       storageClassName: alicloud-disk-topology-alltype
       opts:
         - group-weight=100
         - cache-size=204800

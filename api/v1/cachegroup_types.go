@@ -28,12 +28,13 @@ import (
 type CacheDirType string
 
 var (
-	CacheDirTypeHostPath CacheDirType = "HostPath"
-	CacheDirTypePVC      CacheDirType = "PVC"
+	CacheDirTypeHostPath             CacheDirType = "HostPath"
+	CacheDirTypePVC                  CacheDirType = "PVC"
+	CacheDirTypeVolumeClaimTemplates CacheDirType = "VolumeClaimTemplates"
 )
 
 type CacheDir struct {
-	// +kubebuilder:validation:Enum=HostPath;PVC
+	// +kubebuilder:validation:Enum=HostPath;PVC;VolumeClaimTemplates
 	Type CacheDirType `json:"type,omitempty"`
 	// required for HostPath type
 	// +optional
@@ -41,6 +42,9 @@ type CacheDir struct {
 	// required for PVC type
 	// +optional
 	Name string `json:"name,omitempty"`
+	// required for VolumeClaimTemplates type
+	// +optional
+	VolumeClaimTemplate *corev1.PersistentVolumeClaim `json:"volumeClaimTemplate,omitempty"`
 }
 
 // CacheGroupWorkerTemplate defines cache group worker template

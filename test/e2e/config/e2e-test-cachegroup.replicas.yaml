@@ -1,0 +1,24 @@
+apiVersion: juicefs.io/v1
+kind: CacheGroup
+metadata:
+  name: e2e-test-cachegroup-replicas
+spec:
+  replicas: 2
+  secretRef:
+    name: juicefs-secret
+  worker:
+    template:
+      image: registry.cn-hangzhou.aliyuncs.com/juicedata/mount:ee-5.1.2-59d9736
+      dnsPolicy: ClusterFirstWithHostNet
+      hostNetwork: true
+      tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+      resources:
+        limits:
+          cpu: "1"
+          memory: 1Gi
+        requests:
+          cpu: 100m
+          memory: 128Mi

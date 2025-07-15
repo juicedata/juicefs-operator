@@ -96,6 +96,10 @@ func GenCacheGroupName(cg *juicefsiov1.CacheGroup) string {
 
 func newBasicPod(cg *juicefsiov1.CacheGroup, nodeName string) *corev1.Pod {
 	workerName := common.GenWorkerName(cg.Name, nodeName)
+	if cg.Spec.Replicas != nil {
+		// If replicas is set, nodeName is exactly the worker name.
+		workerName = nodeName
+	}
 	worker := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        workerName,
@@ -121,8 +125,37 @@ func newBasicPod(cg *juicefsiov1.CacheGroup, nodeName string) *corev1.Pod {
 					Privileged: utils.ToPtr(true),
 				},
 			}},
-			NodeName: nodeName,
 		},
+	}
+	if cg.Spec.Replicas == nil {
+		worker.Spec.NodeName = nodeName
+	} else {
+		if cg.Spec.Worker.Template.NodeSelector != nil {
+			worker.Spec.NodeSelector = cg.Spec.Worker.Template.NodeSelector
+		}
+		// Add pod anti-affinity to avoid scheduling multiple workers on the same node.
+		worker.Spec.Affinity = &corev1.Affinity{
+			PodAntiAffinity: &corev1.PodAntiAffinity{
+				PreferredDuringSchedulingIgnoredDuringExecution: []corev1.WeightedPodAffinityTerm{
+					{
+						PodAffinityTerm: corev1.PodAffinityTerm{
+							LabelSelector: &metav1.LabelSelector{
+								MatchExpressions: []metav1.LabelSelectorRequirement{
+									{
+										Key:      common.LabelCacheGroup,
+										Operator: metav1.LabelSelectorOpIn,
+										Values:   []string{utils.TruncateLabelValue(cg.Name)},
+									},
+								},
+							},
+							Namespaces:  []string{cg.Namespace},
+							TopologyKey: "kubernetes.io/hostname",
+						},
+						Weight: 100,
+					},
+				},
+			},
+		}
 	}
 	return worker
 }
@@ -231,6 +264,16 @@ func (p *PodBuilder) genCacheDirs() {
 				VolumeSource: corev1.VolumeSource{
 					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
 						ClaimName: dir.Name,
+					},
+				},
+			})
+		case juicefsiov1.CacheDirTypeVolumeClaimTemplates:
+			pvcName := common.GenPVCName(dir.VolumeClaimTemplate.Name, p.node)
+			p.spec.Volumes = append(p.spec.Volumes, corev1.Volume{
+				Name: volumeName,
+				VolumeSource: corev1.VolumeSource{
+					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+						ClaimName: pvcName,
 					},
 				},
 			})

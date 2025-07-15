@@ -28,12 +28,13 @@ import (
 type CacheDirType string
 
 var (
-	CacheDirTypeHostPath CacheDirType = "HostPath"
-	CacheDirTypePVC      CacheDirType = "PVC"
+	CacheDirTypeHostPath             CacheDirType = "HostPath"
+	CacheDirTypePVC                  CacheDirType = "PVC"
+	CacheDirTypeVolumeClaimTemplates CacheDirType = "VolumeClaimTemplates"
 )
 
 type CacheDir struct {
-	// +kubebuilder:validation:Enum=HostPath;PVC
+	// +kubebuilder:validation:Enum=HostPath;PVC;VolumeClaimTemplates
 	Type CacheDirType `json:"type,omitempty"`
 	// required for HostPath type
 	// +optional
@@ -41,6 +42,9 @@ type CacheDir struct {
 	// required for PVC type
 	// +optional
 	Name string `json:"name,omitempty"`
+	// required for VolumeClaimTemplates type
+	// +optional
+	VolumeClaimTemplate *corev1.PersistentVolumeClaim `json:"volumeClaimTemplate,omitempty"`
 }
 
 // CacheGroupWorkerTemplate defines cache group worker template
@@ -136,6 +140,8 @@ type CacheGroupWorkerSpec struct {
 }
 
 // CacheGroupSpec defines the desired state of CacheGroup
+// +kubebuilder:validation:XValidation:rule="!has(oldSelf.replicas) || has(self.replicas)",message="replicas cannot be unset once set"
+// +kubebuilder:validation:XValidation:rule="has(oldSelf.replicas) || !has(self.replicas)",message="replicas can only be set on creation"
 type CacheGroupSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
@@ -143,7 +149,10 @@ type CacheGroupSpec struct {
 	SecretRef      *corev1.SecretEnvSource         `json:"secretRef,omitempty"`
 	CleanCache     bool                            `json:"cleanCache,omitempty"`
 	CacheGroup     string                          `json:"cacheGroup,omitempty"`
-	Worker         CacheGroupWorkerSpec            `json:"worker,omitempty"`
+	// Replicas is the number of desired Pods.
+	// +kubebuilder:validation:Optional
+	Replicas *int32               `json:"replicas,omitempty"`
+	Worker   CacheGroupWorkerSpec `json:"worker,omitempty"`
 	// Duration for new node to join cluster with group-backup option
 	// Default is 10 minutes
 	// +optional

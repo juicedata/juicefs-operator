@@ -3339,6 +3339,11 @@ spec:
                 - template
                 type: object
             type: object
+            x-kubernetes-validations:
+            - message: replicas cannot be unset once set
+              rule: '!has(oldSelf.replicas) || has(self.replicas)'
+            - message: replicas can only be set on creation
+              rule: has(oldSelf.replicas) || !has(self.replicas)
           status:
             properties:
               backUpWorker:

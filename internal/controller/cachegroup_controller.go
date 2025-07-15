@@ -24,7 +24,6 @@ import (
 	"time"
 
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -540,6 +539,11 @@ func (r *CacheGroupReconciler) cleanWorkerCache(ctx context.Context, cg *juicefs
 	if !cg.Spec.CleanCache {
 		return nil
 	}
+
+	if cg.Spec.Replicas != nil {
+		return r.deletePVCForCacheGroup(ctx, cg, worker)
+	}
+
 	job := builder.NewCleanCacheJob(*cg, worker)
 	if job == nil {
 		return nil
@@ -609,19 +613,10 @@ func (r *CacheGroupReconciler) createPVCForVolumeClaimTemplate(ctx context.Conte
 func (r *CacheGroupReconciler) HandleFinalizer(ctx context.Context, cg *juicefsiov1.CacheGroup) error {
 	log := log.FromContext(ctx)
 
-	// Delete PVCs created by VolumeClaimTemplates
-	if err := r.deletePVCsForCacheGroup(ctx, cg); err != nil {
-		log.Error(err, "failed to delete PVCs for cache group")
-		return err
-	}
-
 	if !cg.Spec.CleanCache {
 		return nil
 	}
-	if cg.Spec.Replicas != nil {
-		klog.Warningf("CacheGroup %s has replicas, clean cache job will not be created", cg.Name)
-		return nil
-	}
+
 	expectStates, err := r.parseExpectState(ctx, cg)
 	if err != nil {
 		return err
@@ -641,29 +636,31 @@ func (r *CacheGroupReconciler) HandleFinalizer(ctx context.Context, cg *juicefsi
 	return nil
 }
 
-// deletePVCsForCacheGroup deletes all PVCs created by VolumeClaimTemplates for a cache group
-func (r *CacheGroupReconciler) deletePVCsForCacheGroup(ctx context.Context, cg *juicefsiov1.CacheGroup) error {
-	log := log.FromContext(ctx)
-
-	// List all PVCs with the cache group label
-	pvcList := &corev1.PersistentVolumeClaimList{}
-	if err := r.List(ctx, pvcList, client.MatchingLabels(map[string]string{
-		common.LabelCacheGroup: utils.TruncateLabelValue(cg.Name),
-		common.LabelManagedBy:  common.LabelManagedByValue,
-	})); err != nil {
-		return err
-	}
-
-	for _, pvc := range pvcList.Items {
-		log.Info("deleting PVC for cache group", "pvc", pvc.Name, "cacheGroup", cg.Name)
-		if err := r.Delete(ctx, &pvc); err != nil {
-			if !apierrors.IsNotFound(err) {
-				log.Error(err, "failed to delete PVC", "pvc", pvc.Name)
-				return err
-			}
+// deletePVCForCacheGroup deletes a PVC created by VolumeClaimTemplates for a cache group
+func (r *CacheGroupReconciler) deletePVCForCacheGroup(ctx context.Context, cg *juicefsiov1.CacheGroup, worker corev1.Pod) error {
+	pvcName := ""
+	for _, v := range worker.Spec.Volumes {
+		if v.VolumeSource.PersistentVolumeClaim != nil {
+			pvcName = v.VolumeSource.PersistentVolumeClaim.ClaimName
+			break
 		}
 	}
+	if pvcName == "" {
+		return nil
+	}
+	log := log.FromContext(ctx)
+	pvc := &corev1.PersistentVolumeClaim{}
+	if err := r.Get(ctx, client.ObjectKey{Namespace: cg.Namespace, Name: pvcName}, pvc); err != nil {
+		return client.IgnoreNotFound(err)
+	}
 
+	log.Info("deleting PVC for cache group", "pvc", pvc.Name, "cacheGroup", cg.Name)
+	if err := r.Delete(ctx, pvc); err != nil {
+		if !apierrors.IsNotFound(err) {
+			log.Error(err, "failed to delete PVC", "pvc", pvc.Name)
+			return err
+		}
+	}
 	return nil
 }
 

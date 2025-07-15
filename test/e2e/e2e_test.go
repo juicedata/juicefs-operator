@@ -643,6 +643,30 @@ var _ = Describe("controller", Ordered, func() {
 			_, err = utils.Run(cmd)
 			ExpectWithOffset(1, err).NotTo(HaveOccurred())
 		})
+
+		It("should reject adding replicas via update", func() {
+			cgName := "e2e-test-cachegroup"
+			cmd := exec.Command("kubectl", "apply", "-f", "test/e2e/config/e2e-test-cachegroup.yaml", "-n", namespace)
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			patch := `{"spec":{"replicas":2}}`
+			cmd = exec.Command("kubectl", "patch", "cachegroups.juicefs.io", cgName, "-n", namespace, "--type=merge", "-p", patch)
+			_, err = utils.Run(cmd)
+			Expect(err).To(HaveOccurred())
+		})
+
+		It("should reject removing replicas via update", func() {
+			cgName := "e2e-test-cachegroup-replicas"
+			cmd := exec.Command("kubectl", "apply", "-f", "test/e2e/config/e2e-test-cachegroup.replicas.yaml", "-n", namespace)
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			patch := `{"spec":{"replicas":null}}`
+			cmd = exec.Command("kubectl", "patch", "cachegroups.juicefs.io", cgName, "-n", namespace, "--type=merge", "-p", patch)
+			_, err = utils.Run(cmd)
+			Expect(err).To(HaveOccurred())
+		})
 	})
 
 	Context("WarmUp Controller", func() {

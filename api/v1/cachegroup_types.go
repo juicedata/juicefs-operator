@@ -140,6 +140,8 @@ type CacheGroupWorkerSpec struct {
 }
 
 // CacheGroupSpec defines the desired state of CacheGroup
+// +kubebuilder:validation:XValidation:rule="!has(oldSelf.replicas) || has(self.replicas)",message="replicas cannot be unset once set"
+// +kubebuilder:validation:XValidation:rule="has(oldSelf.replicas) || !has(self.replicas)",message="replicas can only be set on creation"
 type CacheGroupSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file

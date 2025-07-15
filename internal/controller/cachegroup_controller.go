@@ -571,7 +571,7 @@ func (r *CacheGroupReconciler) createPVCForVolumeClaimTemplate(ctx context.Conte
 		return fmt.Errorf("volumeClaimTemplate is required for VolumeClaimTemplates type")
 	}
 
-	pvcName := fmt.Sprintf("%s-%s", vct.Name, workerName)
+	pvcName := common.GenPVCName(vct.Name, workerName)
 
 	// Check if PVC already exists
 	pvc := &corev1.PersistentVolumeClaim{}

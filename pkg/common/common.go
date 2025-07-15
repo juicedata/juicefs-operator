@@ -132,3 +132,7 @@ func GenSyncWorkerName(syncJobName string, i int) string {
 func GenSyncManagerName(syncJobName string) string {
 	return fmt.Sprintf("%s-%s-manager", SyncNamePrefix, syncJobName)
 }
+
+func GenPVCName(templateName, nodeName string) string {
+	return fmt.Sprintf("%s-%s", templateName, nodeName)
+}

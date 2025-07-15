@@ -33,11 +33,13 @@ import (
 )
 
 const (
-	namespace = "juicefs-operator-system"
-	running   = "Running"
-	trueValue = "true"
-	ReadyStr  = "Ready"
-	image     = "registry.cn-hangzhou.aliyuncs.com/juicedata/mount:ee-5.1.2-59d9736"
+	namespace      = "juicefs-operator-system"
+	running        = "Running"
+	trueValue      = "true"
+	ReadyStr       = "Ready"
+	image          = "registry.cn-hangzhou.aliyuncs.com/juicedata/mount:ee-5.1.2-59d9736"
+	cgName         = "e2e-test-cachegroup"
+	cgNameReplicas = "e2e-test-cachegroup-replicas"
 )
 
 var _ = Describe("controller", Ordered, func() {
@@ -146,8 +148,6 @@ var _ = Describe("controller", Ordered, func() {
 	})
 
 	Context("CacheGroup Controller", func() {
-		cgName := "e2e-test-cachegroup"
-
 		BeforeEach(func() {
 			cmd := exec.Command("kubectl", "label", "nodes", "--all", "juicefs.io/cg-worker-", "--overwrite")
 			_, err := utils.Run(cmd)
@@ -568,14 +568,13 @@ var _ = Describe("controller", Ordered, func() {
 		})
 
 		It("should reconcile the CacheGroup with replicas", func() {
-			cgName := "e2e-test-cachegroup-replicas"
 			cmd := exec.Command("kubectl", "apply", "-f", "test/e2e/config/e2e-test-cachegroup.replicas.yaml", "-n", namespace)
 			_, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("validating that the CacheGroup resource is reconciled")
 			verifyCacheGroupReconciled := func() error {
-				cmd := exec.Command("kubectl", "get", "cachegroups.juicefs.io", cgName, "-o", "jsonpath={.status.phase}", "-n", namespace)
+				cmd := exec.Command("kubectl", "get", "cachegroups.juicefs.io", cgNameReplicas, "-o", "jsonpath={.status.phase}", "-n", namespace)
 				status, err := utils.Run(cmd)
 				ExpectWithOffset(1, err).NotTo(HaveOccurred())
 
@@ -588,7 +587,7 @@ var _ = Describe("controller", Ordered, func() {
 
 			By("validating cache group workers created")
 			verifyWorkerCreated := func(replicas int) error {
-				cmd = exec.Command("kubectl", "get", "pods", "-l", "juicefs.io/cache-group="+cgName, "-n", namespace, "--no-headers")
+				cmd = exec.Command("kubectl", "get", "pods", "-l", "juicefs.io/cache-group="+cgNameReplicas, "-n", namespace, "--no-headers")
 				result, err := utils.Run(cmd)
 				if err != nil {
 					return fmt.Errorf("worker pods not created")
@@ -603,7 +602,7 @@ var _ = Describe("controller", Ordered, func() {
 			By("validating cg status is up to date")
 			verifyCgStatusUpToDate := func(replicas int) error {
 				cmd := exec.Command("kubectl", "get",
-					"cachegroups.juicefs.io", cgName, "-o", "jsonpath={.status.readyWorker}",
+					"cachegroups.juicefs.io", cgNameReplicas, "-o", "jsonpath={.status.readyWorker}",
 					"-n", namespace,
 				)
 				readyWorker, err := utils.Run(cmd)
@@ -612,7 +611,7 @@ var _ = Describe("controller", Ordered, func() {
 					return fmt.Errorf("cg expect has %d readyWorker status, but got %s", replicas, readyWorker)
 				}
 				cmd = exec.Command("kubectl", "get",
-					"cachegroups.juicefs.io", cgName, "-o", "jsonpath={.status.expectWorker}",
+					"cachegroups.juicefs.io", cgNameReplicas, "-o", "jsonpath={.status.expectWorker}",
 					"-n", namespace,
 				)
 				expectWorker, err := utils.Run(cmd)
@@ -625,27 +624,26 @@ var _ = Describe("controller", Ordered, func() {
 			Eventually(func() error { return verifyCgStatusUpToDate(2) }, time.Minute, time.Second).Should(Succeed())
 
 			By("scaling up the cache group")
-			cmd = exec.Command("kubectl", "patch", "cachegroup", cgName, "-n", namespace, "--type", "merge", "-p", `{"spec":{"replicas":3}}`)
+			cmd = exec.Command("kubectl", "patch", "cachegroup", cgNameReplicas, "-n", namespace, "--type", "merge", "-p", `{"spec":{"replicas":3}}`)
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 			Eventually(func() error { return verifyWorkerCreated(3) }, 5*time.Minute, 3*time.Second).Should(Succeed())
 			Eventually(func() error { return verifyCgStatusUpToDate(3) }, time.Minute, time.Second).Should(Succeed())
 
 			By("scaling down the cache group")
-			cmd = exec.Command("kubectl", "patch", "cachegroup", cgName, "-n", namespace, "--type", "merge", "-p", `{"spec":{"replicas":1}}`)
+			cmd = exec.Command("kubectl", "patch", "cachegroup", cgNameReplicas, "-n", namespace, "--type", "merge", "-p", `{"spec":{"replicas":1}}`)
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 			Eventually(func() error { return verifyWorkerCreated(1) }, 5*time.Minute, 3*time.Second).Should(Succeed())
 			Eventually(func() error { return verifyCgStatusUpToDate(1) }, time.Minute, time.Second).Should(Succeed())
 
 			By("deleting the cache group")
-			cmd = exec.Command("kubectl", "delete", "cachegroups.juicefs.io", cgName, "-n", namespace)
+			cmd = exec.Command("kubectl", "delete", "cachegroups.juicefs.io", cgNameReplicas, "-n", namespace)
 			_, err = utils.Run(cmd)
 			ExpectWithOffset(1, err).NotTo(HaveOccurred())
 		})
 
 		It("should reject adding replicas via update", func() {
-			cgName := "e2e-test-cachegroup"
 			cmd := exec.Command("kubectl", "apply", "-f", "test/e2e/config/e2e-test-cachegroup.yaml", "-n", namespace)
 			_, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
@@ -657,13 +655,12 @@ var _ = Describe("controller", Ordered, func() {
 		})
 
 		It("should reject removing replicas via update", func() {
-			cgName := "e2e-test-cachegroup-replicas"
 			cmd := exec.Command("kubectl", "apply", "-f", "test/e2e/config/e2e-test-cachegroup.replicas.yaml", "-n", namespace)
 			_, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
 			patch := `{"spec":{"replicas":null}}`
-			cmd = exec.Command("kubectl", "patch", "cachegroups.juicefs.io", cgName, "-n", namespace, "--type=merge", "-p", patch)
+			cmd = exec.Command("kubectl", "patch", "cachegroups.juicefs.io", cgNameReplicas, "-n", namespace, "--type=merge", "-p", patch)
 			_, err = utils.Run(cmd)
 			Expect(err).To(HaveOccurred())
 		})
@@ -671,7 +668,6 @@ var _ = Describe("controller", Ordered, func() {
 
 	Context("WarmUp Controller", func() {
 		wuName := "e2e-test-warmup"
-		cgName := "e2e-test-cachegroup"
 
 		BeforeEach(func() {
 			cmd := exec.Command("kubectl", "label", "nodes", "--all", "juicefs.io/cg-worker-", "--overwrite")

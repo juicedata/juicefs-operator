@@ -140,6 +140,8 @@ spec:
             properties:
               LastCompleteNode:
                 type: string
+              cacheGroup:
+                type: string
               conditions:
                 items:
                   properties:

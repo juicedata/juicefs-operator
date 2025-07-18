@@ -75,6 +75,7 @@ type Cron struct {
 // WarmUpStatus defines the observed state of WarmUp
 type WarmUpStatus struct {
 	Phase      WarmUpPhase `json:"phase"`
+	CacheGroup string      `json:"cacheGroup,omitempty"`
 	Duration   string      `json:"duration,omitempty"`
 	Conditions []Condition `json:"conditions,omitempty"`
 

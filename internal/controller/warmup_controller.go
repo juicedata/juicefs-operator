@@ -164,6 +164,7 @@ func (o *onceHandler) sync(ctx context.Context, wu *juicefsiov1.WarmUp, cgName s
 	newStatus := o.calculateStatus(ctx, &job)
 	if !reflect.DeepEqual(wu.Status, newStatus) {
 		wu.Status = *newStatus
+		wu.Status.CacheGroup = cgName
 		return utils.IgnoreConflict(o.Status().Update(ctx, wu))
 	}
 

@@ -143,8 +143,7 @@ func newBasicPod(cg *juicefsiov1.CacheGroup, nodeName string) *corev1.Pod {
 								MatchExpressions: []metav1.LabelSelectorRequirement{
 									{
 										Key:      common.LabelCacheGroup,
-										Operator: metav1.LabelSelectorOpIn,
-										Values:   []string{utils.TruncateLabelValue(cg.Name)},
+										Operator: metav1.LabelSelectorOpExists,
 									},
 								},
 							},

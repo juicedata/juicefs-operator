@@ -14,19 +14,41 @@ on:
 jobs:
   release:
     runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.check_version.outputs.image_tag }}
     steps:
     - uses: actions/checkout@v4
     - name: Check version
+      id: check_version
       run: |
         if [ ${{ inputs.image_version }} ]; then
-          echo "IMAGE_TAG=${{ inputs.image_version }}" >> $GITHUB_ENV
+          IMAGE_TAG=${{ inputs.image_version }}
         else
-          TAG=$(git describe --tags --match 'v*' | grep -oE 'v[0-9]+\.[0-9][0-9]*(\.[0-9]+)?')
-          echo "IMAGE_TAG=$TAG" >> $GITHUB_ENV
+          IMAGE_TAG=$(git describe --tags --match 'v*' | grep -oE 'v[0-9]+\.[0-9][0-9]*(\.[0-9]+)?')
         fi
+        echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
+        echo "image_tag=$IMAGE_TAG" >> $GITHUB_OUTPUT
     - name: Login Docker Hub
       run: docker login --username chnliyong --password ${PASSWORD}
       env:
         PASSWORD: ${{ secrets.DOCKERHUB_FUSE_ACCESS_TOKEN }}
     - name: Build and push Docker image
       run: make docker-buildx IMG=juicedata/juicefs-operator:${{ env.IMAGE_TAG }}
+
+  sync_image:
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+    - name: Login Docker Hub
+      run: docker login --username chnliyong --password ${PASSWORD}
+      env:
+        PASSWORD: ${{ secrets.DOCKERHUB_FUSE_ACCESS_TOKEN }}
+    - name: Get Sync Script
+      run: |
+        wget https://raw.githubusercontent.com/juicedata/juicefs-csi-driver/refs/heads/master/.github/scripts/sync.sh
+        chmod +x sync.sh
+    - name: Run Sync Script
+      env:
+        ACR_TOKEN: ${{ secrets.ACR_TOKEN }}
+        ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
+      run: ./sync.sh juicedata/juicefs-operator:${{ needs.release.outputs.image_tag }}

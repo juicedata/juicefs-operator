@@ -36,6 +36,10 @@ type WarmUpSpec struct {
 	Options                 []string                    `json:"options,omitempty"`
 	Policy                  Policy                      `json:"policy,omitempty"`
 	Resources               corev1.ResourceRequirements `json:"resources,omitempty"`
+	// +optional
+	// Image to use for the warmup job
+	// defaults to cachegroup pod image
+	Image string `json:"image,omitempty"`
 }
 
 type Metadata struct {

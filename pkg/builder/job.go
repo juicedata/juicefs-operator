@@ -49,9 +49,13 @@ func (j *JobBuilder) NewWarmUpJob() *batchv1.Job {
 	job.Spec.Template.Spec.Tolerations = j.wu.Spec.Tolerations
 	job.Spec.Template.Spec.NodeSelector = j.wu.Spec.NodeSelector
 	job.Spec.Template.Spec.ImagePullSecrets = j.worker.Spec.ImagePullSecrets
+	image := j.worker.Spec.Containers[0].Image
+	if j.wu.Spec.Image != "" {
+		image = j.wu.Spec.Image
+	}
 	job.Spec.Template.Spec.Containers = []corev1.Container{{
 		Name:            common.WarmUpContainerName,
-		Image:           j.worker.Spec.Containers[0].Image,
+		Image:           image,
 		ImagePullPolicy: j.worker.Spec.Containers[0].ImagePullPolicy,
 		Command:         j.getWarmUpCommand(),
 		Env:             j.worker.Spec.Containers[0].Env,

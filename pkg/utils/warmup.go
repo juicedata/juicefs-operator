@@ -57,7 +57,7 @@ func WarmupSupportStats(image string) bool {
 
 func GetWarmupJobStats(ctx context.Context, job *batchv1.Job) (juicefsiov1.WarmUpStats, string, error) {
 	if !WarmupSupportStats(job.Spec.Template.Spec.Containers[0].Image) {
-		return juicefsiov1.WarmUpStats{}, "", fmt.Errorf("unsupported image version")
+		return juicefsiov1.WarmUpStats{}, "", fmt.Errorf("unsupported image version: %s (minimum required: %s)", job.Spec.Template.Spec.Containers[0].Image, common.MinSupportedWarmupStatsVersion)
 	}
 	// Find job pod by job-name label
 	podList, err := findJobPods(ctx, job)
@@ -88,12 +88,12 @@ func GetWarmupJobStats(ctx context.Context, job *batchv1.Job) (juicefsiov1.WarmU
 
 func CalculateWarmupProgress(stats juicefsiov1.WarmUpStats) string {
 	if stats.ScannedData == "" || stats.CompletedData == "" {
-		return "0.00%"
+		return zeroProgress
 	}
 	total, errTotal := parseBytes(stats.ScannedData)
 	complete, errComplete := parseBytes(stats.CompletedData)
 	if errTotal != nil || errComplete != nil {
-		return "0.00%"
+		return zeroProgress
 	}
 	return CalculateProgress(complete, total)
 }

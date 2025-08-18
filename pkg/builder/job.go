@@ -215,7 +215,8 @@ func (j *JobBuilder) getWarmUpCommand() []string {
 		if opt == "" {
 			continue
 		}
-		if strings.SplitN(opt, "=", 2)[0] == "debug" {
+		parts := strings.SplitN(opt, "=", 2)
+		if len(parts) > 0 && parts[0] == "debug" {
 			hasDebug = true
 		}
 		cmds = append(cmds, fmt.Sprintf("--%s", opt))

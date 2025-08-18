@@ -26,6 +26,15 @@ spec:
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
+    - jsonPath: .status.stats.scannedData
+      name: Scanned
+      type: string
+    - jsonPath: .status.stats.completedData
+      name: Completed
+      type: string
+    - jsonPath: .status.progress
+      name: Progress
+      type: string
     - jsonPath: .status.duration
       name: Duration
       type: string
@@ -116,6 +125,28 @@ spec:
                 items:
                   type: string
                 type: array
+              targetsFrom:
+                properties:
+                  configMap:
+                    properties:
+                      key:
+                        type: string
+                      name:
+                        default: ""
+                        type: string
+                      optional:
+                        type: boolean
+                    required:
+                    - key
+                    type: object
+                    x-kubernetes-map-type: atomic
+                  filePath:
+                    type: string
+                  files:
+                    items:
+                      type: string
+                    type: array
+                type: object
               tolerations:
                 items:
                   properties:
@@ -158,6 +189,8 @@ spec:
                 type: array
               duration:
                 type: string
+              finishLog:
+                type: string
               lastCompleteTime:
                 format: date-time
                 type: string
@@ -166,6 +199,29 @@ spec:
                 type: string
               phase:
                 type: string
+              progress:
+                type: string
+              stats:
+                properties:
+                  completed:
+                    default: 0
+                    format: int64
+                    type: integer
+                  completedData:
+                    type: string
+                  failed:
+                    default: 0
+                    format: int64
+                    type: integer
+                  failedData:
+                    type: string
+                  scanned:
+                    default: 0
+                    format: int64
+                    type: integer
+                  scannedData:
+                    type: string
+                type: object
             required:
             - phase
             type: object

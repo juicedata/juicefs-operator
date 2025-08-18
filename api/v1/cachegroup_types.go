@@ -124,6 +124,10 @@ type CacheGroupWorkerTemplate struct {
 	// +optional
 	DNSPolicy *corev1.DNSPolicy `json:"dnsPolicy,omitempty"`
 
+	// If specified, the pod's scheduling constraints
+	// +optional
+	Affinity *corev1.Affinity `json:"affinity,omitempty" protobuf:"bytes,18,opt,name=affinity"`
+
 	Opts []string `json:"opts,omitempty"`
 }
 

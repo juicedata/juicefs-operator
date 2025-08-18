@@ -79,7 +79,11 @@ const eeImageRegex = `ee-(\d+)\.(\d+)\.(\d+)`
 // return -1 if image < target
 // return 0 if image == target
 func CompareEEImageVersion(image, target string) int {
-	current := strings.Split(image, ":")[1]
+	parts := strings.Split(image, ":")
+	if len(parts) < 2 {
+		return -1 // invalid image format
+	}
+	current := parts[1]
 	if strings.Contains(current, "latest") ||
 		strings.Contains(current, "nightly") ||
 		strings.Contains(current, "dev") {

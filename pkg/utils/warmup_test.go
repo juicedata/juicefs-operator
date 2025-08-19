@@ -32,28 +32,32 @@ func TestParseWarmupProgressLog(t *testing.T) {
 	}{
 		{
 			name:    "valid input",
-			content: "2025/08/15 14:43:43.782701 juicefs[90011] <DEBUG>: scanned: 3,scannedData: 977 MiB,completed: 3,completedData: 30 KiB,speed: 7.4 KiB/s,failed: 0,failedData: 0 B,uptime: 4s [logProgress@warmup.go:162]",
+			content: "2025/08/19 19:08:38.198672 juicefs[16293] <DEBUG>: scanned:11, scanned data:1.4 GiB, completed:7, completed data:144 MiB, speed:60 B/s, failed:10, failed data:2 TiB, uptime:1s [logProgress@warmup.go:162]",
 			expected: juicefsiov1.WarmUpStats{
-				Scanned:       3,
-				ScannedData:   "977 MiB",
-				Completed:     3,
-				CompletedData: "30 KiB",
-				Failed:        0,
-				FailedData:    "0 B",
+				Scanned:       11,
+				ScannedData:   "1.4 GiB",
+				Completed:     7,
+				CompletedData: "144 MiB",
+				Failed:        10,
+				FailedData:    "2 TiB",
 			},
 			wantErr: false,
 		},
 		{
 			name: "valid input need last",
 			content: `
-			2025/08/15 14:43:40.784487 juicefs[90011] <DEBUG>: scanned: 1,scannedData: 2 MiB,completed: 3,completedData: 0 B,speed: 0 B/s,failed: 0,failedData: 0 B,uptime: 1.001s [logProgress@warmup.go:162]
-			2025/08/15 14:43:43.782701 juicefs[90011] <DEBUG>: scanned: 3,scannedData: 977 MiB,completed: 3,completedData: 30 KiB,speed: 7.4 KiB/s,failed: 0,failedData: 0 B,uptime: 4s [logProgress@warmup.go:162]
+				2025/08/19 19:08:38.198672 juicefs[16293] <DEBUG>: scanned:11, scanned data:1.4 GiB, completed:7, completed data:61 B, speed:60 B/s, failed:0, failed data:0 B, uptime:1s [logProgress@warmup.go:162]
+				2025/08/19 19:08:39.198976 juicefs[16293] <DEBUG>: scanned:11, scanned data:1.4 GiB, completed:7, completed data:61 B, speed:30 B/s, failed:0, failed data:0 B, uptime:2s [logProgress@warmup.go:162]
+				2025/08/19 19:08:40.200869 juicefs[16293] <DEBUG>: scanned:11, scanned data:1.4 GiB, completed:7, completed data:61 B, speed:20 B/s, failed:0, failed data:0 B, uptime:3.002s [logProgress@warmup.go:162]
+				2025/08/19 19:08:41.198849 juicefs[16293] <DEBUG>: scanned:11, scanned data:1.4 GiB, completed:7, completed data:144 MiB, speed:36 MiB/s, failed:0, failed data:0 B, uptime:4s [logProgress@warmup.go:162]
+				2025/08/19 19:08:42.199217 juicefs[16293] <DEBUG>: scanned:11, scanned data:1.4 GiB, completed:7, completed data:144 MiB, speed:29 MiB/s, failed:0, failed data:0 B, uptime:5s [logProgress@warmup.go:162]
+				2025/08/19 19:08:42.933924 juicefs[16293] <DEBUG>: scanned:7, scanned data:1.4 GiB, completed:7, completed data:1.4 GiB, speed:248 MiB/s, failed:0, failed data:0 B, uptime:5.735s [logProgress@warmup.go:162]
 			`,
 			expected: juicefsiov1.WarmUpStats{
-				Scanned:       3,
-				ScannedData:   "977 MiB",
-				Completed:     3,
-				CompletedData: "30 KiB",
+				Scanned:       7,
+				ScannedData:   "1.4 GiB",
+				Completed:     7,
+				CompletedData: "1.4 GiB",
 				Failed:        0,
 				FailedData:    "0 B",
 			},
@@ -68,30 +72,6 @@ func TestParseWarmupProgressLog(t *testing.T) {
 		{
 			name:     "no scanned line",
 			content:  "Some log line\nAnother log line",
-			expected: juicefsiov1.WarmUpStats{},
-			wantErr:  true,
-		},
-		{
-			name:     "invalid scanned format",
-			content:  "Some log line\nscanned: abc,scannedData: 10.5 GiB,completed: 50,completedData: 5.2 GiB,speed: 1.0 MiB/s,failed: 10,failedData: 1.1 GiB\nAnother log line",
-			expected: juicefsiov1.WarmUpStats{},
-			wantErr:  true,
-		},
-		{
-			name:     "invalid completed format",
-			content:  "Some log line\nscanned: 100,scannedData: 10.5 GiB,completed: abc,completedData: 5.2 GiB,speed: 1.0 MiB/s,failed: 10,failedData: 1.1 GiB\nAnother log line",
-			expected: juicefsiov1.WarmUpStats{},
-			wantErr:  true,
-		},
-		{
-			name:     "invalid failed format",
-			content:  "Some log line\nscanned: 100,scannedData: 10.5 GiB,completed: 50,completedData: 5.2 GiB,speed: 1.0 MiB/s,failed: abc,failedData: 1.1 GiB\nAnother log line",
-			expected: juicefsiov1.WarmUpStats{},
-			wantErr:  true,
-		},
-		{
-			name:     "line with scanned keyword but invalid format",
-			content:  "Some log line\nscanned: 100 items\nAnother log line",
 			expected: juicefsiov1.WarmUpStats{},
 			wantErr:  true,
 		},

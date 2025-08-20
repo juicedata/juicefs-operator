@@ -32,13 +32,13 @@ func TestParseWarmupProgressLog(t *testing.T) {
 	}{
 		{
 			name:    "valid input",
-			content: "2025/08/19 19:08:38.198672 juicefs[16293] <DEBUG>: scanned:11, scanned data:1.4 GiB, completed:7, completed data:144 MiB, speed:60 B/s, failed:10, failed data:2 TiB, uptime:1s [logProgress@warmup.go:162]",
+			content: "2025/08/19 19:08:38.198672 juicefs[16293] <DEBUG>: scanned:11, scanned data:1.4 GiB, completed:7, completed data:144 MiB, speed:60 B/s, failed blocks:10, failed data:2 TiB, uptime:1s [logProgress@warmup.go:162]",
 			expected: juicefsiov1.WarmUpStats{
 				Scanned:       11,
 				ScannedData:   "1.4 GiB",
 				Completed:     7,
 				CompletedData: "144 MiB",
-				Failed:        10,
+				FailedBlocks:  10,
 				Speed:         "60 B/s",
 				FailedData:    "2 TiB",
 			},
@@ -47,19 +47,19 @@ func TestParseWarmupProgressLog(t *testing.T) {
 		{
 			name: "valid input need last",
 			content: `
-				2025/08/19 19:08:38.198672 juicefs[16293] <DEBUG>: scanned:11, scanned data:1.4 GiB, completed:7, completed data:61 B, speed:60 B/s, failed:0, failed data:0 B, uptime:1s [logProgress@warmup.go:162]
-				2025/08/19 19:08:39.198976 juicefs[16293] <DEBUG>: scanned:11, scanned data:1.4 GiB, completed:7, completed data:61 B, speed:30 B/s, failed:0, failed data:0 B, uptime:2s [logProgress@warmup.go:162]
-				2025/08/19 19:08:40.200869 juicefs[16293] <DEBUG>: scanned:11, scanned data:1.4 GiB, completed:7, completed data:61 B, speed:20 B/s, failed:0, failed data:0 B, uptime:3.002s [logProgress@warmup.go:162]
-				2025/08/19 19:08:41.198849 juicefs[16293] <DEBUG>: scanned:11, scanned data:1.4 GiB, completed:7, completed data:144 MiB, speed:36 MiB/s, failed:0, failed data:0 B, uptime:4s [logProgress@warmup.go:162]
-				2025/08/19 19:08:42.199217 juicefs[16293] <DEBUG>: scanned:11, scanned data:1.4 GiB, completed:7, completed data:144 MiB, speed:29 MiB/s, failed:0, failed data:0 B, uptime:5s [logProgress@warmup.go:162]
-				2025/08/19 19:08:42.933924 juicefs[16293] <DEBUG>: scanned:7, scanned data:1.4 GiB, completed:7, completed data:1.4 GiB, speed:248 MiB/s, failed:0, failed data:0 B, uptime:5.735s [logProgress@warmup.go:162]
+				2025/08/19 19:08:38.198672 juicefs[16293] <DEBUG>: scanned:11, scanned data:1.4 GiB, completed:7, completed data:61 B, speed:60 B/s, failed blocks:0, failed data:0 B, uptime:1s [logProgress@warmup.go:162]
+				2025/08/19 19:08:39.198976 juicefs[16293] <DEBUG>: scanned:11, scanned data:1.4 GiB, completed:7, completed data:61 B, speed:30 B/s, failed blocks:0, failed data:0 B, uptime:2s [logProgress@warmup.go:162]
+				2025/08/19 19:08:40.200869 juicefs[16293] <DEBUG>: scanned:11, scanned data:1.4 GiB, completed:7, completed data:61 B, speed:20 B/s, failed blocks:0, failed data:0 B, uptime:3.002s [logProgress@warmup.go:162]
+				2025/08/19 19:08:41.198849 juicefs[16293] <DEBUG>: scanned:11, scanned data:1.4 GiB, completed:7, completed data:144 MiB, speed:36 MiB/s, failed blocks:0, failed data:0 B, uptime:4s [logProgress@warmup.go:162]
+				2025/08/19 19:08:42.199217 juicefs[16293] <DEBUG>: scanned:11, scanned data:1.4 GiB, completed:7, completed data:144 MiB, speed:29 MiB/s, failed blocks:0, failed data:0 B, uptime:5s [logProgress@warmup.go:162]
+				2025/08/19 19:08:42.933924 juicefs[16293] <DEBUG>: scanned:7, scanned data:1.4 GiB, completed:7, completed data:1.4 GiB, speed:248 MiB/s, failed blocks:1, failed data:0 B, uptime:5.735s [logProgress@warmup.go:162]
 			`,
 			expected: juicefsiov1.WarmUpStats{
 				Scanned:       7,
 				ScannedData:   "1.4 GiB",
 				Completed:     7,
 				CompletedData: "1.4 GiB",
-				Failed:        0,
+				FailedBlocks:  1,
 				Speed:         "248 MiB/s",
 				FailedData:    "0 B",
 			},

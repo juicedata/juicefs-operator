@@ -8108,7 +8108,7 @@ spec:
                     type: integer
                   completedData:
                     type: string
-                  failed:
+                  failedBlocks:
                     default: 0
                     format: int64
                     type: integer

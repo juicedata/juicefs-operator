@@ -98,7 +98,7 @@ func CalculateWarmupProgress(stats juicefsiov1.WarmUpStats) string {
 	return CalculateProgress(complete, total)
 }
 
-var warmupProgressRegex = regexp.MustCompile(`scanned:\s*(\d+),\s*scanned data:\s*([^,]+),\s*completed:\s*(\d+),\s*completed data:\s*([^,]+),\s*speed:\s*([^,]+),\s*failed:\s*(\d+),\s*failed data:\s*([^,\]]+)`)
+var warmupProgressRegex = regexp.MustCompile(`scanned:\s*(\d+),\s*scanned data:\s*([^,]+),\s*completed:\s*(\d+),\s*completed data:\s*([^,]+),\s*speed:\s*([^,]+),\s*failed blocks:\s*(\d+),\s*failed data:\s*([^,\]]+)`)
 
 func ParseWarmupProgressLog(content string) (juicefsiov1.WarmUpStats, error) {
 	lines := strings.Split(content, "\n")
@@ -134,7 +134,7 @@ func ParseWarmupProgressLog(content string) (juicefsiov1.WarmUpStats, error) {
 					Completed:     completedInt,
 					CompletedData: completedData,
 					Speed:         speed,
-					Failed:        failedInt,
+					FailedBlocks:  failedInt,
 					FailedData:    failedData,
 				}, nil
 			}

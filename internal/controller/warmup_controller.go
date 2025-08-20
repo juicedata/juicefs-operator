@@ -222,6 +222,9 @@ func (o *onceHandler) calculateStatus(ctx context.Context, job *batchv1.Job, cgN
 	} else {
 		status.Phase = juicefsiov1.WarmUpPhaseFailed
 	}
+	if status.Stats.Failed > 0 {
+		status.Phase = juicefsiov1.WarmUpPhaseFailed
+	}
 	status.Duration = utils.CalculateDuration(job.CreationTimestamp.Time, finishedJobCondition.LastTransitionTime.Time)
 	return status
 }

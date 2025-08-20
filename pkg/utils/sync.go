@@ -410,6 +410,9 @@ func CalculateProgress(a, b int64) string {
 	if b == 0 {
 		return zeroProgress
 	}
+	if b < a {
+		return "99.99%"
+	}
 	progress := math.Trunc((float64(a)/float64(b))*10000) / 100
 	return fmt.Sprintf("%.2f%%", progress)
 }

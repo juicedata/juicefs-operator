@@ -38,6 +38,7 @@ type WarmUpStats struct {
 	// +kubebuilder:default=0
 	Failed int64 `json:"failed,omitempty"`
 
+	Speed         string `json:"speed,omitempty"`
 	ScannedData   string `json:"scannedData,omitempty"`
 	CompletedData string `json:"completedData,omitempty"`
 	FailedData    string `json:"failedData,omitempty"`

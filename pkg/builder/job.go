@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"maps"
 	"path"
+	"slices"
 	"strings"
 
 	batchv1 "k8s.io/api/batch/v1"
@@ -152,15 +153,24 @@ func (j *JobBuilder) genBaseJob() *batchv1.Job {
 	return job
 }
 
+var (
+	ignoreMountOpts = []string{"foreground", "cache-size", "free-space-ratio", "group-weight", "cache-dir", "group-backup"}
+)
+
 func (j *JobBuilder) getWarmUpCommand() []string {
 	workerCommad := strings.Split(j.worker.Spec.Containers[0].Command[2], "\n")
 	authCmd := workerCommad[0]
 	volName, opts := utils.MustParseWorkerMountCmds(workerCommad[1])
 	mountOpts := []string{
 		"no-sharing",
+		"cache-size=0",
 	}
 	for _, opt := range opts {
-		if opt == "foreground" {
+		part := strings.SplitN(opt, "=", 2)
+		if len(part) < 1 {
+			continue
+		}
+		if slices.Contains(ignoreMountOpts, part[0]) {
 			continue
 		}
 		mountOpts = append(mountOpts, opt)

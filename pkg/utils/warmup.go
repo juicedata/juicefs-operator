@@ -111,6 +111,7 @@ func ParseWarmupProgressLog(content string) (juicefsiov1.WarmUpStats, error) {
 				scannedData := strings.TrimSpace(matches[2])
 				completed := strings.TrimSpace(matches[3])
 				completedData := strings.TrimSpace(matches[4])
+				speed := strings.TrimSpace(matches[5])
 				failed := strings.TrimSpace(matches[6])
 				failedData := strings.TrimSpace(matches[7])
 
@@ -132,6 +133,7 @@ func ParseWarmupProgressLog(content string) (juicefsiov1.WarmUpStats, error) {
 					ScannedData:   scannedData,
 					Completed:     completedInt,
 					CompletedData: completedData,
+					Speed:         speed,
 					Failed:        failedInt,
 					FailedData:    failedData,
 				}, nil

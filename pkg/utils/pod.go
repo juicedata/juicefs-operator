@@ -28,9 +28,6 @@ import (
 )
 
 func IsPodReady(pod corev1.Pod) bool {
-	if pod.Status.Phase == corev1.PodRunning {
-		return true
-	}
 	conditionsTrue := 0
 	for _, cond := range pod.Status.Conditions {
 		if cond.Status == corev1.ConditionTrue && (cond.Type == corev1.ContainersReady || cond.Type == corev1.PodReady) {
@@ -38,6 +35,10 @@ func IsPodReady(pod corev1.Pod) bool {
 		}
 	}
 	return conditionsTrue == 2
+}
+
+func IsPodRunning(pod corev1.Pod) bool {
+	return pod.Status.Phase == corev1.PodRunning
 }
 
 func IsPodSucceeded(pod corev1.Pod) bool {

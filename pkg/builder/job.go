@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"maps"
 	"path"
+	"slices"
 	"strings"
 
 	batchv1 "k8s.io/api/batch/v1"
@@ -35,6 +36,10 @@ type JobBuilder struct {
 	wu     *juicefsiov1.WarmUp
 	worker *corev1.Pod
 }
+
+const (
+	warmupFileListPath = "/tmp/filelist.txt"
+)
 
 func NewJobBuilder(wu *juicefsiov1.WarmUp, worker *corev1.Pod) *JobBuilder {
 	return &JobBuilder{
@@ -148,15 +153,24 @@ func (j *JobBuilder) genBaseJob() *batchv1.Job {
 	return job
 }
 
+var (
+	ignoreMountOpts = []string{"foreground", "cache-size", "free-space-ratio", "group-weight", "cache-dir", "group-backup"}
+)
+
 func (j *JobBuilder) getWarmUpCommand() []string {
 	workerCommad := strings.Split(j.worker.Spec.Containers[0].Command[2], "\n")
 	authCmd := workerCommad[0]
 	volName, opts := utils.MustParseWorkerMountCmds(workerCommad[1])
 	mountOpts := []string{
 		"no-sharing",
+		"cache-size=0",
 	}
 	for _, opt := range opts {
-		if opt == "foreground" {
+		part := strings.SplitN(opt, "=", 2)
+		if len(part) < 1 {
+			continue
+		}
+		if slices.Contains(ignoreMountOpts, part[0]) {
 			continue
 		}
 		mountOpts = append(mountOpts, opt)
@@ -174,28 +188,52 @@ func (j *JobBuilder) getWarmUpCommand() []string {
 		"exec",
 	}
 
-	if len(j.wu.Spec.Targets) != 0 {
-		targets := []string{}
-		for _, t := range j.wu.Spec.Targets {
-			targets = append(targets, path.Join(common.MountPoint, t))
+	if j.wu.Spec.TargetsFrom != nil {
+		if j.wu.Spec.TargetsFrom.Files != nil {
+			targetsCmd = fmt.Sprintf("echo '%s' > %s", strings.Join(j.wu.Spec.TargetsFrom.Files, "\n"), warmupFileListPath)
 		}
-		targetsCmd = fmt.Sprintf("echo '%s' > /tmp/filelist.txt", strings.Join(targets, "\n"))
+		// internal file system path
+		if j.wu.Spec.TargetsFrom.FilePath != "" {
+			targetsCmd = fmt.Sprintf("ln -s %s %s", path.Join(common.MountPoint, j.wu.Spec.TargetsFrom.FilePath), warmupFileListPath)
+		}
+		// configMap do nothing
+	}
+
+	// @deprecated: use targetsFrom.files instead
+	if len(j.wu.Spec.Targets) != 0 {
+		targetsCmd = fmt.Sprintf("echo '%s' > %s", strings.Join(j.wu.Spec.Targets, "\n"), warmupFileListPath)
+	}
+
+	if j.wu.Spec.TargetsFrom != nil || len(targetsCmd) != 0 {
 		cmds = append(cmds, []string{
 			common.JuiceFSBinary,
 			"warmup",
 			"-f",
-			"/tmp/filelist.txt",
+			warmupFileListPath,
 		}...)
 	} else {
+		// warmup all files
 		cmds = append(cmds, []string{
 			common.JuiceFSBinary,
 			"warmup",
 			common.MountPoint,
 		}...)
 	}
-
+	hasDebug := false
 	for _, opt := range j.wu.Spec.Options {
-		cmds = append(cmds, fmt.Sprintf("--%s", strings.TrimSpace(opt)))
+		opt = strings.TrimSpace(opt)
+		if opt == "" {
+			continue
+		}
+		parts := strings.SplitN(opt, "=", 2)
+		if len(parts) > 0 && parts[0] == "debug" {
+			hasDebug = true
+		}
+		cmds = append(cmds, fmt.Sprintf("--%s", opt))
+	}
+	// enable debug mode to get warmup stats log
+	if utils.WarmupSupportStats(j.wu.Spec.Image) && !hasDebug {
+		cmds = append(cmds, "--debug")
 	}
 	return []string{
 		"/bin/sh",
@@ -203,6 +241,7 @@ func (j *JobBuilder) getWarmUpCommand() []string {
 		authCmd + "\n" +
 			strings.Join(mountCmds, " ") + "\n" +
 			targetsCmd + "\n" +
+			"cd " + common.MountPoint + "\n" +
 			strings.Join(cmds, " "),
 	}
 }
@@ -221,6 +260,29 @@ func (j *JobBuilder) getWarmupVolumes() ([]corev1.Volume, []corev1.VolumeMount) 
 			volumeMounts = append(volumeMounts, mount)
 			break
 		}
+	}
+
+	if j.wu.Spec.TargetsFrom != nil && j.wu.Spec.TargetsFrom.ConfigMap != nil {
+		volumes = append(volumes, corev1.Volume{
+			Name: "files-from",
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: j.wu.Spec.TargetsFrom.ConfigMap.Name,
+					},
+					Items: []corev1.KeyToPath{
+						{
+							Key:  j.wu.Spec.TargetsFrom.ConfigMap.Key,
+							Path: common.SyncFileFromName,
+						},
+					},
+				},
+			},
+		})
+		volumeMounts = append(volumeMounts, corev1.VolumeMount{
+			Name:      "files-from",
+			MountPath: warmupFileListPath,
+		})
 	}
 
 	// FIXME: we need to mount the config volume for object storage. like ceph

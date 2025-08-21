@@ -71,6 +71,8 @@ const (
 	InitConfigVolumeName = "init-config"
 	InitConfigVolumeKey  = "initconfig"
 	InitConfigMountPath  = "/etc/juicefs"
+
+	MinSupportedWarmupStatsVersion = "5.2.11"
 )
 
 var (
@@ -99,7 +101,10 @@ var (
 	DefaultBackupWorkerDuration = 10 * time.Minute
 	DefaultWaitingMaxDuration   = 1 * time.Hour
 
-	MaxSyncConcurrentReconciles = 10
+	MaxSyncConcurrentReconciles   = 10
+	MaxWarmupConcurrentReconciles = 10
+
+	UpdateWarmupStatsInterval = 3 * time.Second
 
 	K8sClientQPS   float32 = 30
 	K8sClientBurst int     = 20

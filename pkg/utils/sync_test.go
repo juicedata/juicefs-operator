@@ -446,6 +446,12 @@ func TestCalculateProgress(t *testing.T) {
 			b:    9811548006,
 			want: "99.99%",
 		},
+		{
+			name: "Overflow numbers",
+			a:    9811548006 + 1,
+			b:    9811548006,
+			want: "99.99%",
+		},
 	}
 
 	for _, tt := range tests {

@@ -39,6 +39,10 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
+const (
+	zeroProgress = "0.00%"
+)
+
 // GenerateSSHKeyPair ssh keys
 func GenerateSSHKeyPair() (string, string, error) {
 	privateKey, err := rsa.GenerateKey(rand.Reader, 4096)
@@ -404,7 +408,10 @@ func ParseLog(data string) (map[string]int64, error) {
 
 func CalculateProgress(a, b int64) string {
 	if b == 0 {
-		return "0.00%"
+		return zeroProgress
+	}
+	if b < a {
+		return "99.99%"
 	}
 	progress := math.Trunc((float64(a)/float64(b))*10000) / 100
 	return fmt.Sprintf("%.2f%%", progress)

@@ -37,6 +37,18 @@ func IsPodReady(pod corev1.Pod) bool {
 	return conditionsTrue == 2
 }
 
+func IsPodRunning(pod corev1.Pod) bool {
+	return pod.Status.Phase == corev1.PodRunning
+}
+
+func IsPodSucceeded(pod corev1.Pod) bool {
+	return pod.Status.Phase == corev1.PodSucceeded
+}
+
+func IsPodFailed(pod corev1.Pod) bool {
+	return pod.Status.Phase == corev1.PodFailed
+}
+
 // IsMountPointReady checks if the mount point is ready in the given pod
 func IsMountPointReady(ctx context.Context, pod corev1.Pod, mountPoint string) bool {
 	log := log.FromContext(ctx).WithValues("worker", pod.Name)

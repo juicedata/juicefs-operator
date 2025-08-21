@@ -391,6 +391,9 @@ func (p *PodBuilder) NewCacheGroupWorker(ctx context.Context) *corev1.Pod {
 			worker.Spec.ImagePullSecrets = common.OperatorPod.Spec.ImagePullSecrets
 		}
 	}
+	if spec.Affinity != nil {
+		worker.Spec.Affinity = spec.Affinity
+	}
 	maps.Copy(worker.Labels, spec.Labels)
 	maps.Copy(worker.Annotations, spec.Annotations)
 	worker.Spec.Tolerations = spec.Tolerations
@@ -502,6 +505,9 @@ func MergeCacheGroupWorkerTemplate(template *juicefsiov1.CacheGroupWorkerTemplat
 	}
 	if overwrite.CacheDirs != nil {
 		template.CacheDirs = overwrite.CacheDirs
+	}
+	if overwrite.Affinity != nil {
+		template.Affinity = overwrite.Affinity
 	}
 }
 

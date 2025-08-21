@@ -24,6 +24,26 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
+type WarmUpTargetsFrom struct {
+	Files     []string                     `json:"files,omitempty"`
+	ConfigMap *corev1.ConfigMapKeySelector `json:"configMap,omitempty"`
+	FilePath  string                       `json:"filePath,omitempty"`
+}
+
+type WarmUpStats struct {
+	// +kubebuilder:default=0
+	Scanned int64 `json:"scanned,omitempty"`
+	// +kubebuilder:default=0
+	Completed int64 `json:"completed,omitempty"`
+	// +kubebuilder:default=0
+	FailedBlocks int64 `json:"failedBlocks,omitempty"`
+
+	Speed         string `json:"speed,omitempty"`
+	ScannedData   string `json:"scannedData,omitempty"`
+	CompletedData string `json:"completedData,omitempty"`
+	FailedData    string `json:"failedData,omitempty"`
+}
+
 // WarmUpSpec defines the desired state of WarmUp
 type WarmUpSpec struct {
 	CacheGroupName          string                      `json:"cacheGroupName"`
@@ -32,7 +52,8 @@ type WarmUpSpec struct {
 	Metadata                Metadata                    `json:"metadata,omitempty"`
 	Tolerations             []corev1.Toleration         `json:"tolerations,omitempty"`
 	NodeSelector            map[string]string           `json:"nodeSelector,omitempty"`
-	Targets                 []string                    `json:"targets,omitempty"`
+	Targets                 []string                    `json:"targets,omitempty"` // @deprecated
+	TargetsFrom             *WarmUpTargetsFrom          `json:"targetsFrom,omitempty"`
 	Options                 []string                    `json:"options,omitempty"`
 	Policy                  Policy                      `json:"policy,omitempty"`
 	Resources               corev1.ResourceRequirements `json:"resources,omitempty"`
@@ -83,6 +104,10 @@ type WarmUpStatus struct {
 	Duration   string      `json:"duration,omitempty"`
 	Conditions []Condition `json:"conditions,omitempty"`
 
+	Stats     WarmUpStats `json:"stats,omitempty"`
+	Progress  string      `json:"progress,omitempty"`
+	FinishLog string      `json:"finishLog,omitempty"`
+
 	LastScheduleTime *metav1.Time `json:"lastScheduleTime,omitempty"`
 	LastCompleteTime *metav1.Time `json:"lastCompleteTime,omitempty"`
 	LastCompleteNode string       `json:"LastCompleteNode,omitempty"`
@@ -110,6 +135,9 @@ type Condition struct {
 // +kubebuilder:printcolumn:name="CacheGroup",type="string",JSONPath=`.spec.cacheGroupName`
 // +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=`.status.phase`
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=`.metadata.creationTimestamp`
+// +kubebuilder:printcolumn:name="Scanned",type="string",JSONPath=".status.stats.scannedData"
+// +kubebuilder:printcolumn:name="Completed",type="string",JSONPath=".status.stats.completedData"
+// +kubebuilder:printcolumn:name="Progress",type="string",JSONPath=".status.progress"
 // +kubebuilder:printcolumn:name="Duration",type="string",JSONPath=`.status.duration`
 
 // WarmUp is the Schema for the warmups API

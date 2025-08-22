@@ -322,9 +322,12 @@ func ParseSyncMetrics(data string) (map[string]float64, error) {
 	return metrics, nil
 }
 
+var (
+	bytesRe = regexp.MustCompile(`(?i)^(\d+\.?\d*)\s*([KMGTPE]i?B|B)?$`)
+)
+
 func parseBytes(s string) (int64, error) {
-	re := regexp.MustCompile(`(?i)^(\d+\.?\d*)\s*([KMGTPE]i?B)?$`)
-	matches := re.FindStringSubmatch(s)
+	matches := bytesRe.FindStringSubmatch(s)
 	if matches == nil {
 		return 0, fmt.Errorf("invalid bytes format: %s", s)
 	}

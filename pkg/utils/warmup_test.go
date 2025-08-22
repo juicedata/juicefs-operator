@@ -144,6 +144,14 @@ func TestCalculateWarmupProgress(t *testing.T) {
 			},
 			expected: "0.09%",
 		},
+		{
+			name: "small data",
+			stats: juicefsiov1.WarmUpStats{
+				ScannedData:   "1 B",
+				CompletedData: "1 B",
+			},
+			expected: "100.00%",
+		},
 	}
 
 	for _, tt := range tests {

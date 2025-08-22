@@ -387,11 +387,12 @@ func TestParseLog(t *testing.T) {
 		t.Fatal(err)
 	}
 	expected := map[string]int64{
-		"found":        4,
-		"copied":       4,
-		"failed":       0,
-		"skipped":      0,
-		"copied_bytes": 159865896,
+		"found":         4,
+		"copied":        4,
+		"failed":        0,
+		"skipped":       0,
+		"skipped_bytes": 0,
+		"copied_bytes":  159865896,
 	}
 
 	data2 := `
@@ -623,6 +624,42 @@ func TestTruncateAffinityIfNeeded(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			TruncateSyncAffinityIfNeeded(tt.affinity)
 			assert.Equal(t, tt.want, tt.affinity)
+		})
+	}
+}
+
+func TestParseBytes(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		want    int64
+		wantErr bool
+	}{
+		{"Bytes", "100B", 100, false},
+		{"Kib", "1KiB", 1024, false},
+		{"Mib Decimal", "1.5MiB", 1572864, false},
+		{"Gib space", "1 GiB", 1073741824, false},
+		{"Tib case insensitive", "1tiB", 1099511627776, false},
+		{"Pib", "1 PiB", 1125899906842624, false},
+		{"Eib", "1EiB", 1152921504606846976, false},
+		{"No unit", "42", 42, false},
+		{"Zero", "0", 0, false},
+		{"Zero with unit", "0 KiB", 0, false},
+		{"Invalid number", "abc", 0, true},
+		{"Unknown unit", "10XiB", 0, true},
+		{"Invalid format", "10MB10", 0, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := parseBytes(tt.input)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("parseBytes() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if got != tt.want {
+				t.Errorf("parseBytes() = %v, want %v", got, tt.want)
+			}
 		})
 	}
 }

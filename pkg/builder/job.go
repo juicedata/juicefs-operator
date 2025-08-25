@@ -133,9 +133,8 @@ func (j *JobBuilder) genBaseJob() *batchv1.Job {
 			},
 		},
 		Spec: batchv1.JobSpec{
-			Parallelism:             utils.ToPtr(int32(1)),
-			BackoffLimit:            j.wu.Spec.BackoffLimit,
-			TTLSecondsAfterFinished: j.wu.Spec.TTLSecondsAfterFinished,
+			Parallelism:  utils.ToPtr(int32(1)),
+			BackoffLimit: j.wu.Spec.BackoffLimit,
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels:      j.wu.Spec.Metadata.Labels,

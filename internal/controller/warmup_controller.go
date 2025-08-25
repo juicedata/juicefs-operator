@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"time"
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -135,6 +136,26 @@ var _ warmUpHandler = &onceHandler{}
 
 func (o *onceHandler) sync(ctx context.Context, wu *juicefsiov1.WarmUp, cgName string) (result reconcile.Result, err error) {
 	l := log.FromContext(ctx)
+	if wu.Status.Phase == juicefsiov1.WarmUpPhaseFailed {
+		return reconcile.Result{}, nil
+	}
+	if wu.Status.Phase == juicefsiov1.WarmUpPhaseComplete {
+		if wu.Spec.TTLSecondsAfterFinished != nil {
+			completedAt := wu.Status.LastCompleteTime
+			if completedAt == nil {
+				return ctrl.Result{}, nil
+			}
+			since := float64(*wu.Spec.TTLSecondsAfterFinished) - time.Since(completedAt.Time).Seconds()
+			if since <= 0 {
+				l.Info("warmup ttl is expired, deleted")
+				if err := o.Delete(ctx, wu); err != nil {
+					return ctrl.Result{}, client.IgnoreNotFound(err)
+				}
+			}
+			return ctrl.Result{RequeueAfter: time.Second*time.Duration(since) + 1}, nil
+		}
+		return reconcile.Result{}, nil
+	}
 	jobName := common.GenJobName(wu.Name)
 	var job batchv1.Job
 	if err := o.Get(ctx, client.ObjectKey{Namespace: wu.Namespace, Name: jobName}, &job); err != nil {

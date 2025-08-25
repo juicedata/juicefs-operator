@@ -1099,8 +1099,8 @@ func (in *WarmUpSpec) DeepCopyInto(out *WarmUpSpec) {
 		*out = new(int32)
 		**out = **in
 	}
-	if in.TtlSecondsAfterFinished != nil {
-		in, out := &in.TtlSecondsAfterFinished, &out.TtlSecondsAfterFinished
+	if in.TTLSecondsAfterFinished != nil {
+		in, out := &in.TTLSecondsAfterFinished, &out.TTLSecondsAfterFinished
 		*out = new(int32)
 		**out = **in
 	}

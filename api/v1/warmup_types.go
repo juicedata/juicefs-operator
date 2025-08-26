@@ -48,7 +48,7 @@ type WarmUpStats struct {
 type WarmUpSpec struct {
 	CacheGroupName          string                      `json:"cacheGroupName"`
 	BackoffLimit            *int32                      `json:"backoffLimit,omitempty"`
-	TtlSecondsAfterFinished *int32                      `json:"ttlSecondsAfterFinished,omitempty"`
+	TTLSecondsAfterFinished *int32                      `json:"ttlSecondsAfterFinished,omitempty"`
 	Metadata                Metadata                    `json:"metadata,omitempty"`
 	Tolerations             []corev1.Toleration         `json:"tolerations,omitempty"`
 	NodeSelector            map[string]string           `json:"nodeSelector,omitempty"`

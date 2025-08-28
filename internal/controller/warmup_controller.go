@@ -271,7 +271,7 @@ func (c *cronHandler) sync(ctx context.Context, wu *juicefsiov1.WarmUp, cgName s
 	cronjobBuilder := builder.NewJobBuilder(wu, &podList.Items[0])
 	newCronJob := cronjobBuilder.NewWarmUpCronJob()
 
-	if err := c.Get(ctx, client.ObjectKey{Namespace: wu.Namespace, Name: utils.GenJobName(wu.Name)}, &cronjob); err != nil {
+	if err := c.Get(ctx, client.ObjectKey{Namespace: wu.Namespace, Name: newCronJob.Name}, &cronjob); err != nil {
 		if utils.IsNotFound(err) {
 			l.Info("create warmup cronjob", "cronjob", newCronJob.Name)
 			err = c.Create(ctx, newCronJob)

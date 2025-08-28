@@ -66,7 +66,8 @@ const (
 	AnnoBackupWorker        = "juicefs.io/backup-worker"
 	AnnoWaitingDeleteWorker = "juicefs.io/waiting-delete-worker"
 
-	LabelMaxLength = 63
+	LabelMaxLength       = 63
+	CronJobNameMaxLength = 52
 
 	InitConfigVolumeName = "init-config"
 	InitConfigVolumeKey  = "initconfig"

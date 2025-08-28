@@ -46,3 +46,8 @@ func GenJobName(wuName string) string {
 	n := fmt.Sprintf("%s-%s", common.WarmUpNamePrefix, wuName)
 	return TruncateLabelValue(n)
 }
+
+func GenCronJobName(wuName string) string {
+	n := fmt.Sprintf("%s-%s", common.WarmUpNamePrefix, wuName)
+	return TruncateLabelValueWithLength(n, common.CronJobNameMaxLength)
+}

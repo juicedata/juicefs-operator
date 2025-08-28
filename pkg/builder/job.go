@@ -90,7 +90,7 @@ func (j *JobBuilder) NewWarmUpCronJob() *batchv1.CronJob {
 
 	cronJob := &batchv1.CronJob{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:            utils.GenJobName(j.wu.Name),
+			Name:            utils.GenCronJobName(j.wu.Name),
 			Namespace:       j.wu.Namespace,
 			OwnerReferences: GetWarmUpOwnerReference(j.wu),
 			Labels: map[string]string{

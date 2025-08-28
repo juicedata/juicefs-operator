@@ -146,7 +146,10 @@ func ParseYamlOrJson(source string) (map[string]interface{}, error) {
 // If the input string is longer than the maximum length, it computes an MD5 hash of
 // the string, and appends it to the input string
 func TruncateLabelValue(s string) string {
-	length := common.LabelMaxLength
+	return TruncateLabelValueWithLength(s, common.LabelMaxLength)
+}
+
+func TruncateLabelValueWithLength(s string, length int) string {
 	if len(s) <= length {
 		return s
 	}

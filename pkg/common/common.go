@@ -66,7 +66,8 @@ const (
 	AnnoBackupWorker        = "juicefs.io/backup-worker"
 	AnnoWaitingDeleteWorker = "juicefs.io/waiting-delete-worker"
 
-	LabelMaxLength = 63
+	LabelMaxLength       = 63
+	CronJobNameMaxLength = 52
 
 	InitConfigVolumeName = "init-config"
 	InitConfigVolumeKey  = "initconfig"
@@ -116,10 +117,6 @@ var (
 
 func GenWorkerName(cgName string, nodeName string) string {
 	return fmt.Sprintf("%s-%s-%s", WorkerNamePrefix, cgName, nodeName)
-}
-
-func GenJobName(wuName string) string {
-	return fmt.Sprintf("%s-%s", WarmUpNamePrefix, wuName)
 }
 
 func GenCleanCacheJobName(cgName, nodeName string) string {

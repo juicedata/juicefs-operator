@@ -30,6 +30,7 @@ import (
 
 	juicefsiov1 "github.com/juicedata/juicefs-operator/api/v1"
 	"github.com/juicedata/juicefs-operator/pkg/common"
+	"github.com/juicedata/juicefs-operator/pkg/utils"
 )
 
 var _ = Describe("WarmUp Controller", func() {
@@ -156,7 +157,7 @@ var _ = Describe("WarmUp Controller", func() {
 			job := &batchv1.Job{}
 			err = k8sClient.Get(ctx, types.NamespacedName{
 				Namespace: namespace,
-				Name:      common.GenJobName(warmup.Name),
+				Name:      utils.GenJobName(warmup.Name),
 			}, job)
 			Expect(err).NotTo(HaveOccurred())
 		})

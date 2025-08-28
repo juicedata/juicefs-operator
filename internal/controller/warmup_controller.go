@@ -156,7 +156,7 @@ func (o *onceHandler) sync(ctx context.Context, wu *juicefsiov1.WarmUp, cgName s
 		}
 		return reconcile.Result{}, nil
 	}
-	jobName := common.GenJobName(wu.Name)
+	jobName := utils.GenJobName(wu.Name)
 	var job batchv1.Job
 	if err := o.Get(ctx, client.ObjectKey{Namespace: wu.Namespace, Name: jobName}, &job); err != nil {
 		if utils.IsNotFound(err) {
@@ -271,7 +271,7 @@ func (c *cronHandler) sync(ctx context.Context, wu *juicefsiov1.WarmUp, cgName s
 	cronjobBuilder := builder.NewJobBuilder(wu, &podList.Items[0])
 	newCronJob := cronjobBuilder.NewWarmUpCronJob()
 
-	if err := c.Get(ctx, client.ObjectKey{Namespace: wu.Namespace, Name: common.GenJobName(wu.Name)}, &cronjob); err != nil {
+	if err := c.Get(ctx, client.ObjectKey{Namespace: wu.Namespace, Name: newCronJob.Name}, &cronjob); err != nil {
 		if utils.IsNotFound(err) {
 			l.Info("create warmup cronjob", "cronjob", newCronJob.Name)
 			err = c.Create(ctx, newCronJob)

@@ -17,8 +17,10 @@
 package utils
 
 import (
+	"fmt"
 	"time"
 
+	"github.com/juicedata/juicefs-operator/pkg/common"
 	v1 "k8s.io/api/batch/v1"
 )
 
@@ -38,4 +40,9 @@ func CalculateDuration(creationTime time.Time, finishTime time.Time) string {
 		finishTime = time.Now()
 	}
 	return finishTime.Sub(creationTime).Round(time.Second).String()
+}
+
+func GenJobName(wuName string) string {
+	n := fmt.Sprintf("%s-%s", common.WarmUpNamePrefix, wuName)
+	return TruncateLabelValue(n)
 }

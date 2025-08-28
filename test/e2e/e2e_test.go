@@ -29,6 +29,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/juicedata/juicefs-operator/pkg/common"
+	pkgutils "github.com/juicedata/juicefs-operator/pkg/utils"
 	"github.com/juicedata/juicefs-operator/test/utils"
 )
 
@@ -771,7 +772,7 @@ var _ = Describe("controller", Ordered, func() {
 			fmt.Println("pods:")
 			fmt.Println(string(result))
 
-			cmd = exec.Command("kubectl", "get", "po", "-l", fmt.Sprintf("job-name=%s", common.GenJobName(wuName)), "-n", namespace, "--no-headers", "-o", "jsonpath='{.items[*].metadata.name}'")
+			cmd = exec.Command("kubectl", "get", "po", "-l", fmt.Sprintf("job-name=%s", pkgutils.GenJobName(wuName)), "-n", namespace, "--no-headers", "-o", "jsonpath='{.items[*].metadata.name}'")
 			result, _ = utils.Run(cmd)
 			if len(utils.GetNonEmptyLines(string(result))) == 1 && strings.TrimSpace(string(result)) != "''" {
 				fmt.Println("warmup pod describe:")
@@ -817,7 +818,7 @@ var _ = Describe("controller", Ordered, func() {
 
 			By("validating warmup job running")
 			verifyWarmUpJobRunning := func() error {
-				cmd := exec.Command("kubectl", "get", "job", common.GenJobName(wuName), "-n", namespace, "-o", "jsonpath={.status.active}")
+				cmd := exec.Command("kubectl", "get", "job", pkgutils.GenJobName(wuName), "-n", namespace, "-o", "jsonpath={.status.active}")
 				result, err := utils.Run(cmd)
 				if err != nil {
 					return fmt.Errorf("get warmup job failed, %+v", err)
@@ -839,7 +840,7 @@ var _ = Describe("controller", Ordered, func() {
 				if string(status) != "Running" {
 					return fmt.Errorf("warmup in %s status", status)
 				}
-				cmd = exec.Command("kubectl", "get", "po", "-l", fmt.Sprintf("job-name=%s", common.GenJobName(wuName)), "-n", namespace, "--no-headers")
+				cmd = exec.Command("kubectl", "get", "po", "-l", fmt.Sprintf("job-name=%s", pkgutils.GenJobName(wuName)), "-n", namespace, "--no-headers")
 				result, err := utils.Run(cmd)
 				if err != nil {
 					return fmt.Errorf("get warmup job pod failed, %+v", err)

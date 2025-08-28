@@ -118,10 +118,6 @@ func GenWorkerName(cgName string, nodeName string) string {
 	return fmt.Sprintf("%s-%s-%s", WorkerNamePrefix, cgName, nodeName)
 }
 
-func GenJobName(wuName string) string {
-	return fmt.Sprintf("%s-%s", WarmUpNamePrefix, wuName)
-}
-
 func GenCleanCacheJobName(cgName, nodeName string) string {
 	return fmt.Sprintf("%s-%s-%s", CleanCacheContainerName, cgName, nodeName)
 }

@@ -119,10 +119,6 @@ func GenWorkerName(cgName string, nodeName string) string {
 	return fmt.Sprintf("%s-%s-%s", WorkerNamePrefix, cgName, nodeName)
 }
 
-func GenCleanCacheJobName(cgName, nodeName string) string {
-	return fmt.Sprintf("%s-%s-%s", CleanCacheContainerName, cgName, nodeName)
-}
-
 func GenSyncSecretName(syncJobName string) string {
 	return fmt.Sprintf("juicefs-%s-secrets", syncJobName)
 }

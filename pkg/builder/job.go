@@ -324,7 +324,7 @@ func NewCleanCacheJob(cg juicefsiov1.CacheGroup, worker corev1.Pod) *batchv1.Job
 
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      common.GenCleanCacheJobName(cg.Name, worker.Spec.NodeName),
+			Name:      utils.GenCleanCacheJobName(cg.Name, worker.Spec.NodeName),
 			Namespace: worker.Namespace,
 			Labels: map[string]string{
 				common.LabelAppType:    common.LabelCleanCacheJobValue,

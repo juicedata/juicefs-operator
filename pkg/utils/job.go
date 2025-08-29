@@ -51,3 +51,7 @@ func GenCronJobName(wuName string) string {
 	n := fmt.Sprintf("%s-%s", common.WarmUpNamePrefix, wuName)
 	return TruncateLabelValueWithLength(n, common.CronJobNameMaxLength)
 }
+
+func GenCleanCacheJobName(cgName, nodeName string) string {
+	return TruncateLabelValue(fmt.Sprintf("%s-%s-%s", common.CleanCacheContainerName, cgName, nodeName))
+}

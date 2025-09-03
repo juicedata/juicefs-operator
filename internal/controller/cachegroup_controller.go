@@ -26,6 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -670,6 +671,9 @@ func (r *CacheGroupReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&juicefsiov1.CacheGroup{}).
 		Owns(&corev1.Pod{}).
 		Owns(&corev1.PersistentVolumeClaim{}).
+		WithOptions(controller.Options{
+			MaxConcurrentReconciles: common.MaxCGConcurrentReconciles,
+		}).
 		Watches(&corev1.Node{}, r.enqueueRequestForNode()).
 		Complete(r)
 }

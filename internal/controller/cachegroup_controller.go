@@ -150,7 +150,9 @@ func (r *CacheGroupReconciler) sync(ctx context.Context, cg *juicefsiov1.CacheGr
 				break
 			}
 			wg.Add(1)
-			numUnavailable++
+			if actualState != nil {
+				numUnavailable++
+			}
 			go func() {
 				defer wg.Done()
 				if groupBackUp {

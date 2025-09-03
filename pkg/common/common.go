@@ -104,6 +104,7 @@ var (
 
 	MaxSyncConcurrentReconciles   = 10
 	MaxWarmupConcurrentReconciles = 10
+	MaxCGConcurrentReconciles     = 10
 
 	UpdateWarmupStatsInterval = 3 * time.Second
 

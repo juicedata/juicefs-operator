@@ -31,6 +31,7 @@ import (
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
+	"k8s.io/klog/v2"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -49,6 +50,7 @@ var zapOpts = zap.Options{
 
 func init() {
 	fs := flag.NewFlagSet("", flag.ExitOnError)
+	klog.InitFlags(fs)
 	zapOpts.BindFlags(fs)
 	ControllerCmd.Flags().AddGoFlagSet(fs)
 	ControllerCmd.PersistentFlags().IntVarP(&common.MaxSyncConcurrentReconciles, "max-sync-concurrent-reconciles", "", 10, "max concurrent reconciles for sync")
@@ -57,6 +59,7 @@ func init() {
 	ControllerCmd.PersistentFlags().Float32VarP(&common.K8sClientQPS, "k8s-client-qps", "", 30, "QPS indicates the maximum QPS to the master from this client. Setting this to a negative value will disable client-side ratelimiting")
 	ControllerCmd.PersistentFlags().IntVarP(&common.K8sClientBurst, "k8s-client-burst", "", 20, "Maximum burst for throttle")
 	ControllerCmd.PersistentFlags().DurationVarP(&common.UpdateWarmupStatsInterval, "update-warmup-stats-interval", "", 3*time.Second, "Interval for updating warmup stats")
+	ControllerCmd.PersistentFlags().StringArrayVarP(&common.WatchNamespaces, "watch-namespaces", "", common.WatchNamespaces, "The namespace(s) that the operator watches. If not set, the operator watches all namespaces.")
 }
 
 func run() {
@@ -98,7 +101,6 @@ func run() {
 		os.Exit(1)
 	}
 
-	setupLog.Info("starting manager")
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)

@@ -22,10 +22,14 @@ import (
 	"os"
 
 	"github.com/juicedata/juicefs-operator/pkg/common"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
@@ -78,6 +82,31 @@ func NewManager() (ctrl.Manager, error) {
 	cfg := ctrl.GetConfigOrDie()
 	cfg.QPS = common.K8sClientQPS
 	cfg.Burst = common.K8sClientBurst
+
+	cacheOpts := cache.Options{
+		ByObject: map[client.Object]cache.ByObject{
+			&corev1.Pod{}: {
+				Label: labels.SelectorFromSet(labels.Set{common.LabelManagedBy: common.LabelManagedByValue}),
+			},
+			&batchv1.CronJob{}: {
+				Label: labels.SelectorFromSet(labels.Set{common.LabelManagedBy: common.LabelManagedByValue}),
+			},
+			&batchv1.Job{}: {
+				Label: labels.SelectorFromSet(labels.Set{common.LabelManagedBy: common.LabelManagedByValue}),
+			},
+			&corev1.PersistentVolumeClaim{}: {
+				Label: labels.SelectorFromSet(labels.Set{common.LabelManagedBy: common.LabelManagedByValue}),
+			},
+		},
+	}
+	if len(common.WatchNamespaces) > 0 {
+		setupLog.Info("Watching namespaces", "namespaces", common.WatchNamespaces)
+		defaultNamespaces := map[string]cache.Config{}
+		for _, ns := range common.WatchNamespaces {
+			defaultNamespaces[ns] = cache.Config{}
+		}
+		cacheOpts.DefaultNamespaces = defaultNamespaces
+	}
 	// ref: https://github.com/kubernetes-sigs/controller-runtime/issues/2956
 	cfg.WarningHandler = rest.NoWarnings{}
 	mgr, err := ctrl.NewManager(cfg, ctrl.Options{
@@ -86,6 +115,7 @@ func NewManager() (ctrl.Manager, error) {
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       "03922de6.juicefs.io",
+		Cache:                  cacheOpts,
 		// LeaderElectionReleaseOnCancel defines if the leader should step down voluntarily
 		// when the Manager ends. This requires the binary to immediately end when the
 		// Manager is stopped, otherwise, this setting is unsafe. Setting this significantly

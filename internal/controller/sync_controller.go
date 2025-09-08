@@ -471,7 +471,7 @@ func (r *SyncReconciler) updateStatus(ctx context.Context, sync *juicefsiov1.Syn
 			return err
 		}
 		newSync.Status = sync.Status
-		return r.Status().Update(ctx, sync)
+		return r.Status().Update(ctx, newSync)
 	})
 }
 

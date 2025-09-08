@@ -453,8 +453,14 @@ func (r *CacheGroupReconciler) gracefulShutdownWorker(
 	return false, err
 }
 
+const minBackupWorkerDuration = time.Second
+
 func (r *CacheGroupReconciler) shouldAddGroupBackupOrNot(cg *juicefsiov1.CacheGroup, actual *corev1.Pod, newImage string) bool {
 	if utils.CompareEEImageVersion(newImage, "5.1.0") < 0 {
+		return false
+	}
+	duration := utils.GetBackupWorkerDuration(cg.Spec.BackupDuration)
+	if duration <= minBackupWorkerDuration {
 		return false
 	}
 
@@ -467,7 +473,7 @@ func (r *CacheGroupReconciler) shouldAddGroupBackupOrNot(cg *juicefsiov1.CacheGr
 	// then this node is a normal worker.
 	if v, ok := actual.Annotations[common.AnnoBackupWorker]; ok {
 		backupAt := utils.MustParseTime(v)
-		return time.Since(backupAt) < utils.GetBackupWorkerDuration(cg.Spec.BackupDuration)
+		return time.Since(backupAt) < duration
 	}
 	return false
 }

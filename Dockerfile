@@ -44,6 +44,8 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -ldflags
 FROM gcr.io/distroless/static:nonroot
 WORKDIR /
 COPY --from=builder /workspace/juicefs-operator .
+# for compatibility
+COPY --from=builder /workspace/juicefs-operator ./manager
 USER 65532:65532
 
 ENTRYPOINT ["/juicefs-operator", "controller"]

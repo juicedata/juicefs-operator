@@ -108,6 +108,8 @@ var (
 
 	UpdateWarmupStatsInterval = 3 * time.Second
 
+	WatchNamespaces = []string{}
+
 	K8sClientQPS   float32 = 30
 	K8sClientBurst int     = 20
 

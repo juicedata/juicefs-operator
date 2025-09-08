@@ -10,6 +10,15 @@ else
 GOBIN=$(shell go env GOBIN)
 endif
 
+GIT_COMMIT?=$(shell git rev-parse HEAD)
+VERSION=$(shell git describe --tags --match 'v*' --always --dirty)
+BUILD_DATE?=$(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
+CLIENT_GO_PKG=k8s.io/client-go
+LDFLAGS?="-X ${CLIENT_GO_PKG}/pkg/version.buildDate=${BUILD_DATE} \
+		  -X ${CLIENT_GO_PKG}/pkg/version.gitVersion=${VERSION} \
+		  -X ${CLIENT_GO_PKG}/pkg/version.gitCommit=${GIT_COMMIT} \
+		  -s -w"
+
 # CONTAINER_TOOL defines the container tool to be used for building images.
 # Be aware that the target commands are only tested with Docker which is
 # scaffolded by default. However, you might want to replace it to use other
@@ -80,7 +89,7 @@ lint-fix: golangci-lint ## Run golangci-lint linter and perform fixes
 
 .PHONY: build
 build: manifests generate fmt vet ## Build manager binary.
-	go build -o bin/manager cmd/main.go
+	go build -o bin/manager -ldflags ${LDFLAGS} cmd/main.go
 
 .PHONY: run
 run: manifests generate fmt vet ## Run a controller from your host.

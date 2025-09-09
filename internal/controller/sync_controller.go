@@ -93,8 +93,16 @@ func (r *SyncReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		sync.Status.Reason = err.Error()
 		return ctrl.Result{}, r.updateStatus(ctx, sync)
 	}
-	if from.FilesFrom != nil && utils.CompareEEImageVersion(sync.Spec.Image, "5.1.10") < 0 {
+	if sync.Spec.From.JuiceFS != nil && from.FilesFrom != nil && utils.CompareEEImageVersion(sync.Spec.Image, "5.1.10") < 0 {
 		err := fmt.Errorf("filesFrom is only supported in JuiceFS EE 5.1.10 or later")
+		l.Error(err, "")
+		sync.Status.Phase = juicefsiov1.SyncPhaseFailed
+		sync.Status.Reason = err.Error()
+		return ctrl.Result{}, r.updateStatus(ctx, sync)
+	}
+
+	if sync.Spec.From.JuiceFSCE != nil && from.FilesFrom != nil && utils.CompareImageVersion(sync.Spec.Image, "1.3.0") < 0 {
+		err := fmt.Errorf("filesFrom is only supported in JuiceFS CE 1.3.0 or later")
 		l.Error(err, "")
 		sync.Status.Phase = juicefsiov1.SyncPhaseFailed
 		sync.Status.Reason = err.Error()

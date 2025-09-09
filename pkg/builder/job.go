@@ -188,8 +188,12 @@ func (j *JobBuilder) getWarmUpCommand() []string {
 	}
 
 	if j.wu.Spec.TargetsFrom != nil {
-		if j.wu.Spec.TargetsFrom.Files != nil {
-			targetsCmd = fmt.Sprintf("echo '%s' > %s", strings.Join(j.wu.Spec.TargetsFrom.Files, "\n"), warmupFileListPath)
+		targets := []string{}
+		for _, t := range j.wu.Spec.TargetsFrom.Files {
+			targets = append(targets, path.Join(common.MountPoint, t))
+		}
+		if len(targets) > 0 {
+			targetsCmd = fmt.Sprintf("echo '%s' > %s", strings.Join(targets, "\n"), warmupFileListPath)
 		}
 		// internal file system path
 		if j.wu.Spec.TargetsFrom.FilePath != "" {
@@ -200,7 +204,13 @@ func (j *JobBuilder) getWarmUpCommand() []string {
 
 	// @deprecated: use targetsFrom.files instead
 	if len(j.wu.Spec.Targets) != 0 {
-		targetsCmd = fmt.Sprintf("echo '%s' > %s", strings.Join(j.wu.Spec.Targets, "\n"), warmupFileListPath)
+		targets := []string{}
+		for _, t := range j.wu.Spec.Targets {
+			targets = append(targets, path.Join(common.MountPoint, t))
+		}
+		if len(targets) > 0 {
+			targetsCmd = fmt.Sprintf("echo '%s' > %s", strings.Join(targets, "\n"), warmupFileListPath)
+		}
 	}
 
 	if j.wu.Spec.TargetsFrom != nil || len(targetsCmd) != 0 {

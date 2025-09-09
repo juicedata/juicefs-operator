@@ -79,22 +79,41 @@ const eeImageRegex = `ee-(\d+)\.(\d+)\.(\d+)`
 // return -1 if image < target
 // return 0 if image == target
 func CompareEEImageVersion(image, target string) int {
+	return CompareImageVersion(image, target)
+}
+
+const ceImageRegex = `ce-(\d+)\.(\d+)\.(\d+)`
+
+func CompareImageVersion(image, target string) int {
 	parts := strings.Split(image, ":")
 	if len(parts) < 2 {
 		return -1 // invalid image format
 	}
 	current := parts[1]
 	if strings.Contains(current, "latest") ||
+		strings.Contains(current, "master") ||
+		strings.Contains(current, "main") ||
 		strings.Contains(current, "nightly") ||
 		strings.Contains(current, "dev") {
 		return 1
 	}
 
-	matches := regexp.MustCompile(eeImageRegex).FindStringSubmatch(current)
-	if len(matches) < 1 {
+	var currentParts []string
+	if strings.Contains(current, "ee-") {
+		matches := regexp.MustCompile(eeImageRegex).FindStringSubmatch(current)
+		if len(matches) < 1 {
+			return -1
+		}
+		currentParts = matches[1:]
+	} else if strings.Contains(current, "ce-") {
+		matches := regexp.MustCompile(ceImageRegex).FindStringSubmatch(current)
+		if len(matches) < 1 {
+			return -1
+		}
+		currentParts = matches[1:]
+	} else {
 		return -1
 	}
-	currentParts := matches[1:]
 	targetParts := strings.Split(target, ".")
 	for i := 0; i < len(currentParts); i++ {
 		if i >= len(targetParts) {
@@ -112,7 +131,6 @@ func CompareEEImageVersion(image, target string) int {
 	if len(currentParts) < len(targetParts) {
 		return -1
 	}
-
 	return 0
 }
 

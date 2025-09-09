@@ -322,12 +322,26 @@ func (r *WarmUpReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		return err
 	}
 
-	return ctrl.NewControllerManagedBy(mgr).
+	controllerBuilder := ctrl.NewControllerManagedBy(mgr).
 		For(&juicefsiov1.WarmUp{}).
 		Owns(&batchv1.Job{}).
-		Owns(&batchv1.CronJob{}).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: common.MaxWarmupConcurrentReconciles,
-		}).
-		Complete(r)
+		})
+
+	if isCronJobAPIAvailable(mgr) {
+		controllerBuilder = controllerBuilder.Owns(&batchv1.CronJob{})
+	} else {
+		log.Log.Info("CronJob API is not available in this Kubernetes cluster, scheduled warmup functionality will be disabled. Only manual warmup jobs will be supported.")
+	}
+
+	return controllerBuilder.Complete(r)
+}
+
+// isCronJobAPIAvailable checks if the CronJob API is available in the cluster
+func isCronJobAPIAvailable(mgr ctrl.Manager) bool {
+	mapper := mgr.GetRESTMapper()
+	gvk := batchv1.SchemeGroupVersion.WithKind("CronJob")
+	_, err := mapper.RESTMapping(gvk.GroupKind(), gvk.Version)
+	return err == nil
 }

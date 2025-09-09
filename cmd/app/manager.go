@@ -151,7 +151,7 @@ func NewManager() (ctrl.Manager, error) {
 		}
 		if common.OperatorPodName != "" && common.OperatorPodNamespace != "" {
 			pod := &corev1.Pod{}
-			if err := mgr.GetClient().Get(
+			if err := mgr.GetAPIReader().Get(
 				context.Background(),
 				types.NamespacedName{
 					Name:      common.OperatorPodName,

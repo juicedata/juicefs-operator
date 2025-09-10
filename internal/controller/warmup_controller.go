@@ -43,7 +43,7 @@ import (
 type WarmUpReconciler struct {
 	client.Client
 	Scheme           *runtime.Scheme
-	CronjobSupported bool
+	cronjobSupported bool
 }
 
 // +kubebuilder:rbac:groups=juicefs.io,resources=warmups,verbs=get;list;watch;create;update;patch;delete
@@ -120,7 +120,7 @@ func (r *WarmUpReconciler) getWarmUpHandler(policyType juicefsiov1.PolicyType) w
 	case juicefsiov1.PolicyTypeOnce:
 		return &onceHandler{r.Client}
 	case juicefsiov1.PolicyTypeCron:
-		if !r.CronjobSupported {
+		if !r.cronjobSupported {
 			return nil
 		}
 		return &cronHandler{r.Client}
@@ -335,7 +335,7 @@ func (r *WarmUpReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	if isCronJobAPIAvailable(mgr) {
 		controllerBuilder = controllerBuilder.Owns(&batchv1.CronJob{})
-		r.CronjobSupported = true
+		r.cronjobSupported = true
 	} else {
 		log.Log.Info("CronJob API is not available in this Kubernetes cluster, scheduled warmup functionality will be disabled. Only manual warmup jobs will be supported.")
 	}

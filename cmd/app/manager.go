@@ -88,9 +88,6 @@ func NewManager() (ctrl.Manager, error) {
 			&corev1.Pod{}: {
 				Label: labels.SelectorFromSet(labels.Set{common.LabelManagedBy: common.LabelManagedByValue}),
 			},
-			&batchv1.CronJob{}: {
-				Label: labels.SelectorFromSet(labels.Set{common.LabelManagedBy: common.LabelManagedByValue}),
-			},
 			&batchv1.Job{}: {
 				Label: labels.SelectorFromSet(labels.Set{common.LabelManagedBy: common.LabelManagedByValue}),
 			},

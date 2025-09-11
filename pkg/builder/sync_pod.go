@@ -309,6 +309,22 @@ func (s *SyncPodBuilder) genSyncVolumes(isManager bool) ([]corev1.Volume, []core
 				MountPath: extraVolume.HostPath.MountPath,
 			})
 		}
+		if extraVolume.PVC != nil {
+			if lo.ContainsBy(volumes, func(v corev1.Volume) bool { return v.Name == extraVolume.PVC.ClaimName }) {
+				continue
+			}
+			volumes = append(volumes, corev1.Volume{
+				Name: extraVolume.PVC.ClaimName,
+				VolumeSource: corev1.VolumeSource{
+					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+						ClaimName: extraVolume.PVC.ClaimName,
+					}},
+			})
+			volumeMounts = append(volumeMounts, corev1.VolumeMount{
+				Name:      extraVolume.PVC.ClaimName,
+				MountPath: extraVolume.PVC.MountPath,
+			})
+		}
 	}
 
 	if !s.IsDistributed {

@@ -128,12 +128,34 @@ func newBasicPod(cg *juicefsiov1.CacheGroup, nodeName string) *corev1.Pod {
 		},
 	}
 	if cg.Spec.Replicas == nil {
-		worker.Spec.NodeName = nodeName
+		// Use nodeAffinity instead of nodeName for more flexible scheduling
+		// This allows the scheduler to respect taints, resource constraints, and other scheduling policies
+		worker.Spec.Affinity = &corev1.Affinity{
+			NodeAffinity: &corev1.NodeAffinity{
+				RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+					NodeSelectorTerms: []corev1.NodeSelectorTerm{
+						{
+							MatchExpressions: []corev1.NodeSelectorRequirement{
+								{
+									Key:      "kubernetes.io/hostname",
+									Operator: corev1.NodeSelectorOpIn,
+									Values:   []string{nodeName},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+		if cg.Spec.Worker.Template.NodeSelector != nil {
+			worker.Spec.NodeSelector = cg.Spec.Worker.Template.NodeSelector
+		}
 	} else {
 		if cg.Spec.Worker.Template.NodeSelector != nil {
 			worker.Spec.NodeSelector = cg.Spec.Worker.Template.NodeSelector
 		}
 		// Add pod anti-affinity to avoid scheduling multiple workers on the same node.
+		// This will be merged with any user-defined affinity later
 		worker.Spec.Affinity = &corev1.Affinity{
 			PodAntiAffinity: &corev1.PodAntiAffinity{
 				PreferredDuringSchedulingIgnoredDuringExecution: []corev1.WeightedPodAffinityTerm{
@@ -392,7 +414,8 @@ func (p *PodBuilder) NewCacheGroupWorker(ctx context.Context) *corev1.Pod {
 		}
 	}
 	if spec.Affinity != nil {
-		worker.Spec.Affinity = spec.Affinity
+		// Merge user-defined affinity with the node-specific affinity
+		worker.Spec.Affinity = mergeNodeAffinity(worker.Spec.Affinity, spec.Affinity)
 	}
 	maps.Copy(worker.Labels, spec.Labels)
 	maps.Copy(worker.Annotations, spec.Annotations)
@@ -449,6 +472,58 @@ func (p *PodBuilder) NewCacheGroupWorker(ctx context.Context) *corev1.Pod {
 	}
 
 	return worker
+}
+
+// mergeNodeAffinity merges user-defined affinity with node-specific affinity
+func mergeNodeAffinity(baseAffinity, userAffinity *corev1.Affinity) *corev1.Affinity {
+	if baseAffinity == nil {
+		return userAffinity
+	}
+	if userAffinity == nil {
+		return baseAffinity
+	}
+	
+	// Start with a copy of the base affinity
+	merged := baseAffinity.DeepCopy()
+	
+	// Merge NodeAffinity
+	if userAffinity.NodeAffinity != nil {
+		if merged.NodeAffinity == nil {
+			merged.NodeAffinity = userAffinity.NodeAffinity
+		} else {
+			// Merge required node selector terms
+			if userAffinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution != nil {
+				if merged.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution != nil {
+					// Combine the node selector terms with AND logic
+					// The pod must satisfy both the node-specific requirement and user requirements
+					merged.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms = 
+						append(merged.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms,
+							userAffinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms...)
+				} else {
+					merged.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution = 
+						userAffinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution
+				}
+			}
+			// Add preferred node selector terms
+			if userAffinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution != nil {
+				merged.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution = 
+					append(merged.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution,
+						userAffinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution...)
+			}
+		}
+	}
+	
+	// Copy PodAffinity if specified by user
+	if userAffinity.PodAffinity != nil {
+		merged.PodAffinity = userAffinity.PodAffinity
+	}
+	
+	// Copy PodAntiAffinity if specified by user
+	if userAffinity.PodAntiAffinity != nil {
+		merged.PodAntiAffinity = userAffinity.PodAntiAffinity
+	}
+	
+	return merged
 }
 
 func MergeCacheGroupWorkerTemplate(template *juicefsiov1.CacheGroupWorkerTemplate, overwrite juicefsiov1.CacheGroupWorkerOverwrite) {

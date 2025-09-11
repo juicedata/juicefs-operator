@@ -36,10 +36,18 @@ type HostPath struct {
 	MountPath string `json:"mountPath"`
 }
 
+type PVCMountPath struct {
+	// +kubebuilder:validation:Required
+	ClaimName string `json:"claimName"`
+	// +kubebuilder:validation:Required
+	MountPath string `json:"mountPath"`
+}
+
 type ExtraVolume struct {
 	ConfigMap *nameMountPath `json:"configMap,omitempty"`
 	Secret    *nameMountPath `json:"secret,omitempty"`
 	HostPath  *HostPath      `json:"hostPath,omitempty"`
+	PVC       *PVCMountPath  `json:"pvc,omitempty"`
 }
 
 type ParsedSyncSink struct {
@@ -110,13 +118,6 @@ type SyncSinkJuiceFSCE struct {
 	ExtraVolumes []ExtraVolume `json:"extraVolumes,omitempty"`
 }
 
-type SyncSinkPVC struct {
-	// +kubebuilder:validation:Required
-	Name string `json:"name,omitempty"`
-	// +kubebuilder:validation:Required
-	Namespace string `json:"namespace,omitempty"`
-}
-
 type SyncSink struct {
 	// Sync from external source
 	External *SyncSinkExternal `json:"external,omitempty"`
@@ -126,9 +127,6 @@ type SyncSink struct {
 
 	// Sync from JuiceFS community edition
 	JuiceFSCE *SyncSinkJuiceFSCE `json:"juicefsCE,omitempty"`
-
-	// Sync from PVC
-	PVC *SyncSinkPVC `json:"pvc,omitempty"`
 }
 
 // SyncSpec defines the desired state of Sync.

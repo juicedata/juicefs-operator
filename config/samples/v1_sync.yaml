@@ -66,6 +66,9 @@ spec:
     #         path: /data/jfs/
     #         type: Directory
     #         mountPath: /data/jfs/
+    #     - pvc:
+    #         claimName: data-jfs-pvc
+    #         mountPath: /data/jfs/
   to:
     juicefs:
       path: /sync-test/demo2/

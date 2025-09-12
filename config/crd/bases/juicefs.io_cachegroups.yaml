@@ -53,6 +53,8 @@ spec:
                 type: string
               cleanCache:
                 type: boolean
+              enableScheduling:
+                type: boolean
               replicas:
                 format: int32
                 type: integer

@@ -23,6 +23,7 @@ import (
 	"sync"
 	"time"
 
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -230,6 +231,9 @@ func (r *CacheGroupReconciler) parseExpectState(ctx context.Context, cg *juicefs
 	if cg.Spec.Replicas != nil {
 		return r.parseExpectStateByReplicas(cg), nil
 	}
+	if cg.Spec.EnableScheduling {
+		return r.parseExpectStateByScheduler(ctx, cg)
+	}
 	return r.parseExpectStateByNodeSelector(ctx, cg)
 }
 
@@ -242,14 +246,9 @@ func (r *CacheGroupReconciler) parseExpectStateByReplicas(cg *juicefsiov1.CacheG
 	return expectStates
 }
 
-func (r *CacheGroupReconciler) parseExpectStateByNodeSelector(ctx context.Context, cg *juicefsiov1.CacheGroup) (map[string]juicefsiov1.CacheGroupWorkerTemplate, error) {
-	expectAppliedNodes := corev1.NodeList{}
-	err := r.List(ctx, &expectAppliedNodes, client.MatchingLabels(cg.Spec.Worker.Template.NodeSelector))
-	if err != nil {
-		return nil, err
-	}
+func (r *CacheGroupReconciler) parseExpectStateWithNode(cg *juicefsiov1.CacheGroup, nodes []corev1.Node) map[string]juicefsiov1.CacheGroupWorkerTemplate {
 	expectStates := map[string]juicefsiov1.CacheGroupWorkerTemplate{}
-	for _, node := range expectAppliedNodes.Items {
+	for _, node := range nodes {
 		expectState := cg.Spec.Worker.Template.DeepCopy()
 		for _, overwrite := range cg.Spec.Worker.Overwrite {
 			if utils.SliceContains(overwrite.Nodes, node.Name) ||
@@ -258,6 +257,50 @@ func (r *CacheGroupReconciler) parseExpectStateByNodeSelector(ctx context.Contex
 			}
 		}
 		expectStates[node.Name] = *expectState
+	}
+	return expectStates
+}
+
+func (r *CacheGroupReconciler) parseExpectStateByNodeSelector(ctx context.Context, cg *juicefsiov1.CacheGroup) (map[string]juicefsiov1.CacheGroupWorkerTemplate, error) {
+	expectAppliedNodes := corev1.NodeList{}
+	err := r.List(ctx, &expectAppliedNodes, client.MatchingLabels(cg.Spec.Worker.Template.NodeSelector))
+	if err != nil {
+		return nil, err
+	}
+	return r.parseExpectStateWithNode(cg, expectAppliedNodes.Items), nil
+}
+
+// parseExpectStateByScheduler
+// make cg respect the affinity and tolerations of the scheduler
+func (r *CacheGroupReconciler) parseExpectStateByScheduler(ctx context.Context, cg *juicefsiov1.CacheGroup) (map[string]juicefsiov1.CacheGroupWorkerTemplate, error) {
+	log := log.FromContext(ctx)
+	selector := labels.Everything()
+	if cg.Spec.Worker.Template.NodeSelector != nil {
+		selector = labels.SelectorFromSet(cg.Spec.Worker.Template.NodeSelector)
+	}
+	checkNodes := corev1.NodeList{}
+	err := r.List(ctx, &checkNodes, client.MatchingLabelsSelector{Selector: selector})
+	if err != nil {
+		return nil, err
+	}
+	if len(checkNodes.Items) == 0 {
+		return nil, nil
+	}
+	expectStates := r.parseExpectStateWithNode(cg, checkNodes.Items)
+	for _, node := range checkNodes.Items {
+		state := expectStates[node.Name]
+		pod := &corev1.Pod{
+			Spec: corev1.PodSpec{
+				NodeSelector: state.NodeSelector,
+				Affinity:     state.Affinity,
+				Tolerations:  state.Tolerations,
+			},
+		}
+		fitsNodeAffinity, fitsTaints := utils.PodShouldBeOnNode(pod, &node, node.Spec.Taints)
+		if !fitsNodeAffinity || !fitsTaints {
+			log.V(1).Info("node does not fit the predicates, ignore", "node", node.Name, "fitsNodeAffinity", fitsNodeAffinity, "fitsTaints", fitsTaints)
+			delete(expectStates, node.Name)
+		}
 	}
 	return expectStates, nil
 }

@@ -23,11 +23,8 @@ import (
 	"github.com/juicedata/juicefs-operator/pkg/common"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	v1helper "k8s.io/component-helpers/scheduling/corev1"
-	"k8s.io/component-helpers/scheduling/corev1/nodeaffinity"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -172,40 +169,31 @@ func PodNotReadyReason(pod corev1.Pod) string {
 	return "Unknown"
 }
 
-func PodShouldBeOnNode(pod *v1.Pod, node *v1.Node, taints []v1.Taint) (fitsNodeAffinity, fitsTaints bool) {
-	fitsNodeAffinity, _ = nodeaffinity.GetRequiredNodeAffinity(pod).Match(node)
-	_, hasUntoleratedTaint := v1helper.FindMatchingUntoleratedTaint(taints, pod.Spec.Tolerations, func(t *v1.Taint) bool {
-		return t.Effect == v1.TaintEffectNoExecute || t.Effect == v1.TaintEffectNoSchedule
-	})
-	fitsTaints = !hasUntoleratedTaint
-	return
-}
-
-func AddNodeNameNodeAffinity(affinity *v1.Affinity, nodename string) *v1.Affinity {
-	nodeSelReq := v1.NodeSelectorRequirement{
+func AddNodeNameNodeAffinity(affinity *corev1.Affinity, nodename string) *corev1.Affinity {
+	nodeSelReq := corev1.NodeSelectorRequirement{
 		Key:      metav1.ObjectNameField,
-		Operator: v1.NodeSelectorOpIn,
+		Operator: corev1.NodeSelectorOpIn,
 		Values:   []string{nodename},
 	}
 
-	nodeSelector := &v1.NodeSelector{
-		NodeSelectorTerms: []v1.NodeSelectorTerm{
+	nodeSelector := &corev1.NodeSelector{
+		NodeSelectorTerms: []corev1.NodeSelectorTerm{
 			{
-				MatchFields: []v1.NodeSelectorRequirement{nodeSelReq},
+				MatchFields: []corev1.NodeSelectorRequirement{nodeSelReq},
 			},
 		},
 	}
 
 	if affinity == nil {
-		return &v1.Affinity{
-			NodeAffinity: &v1.NodeAffinity{
+		return &corev1.Affinity{
+			NodeAffinity: &corev1.NodeAffinity{
 				RequiredDuringSchedulingIgnoredDuringExecution: nodeSelector,
 			},
 		}
 	}
 
 	if affinity.NodeAffinity == nil {
-		affinity.NodeAffinity = &v1.NodeAffinity{
+		affinity.NodeAffinity = &corev1.NodeAffinity{
 			RequiredDuringSchedulingIgnoredDuringExecution: nodeSelector,
 		}
 		return affinity

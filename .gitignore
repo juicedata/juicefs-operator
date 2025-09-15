@@ -27,3 +27,5 @@ go.work
 *~
 
 deploy_dev/*
+
+__debug*

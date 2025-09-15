@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"sort"
 	"sync"
 	"time"
 
@@ -34,6 +35,7 @@ import (
 	juicefsiov1 "github.com/juicedata/juicefs-operator/api/v1"
 	"github.com/juicedata/juicefs-operator/pkg/builder"
 	"github.com/juicedata/juicefs-operator/pkg/common"
+	"github.com/juicedata/juicefs-operator/pkg/scheduler"
 	"github.com/juicedata/juicefs-operator/pkg/utils"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -273,7 +275,6 @@ func (r *CacheGroupReconciler) parseExpectStateByNodeSelector(ctx context.Contex
 // parseExpectStateByScheduler
 // make cg respect the affinity and tolerations of the scheduler
 func (r *CacheGroupReconciler) parseExpectStateByScheduler(ctx context.Context, cg *juicefsiov1.CacheGroup) (map[string]juicefsiov1.CacheGroupWorkerTemplate, error) {
-	log := log.FromContext(ctx)
 	selector := labels.Everything()
 	if cg.Spec.Worker.Template.NodeSelector != nil {
 		selector = labels.SelectorFromSet(cg.Spec.Worker.Template.NodeSelector)
@@ -286,20 +287,27 @@ func (r *CacheGroupReconciler) parseExpectStateByScheduler(ctx context.Context, 
 	if len(checkNodes.Items) == 0 {
 		return nil, nil
 	}
+	sim := scheduler.NewSchedulerSimulator(r.Client, checkNodes.Items)
 	expectStates := r.parseExpectStateWithNode(cg, checkNodes.Items)
-	for _, node := range checkNodes.Items {
+
+	nodes := checkNodes.Items
+	sort.Slice(nodes, func(i, j int) bool {
+		return nodes[i].Name < nodes[j].Name
+	})
+	for _, node := range nodes {
 		state := expectStates[node.Name]
-		pod := &corev1.Pod{
-			Spec: corev1.PodSpec{
-				NodeSelector: state.NodeSelector,
-				Affinity:     state.Affinity,
-				Tolerations:  state.Tolerations,
-			},
-		}
-		fitsNodeAffinity, fitsTaints := utils.PodShouldBeOnNode(pod, &node, node.Spec.Taints)
-		if !fitsNodeAffinity || !fitsTaints {
-			log.V(1).Info("node does not fit the predicates, ignore", "node", node.Name, "fitsNodeAffinity", fitsNodeAffinity, "fitsTaints", fitsTaints)
-			delete(expectStates, node.Name)
+		podBuilder := builder.NewPodBuilder(cg, &corev1.Secret{}, node.Name, state, false)
+		pod := podBuilder.NewCacheGroupWorker(ctx)
+		if ok, err := sim.CanSchedulePodOnNode(ctx, pod, &node); err != nil {
+			return nil, err
+		} else {
+			if !ok {
+				delete(expectStates, node.Name)
+				sim.AppendToBeDeletedPod(pod)
+				continue
+			}
+			pod.Spec.NodeName = node.Name
+			sim.AppendPendingPod(pod)
 		}
 	}
 	return expectStates, nil

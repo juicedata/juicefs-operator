@@ -165,6 +165,11 @@ type CacheGroupSpec struct {
 	// Default is 1 hour
 	// +optional
 	WaitingDeletedMaxDuration *metav1.Duration `json:"waitingDeletedMaxDuration,omitempty"`
+
+	// Whether to use the Kubernetes scheduler for worker pods.
+	// If false, then the nodeName field will be used to bypass the scheduler, and `affinity` will be ignored.
+	// +optional
+	EnableScheduling bool `json:"enableScheduling,omitempty"`
 }
 
 type CacheGroupPhase string

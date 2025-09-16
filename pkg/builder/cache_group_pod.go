@@ -128,7 +128,9 @@ func newBasicPod(cg *juicefsiov1.CacheGroup, nodeName string) *corev1.Pod {
 		},
 	}
 	if cg.Spec.Replicas == nil {
-		worker.Spec.NodeName = nodeName
+		if !cg.Spec.EnableScheduling {
+			worker.Spec.NodeName = nodeName
+		}
 	} else {
 		if cg.Spec.Worker.Template.NodeSelector != nil {
 			worker.Spec.NodeSelector = cg.Spec.Worker.Template.NodeSelector
@@ -391,8 +393,10 @@ func (p *PodBuilder) NewCacheGroupWorker(ctx context.Context) *corev1.Pod {
 			worker.Spec.ImagePullSecrets = common.OperatorPod.Spec.ImagePullSecrets
 		}
 	}
-	if spec.Affinity != nil {
-		worker.Spec.Affinity = spec.Affinity
+	if p.cg.Spec.Replicas == nil && spec.Affinity != nil {
+		if p.cg.Spec.EnableScheduling {
+			worker.Spec.Affinity = utils.AddNodeNameNodeAffinity(spec.Affinity.DeepCopy(), p.node)
+		}
 	}
 	maps.Copy(worker.Labels, spec.Labels)
 	maps.Copy(worker.Annotations, spec.Annotations)

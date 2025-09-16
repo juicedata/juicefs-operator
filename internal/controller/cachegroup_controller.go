@@ -20,9 +20,11 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"sort"
 	"sync"
 	"time"
 
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -33,6 +35,7 @@ import (
 	juicefsiov1 "github.com/juicedata/juicefs-operator/api/v1"
 	"github.com/juicedata/juicefs-operator/pkg/builder"
 	"github.com/juicedata/juicefs-operator/pkg/common"
+	"github.com/juicedata/juicefs-operator/pkg/scheduler"
 	"github.com/juicedata/juicefs-operator/pkg/utils"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -230,6 +233,9 @@ func (r *CacheGroupReconciler) parseExpectState(ctx context.Context, cg *juicefs
 	if cg.Spec.Replicas != nil {
 		return r.parseExpectStateByReplicas(cg), nil
 	}
+	if cg.Spec.EnableScheduling {
+		return r.parseExpectStateByScheduler(ctx, cg)
+	}
 	return r.parseExpectStateByNodeSelector(ctx, cg)
 }
 
@@ -242,14 +248,9 @@ func (r *CacheGroupReconciler) parseExpectStateByReplicas(cg *juicefsiov1.CacheG
 	return expectStates
 }
 
-func (r *CacheGroupReconciler) parseExpectStateByNodeSelector(ctx context.Context, cg *juicefsiov1.CacheGroup) (map[string]juicefsiov1.CacheGroupWorkerTemplate, error) {
-	expectAppliedNodes := corev1.NodeList{}
-	err := r.List(ctx, &expectAppliedNodes, client.MatchingLabels(cg.Spec.Worker.Template.NodeSelector))
-	if err != nil {
-		return nil, err
-	}
+func (r *CacheGroupReconciler) parseExpectStateWithNode(cg *juicefsiov1.CacheGroup, nodes []corev1.Node) map[string]juicefsiov1.CacheGroupWorkerTemplate {
 	expectStates := map[string]juicefsiov1.CacheGroupWorkerTemplate{}
-	for _, node := range expectAppliedNodes.Items {
+	for _, node := range nodes {
 		expectState := cg.Spec.Worker.Template.DeepCopy()
 		for _, overwrite := range cg.Spec.Worker.Overwrite {
 			if utils.SliceContains(overwrite.Nodes, node.Name) ||
@@ -258,6 +259,56 @@ func (r *CacheGroupReconciler) parseExpectStateByNodeSelector(ctx context.Contex
 			}
 		}
 		expectStates[node.Name] = *expectState
+	}
+	return expectStates
+}
+
+func (r *CacheGroupReconciler) parseExpectStateByNodeSelector(ctx context.Context, cg *juicefsiov1.CacheGroup) (map[string]juicefsiov1.CacheGroupWorkerTemplate, error) {
+	expectAppliedNodes := corev1.NodeList{}
+	err := r.List(ctx, &expectAppliedNodes, client.MatchingLabels(cg.Spec.Worker.Template.NodeSelector))
+	if err != nil {
+		return nil, err
+	}
+	return r.parseExpectStateWithNode(cg, expectAppliedNodes.Items), nil
+}
+
+// parseExpectStateByScheduler
+// make cg respect the affinity and tolerations of the scheduler
+func (r *CacheGroupReconciler) parseExpectStateByScheduler(ctx context.Context, cg *juicefsiov1.CacheGroup) (map[string]juicefsiov1.CacheGroupWorkerTemplate, error) {
+	selector := labels.Everything()
+	if cg.Spec.Worker.Template.NodeSelector != nil {
+		selector = labels.SelectorFromSet(cg.Spec.Worker.Template.NodeSelector)
+	}
+	checkNodes := corev1.NodeList{}
+	err := r.List(ctx, &checkNodes, client.MatchingLabelsSelector{Selector: selector})
+	if err != nil {
+		return nil, err
+	}
+	if len(checkNodes.Items) == 0 {
+		return nil, nil
+	}
+	sim := scheduler.NewSchedulerSimulator(r.Client, checkNodes.Items)
+	expectStates := r.parseExpectStateWithNode(cg, checkNodes.Items)
+
+	nodes := checkNodes.Items
+	sort.Slice(nodes, func(i, j int) bool {
+		return nodes[i].Name < nodes[j].Name
+	})
+	for _, node := range nodes {
+		state := expectStates[node.Name]
+		podBuilder := builder.NewPodBuilder(cg, &corev1.Secret{}, node.Name, state, false)
+		pod := podBuilder.NewCacheGroupWorker(ctx)
+		if ok, err := sim.CanSchedulePodOnNode(ctx, pod, &node); err != nil {
+			return nil, err
+		} else {
+			if !ok {
+				delete(expectStates, node.Name)
+				sim.AppendToBeDeletedPod(pod)
+				continue
+			}
+			pod.Spec.NodeName = node.Name
+			sim.AppendPendingPod(pod)
+		}
 	}
 	return expectStates, nil
 }

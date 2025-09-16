@@ -23,6 +23,7 @@ import (
 	"github.com/juicedata/juicefs-operator/pkg/common"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -166,4 +167,49 @@ func PodNotReadyReason(pod corev1.Pod) string {
 		}
 	}
 	return "Unknown"
+}
+
+func AddNodeNameNodeAffinity(affinity *corev1.Affinity, nodename string) *corev1.Affinity {
+	nodeSelReq := corev1.NodeSelectorRequirement{
+		Key:      metav1.ObjectNameField,
+		Operator: corev1.NodeSelectorOpIn,
+		Values:   []string{nodename},
+	}
+
+	nodeSelector := &corev1.NodeSelector{
+		NodeSelectorTerms: []corev1.NodeSelectorTerm{
+			{
+				MatchFields: []corev1.NodeSelectorRequirement{nodeSelReq},
+			},
+		},
+	}
+
+	if affinity == nil {
+		return &corev1.Affinity{
+			NodeAffinity: &corev1.NodeAffinity{
+				RequiredDuringSchedulingIgnoredDuringExecution: nodeSelector,
+			},
+		}
+	}
+
+	if affinity.NodeAffinity == nil {
+		affinity.NodeAffinity = &corev1.NodeAffinity{
+			RequiredDuringSchedulingIgnoredDuringExecution: nodeSelector,
+		}
+		return affinity
+	}
+
+	nodeAffinity := affinity.NodeAffinity
+
+	if nodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution == nil {
+		nodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution = nodeSelector
+		return affinity
+	}
+
+	// Replace node selector with the new one.
+	nodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms = append(
+		nodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms,
+		nodeSelector.NodeSelectorTerms...)
+
+	return affinity
 }

@@ -37,6 +37,7 @@ import (
 	"github.com/juicedata/juicefs-operator/pkg/common"
 	"github.com/juicedata/juicefs-operator/pkg/scheduler"
 	"github.com/juicedata/juicefs-operator/pkg/utils"
+	"github.com/samber/lo"
 
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -143,7 +144,7 @@ func (r *CacheGroupReconciler) sync(ctx context.Context, cg *juicefsiov1.CacheGr
 			log.Error(err, "failed to get actual state", "node", node)
 			continue
 		}
-		groupBackUp := r.shouldAddGroupBackupOrNot(cg, actualState, expectState.Image)
+		groupBackUp := r.shouldAddGroupBackupOrNot(cg, actualState, expectState)
 		podBuilder := builder.NewPodBuilder(cg, secret, node, expectState, groupBackUp)
 		expectWorker := podBuilder.NewCacheGroupWorker(ctx)
 
@@ -506,12 +507,15 @@ func (r *CacheGroupReconciler) gracefulShutdownWorker(
 
 const minBackupWorkerDuration = time.Second
 
-func (r *CacheGroupReconciler) shouldAddGroupBackupOrNot(cg *juicefsiov1.CacheGroup, actual *corev1.Pod, newImage string) bool {
-	if utils.CompareEEImageVersion(newImage, "5.1.0") < 0 {
+func (r *CacheGroupReconciler) shouldAddGroupBackupOrNot(cg *juicefsiov1.CacheGroup, actual *corev1.Pod, expectState juicefsiov1.CacheGroupWorkerTemplate) bool {
+	if utils.CompareEEImageVersion(expectState.Image, "5.1.0") < 0 {
 		return false
 	}
 	duration := utils.GetBackupWorkerDuration(cg.Spec.BackupDuration)
 	if duration <= minBackupWorkerDuration {
+		return false
+	}
+	if lo.Contains(expectState.Opts, "group-backup") {
 		return false
 	}
 

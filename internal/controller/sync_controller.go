@@ -247,7 +247,7 @@ func (r *SyncReconciler) calculateSyncStats(ctx context.Context, sync *juicefsio
 			status.Phase = juicefsiov1.SyncPhaseCompleted
 		}
 		status.CompletedAt = &metav1.Time{Time: time.Now()}
-		finishLog, err := utils.LogPod(ctx, sync.Namespace, common.GenSyncManagerName(sync.Name), common.SyncNamePrefix, 5)
+		finishLog, err := utils.LogPod(ctx, sync.Namespace, common.GenSyncManagerName(sync.Name), common.SyncNamePrefix, 20)
 		if err != nil {
 			status.Reason = "failed to get manager pod last logs\nerror: " + err.Error()
 			l.Error(err, "failed to get manager pod last logs")

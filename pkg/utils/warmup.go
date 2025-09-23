@@ -72,7 +72,7 @@ func GetWarmupJobStats(ctx context.Context, job *batchv1.Job) (juicefsiov1.WarmU
 
 	podCanProvideStats := IsPodSucceeded(pod) || IsPodFailed(pod) || IsPodRunning(pod)
 	if podCanProvideStats {
-		logs, err := LogPod(ctx, pod.Namespace, pod.Name, job.Spec.Template.Spec.Containers[0].Name, 10)
+		logs, err := LogPod(ctx, pod.Namespace, pod.Name, job.Spec.Template.Spec.Containers[0].Name, 20)
 		if err != nil {
 			return juicefsiov1.WarmUpStats{}, "", fmt.Errorf("failed to get pod logs: %w", err)
 		}

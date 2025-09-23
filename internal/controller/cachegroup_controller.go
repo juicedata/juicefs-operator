@@ -427,6 +427,10 @@ func (r *CacheGroupReconciler) removeRedundantWorkers(
 		} else {
 			workerKey = worker.Spec.NodeName
 		}
+		// worker may be waiting for scheduler dispatch, waiting for next reconciler
+		if workerKey == "" && cg.Spec.EnableScheduling {
+			continue
+		}
 		if _, ok := expectStates[workerKey]; ok {
 			continue
 		}

@@ -128,13 +128,13 @@ func newBasicPod(cg *juicefsiov1.CacheGroup, nodeName string) *corev1.Pod {
 		},
 	}
 	if cg.Spec.Replicas == nil {
-		if !cg.Spec.EnableScheduling {
+		if cg.Spec.EnableScheduling {
+			worker.Spec.NodeSelector = cg.Spec.Worker.Template.NodeSelector
+		} else {
 			worker.Spec.NodeName = nodeName
 		}
 	} else {
-		if cg.Spec.Worker.Template.NodeSelector != nil {
-			worker.Spec.NodeSelector = cg.Spec.Worker.Template.NodeSelector
-		}
+		worker.Spec.NodeSelector = cg.Spec.Worker.Template.NodeSelector
 		// Add pod anti-affinity to avoid scheduling multiple workers on the same node.
 		worker.Spec.Affinity = &corev1.Affinity{
 			PodAntiAffinity: &corev1.PodAntiAffinity{
@@ -393,8 +393,11 @@ func (p *PodBuilder) NewCacheGroupWorker(ctx context.Context) *corev1.Pod {
 			worker.Spec.ImagePullSecrets = common.OperatorPod.Spec.ImagePullSecrets
 		}
 	}
-	if p.cg.Spec.Replicas == nil && spec.Affinity != nil {
+	if p.cg.Spec.Replicas == nil {
 		if p.cg.Spec.EnableScheduling {
+			if spec.Affinity == nil {
+				spec.Affinity = &corev1.Affinity{}
+			}
 			worker.Spec.Affinity = utils.AddNodeNameNodeAffinity(spec.Affinity.DeepCopy(), p.node)
 		}
 	}

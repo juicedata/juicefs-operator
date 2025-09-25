@@ -362,7 +362,9 @@ func parseBytes(s string) (int64, error) {
 // ParseLog parse log from sync manager pod
 func ParseLog(data string) (map[string]int64, error) {
 	logWithStats := ""
-	for _, line := range strings.Split(data, "\n") {
+	logs := strings.Split(data, "\n")
+	for i := len(logs) - 1; i >= 0; i-- {
+		line := logs[i]
 		if strings.Contains(line, "<INFO>: Found") {
 			logWithStats = line
 			break

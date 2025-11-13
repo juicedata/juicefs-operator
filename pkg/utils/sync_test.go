@@ -161,12 +161,8 @@ func TestParseSyncSink(t *testing.T) {
 							},
 						},
 					},
-					{
-						Name:  "BASE_URL",
-						Value: "http://127.0.0.1:8080/static",
-					},
 				},
-				PrepareCommand: "juicefs auth volume --token $JUICEFS_TO_TOKEN --option1 --option2",
+				PrepareCommand: "BASE_URL=http://127.0.0.1:8080/static juicefs auth volume --token $JUICEFS_TO_TOKEN --option1 --option2",
 			},
 			wantErr: false,
 		},

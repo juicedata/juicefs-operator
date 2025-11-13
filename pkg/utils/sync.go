@@ -149,10 +149,7 @@ func parseJuiceFSSyncSink(jfs *juicefsiov1.SyncSinkJuiceFS, syncName, ref string
 		authCmd = append(authCmd, "--secret-key", fmt.Sprintf("$%s", key))
 	}
 	if jfs.ConsoleUrl != "" {
-		pss.Envs = append(pss.Envs, corev1.EnvVar{
-			Name:  "BASE_URL",
-			Value: jfs.ConsoleUrl,
-		})
+		pss.PrepareCommand += fmt.Sprintf("BASE_URL=%s ", jfs.ConsoleUrl)
 	}
 	for _, opt := range jfs.AuthOptions {
 		opt = strings.TrimPrefix(opt, "--")

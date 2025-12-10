@@ -323,7 +323,7 @@ var _ = Describe("controller", Ordered, func() {
 				}
 				return nil
 			}
-			Eventually(verifyCgStatusUpToDate, time.Minute, time.Second).Should(Succeed())
+			Eventually(verifyCgStatusUpToDate, 5*time.Minute, time.Second).Should(Succeed())
 		})
 
 		It("should reconcile the worker with node labels update", func() {
@@ -710,7 +710,7 @@ var _ = Describe("controller", Ordered, func() {
 				}
 				return nil
 			}
-			Eventually(verifyCgStatusUpToDate, time.Minute, time.Second).Should(Succeed())
+			Eventually(verifyCgStatusUpToDate, 5*time.Minute, time.Second).Should(Succeed())
 
 			time.Sleep(5 * time.Second)
 

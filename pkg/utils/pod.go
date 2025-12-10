@@ -38,6 +38,18 @@ func IsPodReady(pod corev1.Pod) bool {
 	return conditionsTrue == 2
 }
 
+// FormatPodNotReadyConditions returns a slice of formatted strings describing
+// the conditions that are not in True status for a pod
+func FormatPodNotReadyConditions(pod corev1.Pod) []string {
+	notReadyReasons := []string{}
+	for _, cond := range pod.Status.Conditions {
+		if cond.Status != corev1.ConditionTrue {
+			notReadyReasons = append(notReadyReasons, fmt.Sprintf("%s=%s (reason: %s, message: %s)", cond.Type, cond.Status, cond.Reason, cond.Message))
+		}
+	}
+	return notReadyReasons
+}
+
 func IsPodRunning(pod corev1.Pod) bool {
 	return pod.Status.Phase == corev1.PodRunning
 }

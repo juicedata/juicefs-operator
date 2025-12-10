@@ -454,7 +454,21 @@ func (p *PodBuilder) NewCacheGroupWorker(ctx context.Context) *corev1.Pod {
 		backupAt := time.Now().Format(time.RFC3339)
 		worker.Annotations[common.AnnoBackupWorker] = backupAt
 	}
-
+	if worker.Spec.Containers[0].ReadinessProbe == nil {
+		worker.Spec.Containers[0].ReadinessProbe = &corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				Exec: &corev1.ExecAction{
+					Command: []string{
+						"stat",
+						common.MountPoint,
+					},
+				},
+			},
+			InitialDelaySeconds: 5,
+			PeriodSeconds:       10,
+			FailureThreshold:    3,
+		}
+	}
 	return worker
 }
 

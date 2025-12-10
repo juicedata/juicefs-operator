@@ -126,7 +126,6 @@ func (r *CacheGroupReconciler) sync(ctx context.Context, cg *juicefsiov1.CacheGr
 	updateStrategyType, maxUnavailable := utils.ParseUpdateStrategy(cg.Spec.UpdateStrategy, len(expectStates))
 	wg := sync.WaitGroup{}
 	errCh := make(chan error, 2*maxUnavailable)
-	numUnavailable := 0
 	// TODO: add a webook to validate the cache group worker template
 	secret := &corev1.Secret{}
 	if err := r.Get(ctx, client.ObjectKey{Namespace: cg.Namespace, Name: cg.Spec.SecretRef.Name}, secret); err != nil {
@@ -137,26 +136,44 @@ func (r *CacheGroupReconciler) sync(ctx context.Context, cg *juicefsiov1.CacheGr
 		log.Error(err, "failed to validate secret")
 		return err
 	}
-	log.V(1).Info("sync worker to expect states", "expectStates", len(expectStates))
+
+	actualWorkers, err := r.listActualWorkers(ctx, cg)
+	if err != nil {
+		log.Error(err, "failed to list actual worker nodes")
+		return err
+	}
+	actualWorkerMap := lo.KeyBy(actualWorkers, func(worker corev1.Pod) string { return worker.Spec.NodeName })
+	numUnavailable := lo.CountBy(actualWorkers, func(worker corev1.Pod) bool {
+		if worker.DeletionTimestamp != nil {
+			return true
+		}
+		return !utils.IsPodReady(worker)
+	})
+
+	log.Info("sync worker to expect states", "expect", len(expectStates), "actual", len(actualWorkers), "currentUnavailable", numUnavailable)
 	for node, expectState := range expectStates {
-		actualState, err := r.getActualState(ctx, cg, node)
-		if err != nil && !apierrors.IsNotFound(err) {
-			log.Error(err, "failed to get actual state", "node", node)
-			continue
+		var actualState *corev1.Pod
+		if v, ok := actualWorkerMap[node]; ok {
+			actualState = &v
 		}
 		groupBackUp := r.shouldAddGroupBackupOrNot(cg, actualState, expectState)
 		podBuilder := builder.NewPodBuilder(cg, secret, node, expectState, groupBackUp)
 		expectWorker := podBuilder.NewCacheGroupWorker(ctx)
 
+		if actualState != nil && actualState.DeletionTimestamp != nil {
+			log.Info("actual worker is being deleted, skip updating worker, waiting for next reconciler", "worker", expectWorker.Name)
+			continue
+		}
+
 		if r.actualShouldbeUpdate(updateStrategyType, expectWorker, actualState) {
-			if numUnavailable >= maxUnavailable {
-				log.V(1).Info("maxUnavailable reached, skip updating worker, waiting for next reconciler", "worker", expectWorker.Name)
-				break
-			}
-			wg.Add(1)
 			if actualState != nil {
+				if numUnavailable >= maxUnavailable {
+					log.V(1).Info("maxUnavailable reached, skip updating worker, waiting for next reconciler", "worker", expectWorker.Name)
+					break
+				}
 				numUnavailable++
 			}
+			wg.Add(1)
 			go func() {
 				defer wg.Done()
 				if groupBackUp {
@@ -167,12 +184,7 @@ func (r *CacheGroupReconciler) sync(ctx context.Context, cg *juicefsiov1.CacheGr
 					errCh <- err
 					return
 				}
-				// Wait for the worker to be ready
-				if err := r.waitForWorkerReady(ctx, cg, expectWorker.Name); err != nil {
-					log.Info("worker is not ready, waiting for next reconciler", "worker", expectWorker.Name, "err", err)
-					errCh <- err
-					return
-				}
+				// we can skip waiting for the worker to be ready here
 			}()
 		} else {
 			log.V(1).Info("worker is up to date", "worker", expectWorker.Name)
@@ -371,7 +383,6 @@ func (r *CacheGroupReconciler) updateCacheGroupWorker(ctx context.Context, oldWo
 		log.Error(err, "failed to delete old worker")
 		return err
 	}
-	log.Info("old worker deleted, created new one")
 	return r.Create(ctx, expectWorker)
 }
 
@@ -562,7 +573,13 @@ func (r *CacheGroupReconciler) calculateStatus(
 			waitingDeletedWorker++
 		}
 	}
-	newStatus.ReadyWorker = int32(len(actualWorks))
+	readyWorker := 0
+	for _, worker := range actualWorks {
+		if utils.IsPodReady(worker) {
+			readyWorker++
+		}
+	}
+	newStatus.ReadyWorker = int32(readyWorker)
 	newStatus.ExpectWorker = int32(len(expectStates))
 	newStatus.BackUpWorker = int32(backupWorker)
 	newStatus.WaitingDeletedWorker = int32(waitingDeletedWorker)
@@ -574,32 +591,6 @@ func (r *CacheGroupReconciler) calculateStatus(
 	}
 	newStatus.CacheGroup = builder.GenCacheGroupName(cg)
 	return newStatus
-}
-
-func (r *CacheGroupReconciler) waitForWorkerReady(ctx context.Context, cg *juicefsiov1.CacheGroup, workerName string) error {
-	log := log.FromContext(ctx)
-	ctx, cancel := context.WithTimeout(ctx, time.Minute)
-	defer cancel()
-	for {
-		select {
-		case <-ctx.Done():
-			return fmt.Errorf("timeout waiting for worker to be ready")
-		default:
-			worker := corev1.Pod{}
-			if err := r.Get(ctx, client.ObjectKey{Namespace: cg.Namespace, Name: workerName}, &worker); err != nil {
-				if apierrors.IsNotFound(err) {
-					time.Sleep(time.Second)
-					continue
-				}
-				return err
-			}
-			if utils.IsPodReady(worker) && utils.IsMountPointReady(ctx, worker, common.MountPoint) {
-				log.Info("worker is ready", "worker", worker.Name)
-				return nil
-			}
-			time.Sleep(time.Second)
-		}
-	}
 }
 
 func (r *CacheGroupReconciler) cleanWorkerCache(ctx context.Context, cg *juicefsiov1.CacheGroup, worker corev1.Pod) error {

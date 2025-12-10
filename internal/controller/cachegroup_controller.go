@@ -92,7 +92,7 @@ func (r *CacheGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			}
 			controllerutil.RemoveFinalizer(cg, common.Finalizer)
 			if err := r.Update(ctx, cg); err != nil {
-				return ctrl.Result{}, err
+				return ctrl.Result{}, client.IgnoreNotFound(err)
 			}
 		}
 
@@ -142,7 +142,7 @@ func (r *CacheGroupReconciler) sync(ctx context.Context, cg *juicefsiov1.CacheGr
 		log.Error(err, "failed to list actual worker nodes")
 		return err
 	}
-	actualWorkerMap := lo.KeyBy(actualWorkers, func(worker corev1.Pod) string { return worker.Spec.NodeName })
+	actualWorkerMap := lo.KeyBy(actualWorkers, func(worker corev1.Pod) string { return worker.Name })
 	numUnavailable := lo.CountBy(actualWorkers, func(worker corev1.Pod) bool {
 		if worker.DeletionTimestamp != nil {
 			return true
@@ -153,7 +153,7 @@ func (r *CacheGroupReconciler) sync(ctx context.Context, cg *juicefsiov1.CacheGr
 	log.Info("sync worker to expect states", "expect", len(expectStates), "actual", len(actualWorkers), "currentUnavailable", numUnavailable)
 	for node, expectState := range expectStates {
 		var actualState *corev1.Pod
-		if v, ok := actualWorkerMap[node]; ok {
+		if v, ok := actualWorkerMap[r.getPodName(cg, node)]; ok {
 			actualState = &v
 		}
 		groupBackUp := r.shouldAddGroupBackupOrNot(cg, actualState, expectState)
@@ -166,10 +166,11 @@ func (r *CacheGroupReconciler) sync(ctx context.Context, cg *juicefsiov1.CacheGr
 		}
 
 		if r.actualShouldbeUpdate(updateStrategyType, expectWorker, actualState) {
+			// only update respect maxUnavailable strategy
 			if actualState != nil {
 				if numUnavailable >= maxUnavailable {
 					log.V(1).Info("maxUnavailable reached, skip updating worker, waiting for next reconciler", "worker", expectWorker.Name)
-					break
+					continue
 				}
 				numUnavailable++
 			}
@@ -326,18 +327,12 @@ func (r *CacheGroupReconciler) parseExpectStateByScheduler(ctx context.Context, 
 	return expectStates, nil
 }
 
-func (r *CacheGroupReconciler) getActualState(ctx context.Context, cg *juicefsiov1.CacheGroup, workerName string) (*corev1.Pod, error) {
-	worker := &corev1.Pod{}
-	var podName string
+func (r *CacheGroupReconciler) getPodName(cg *juicefsiov1.CacheGroup, node string) string {
 	if cg.Spec.Replicas != nil {
-		podName = workerName
+		return node
 	} else {
-		podName = common.GenWorkerName(cg.Name, workerName)
+		return common.GenWorkerName(cg.Name, node)
 	}
-	if err := r.Get(ctx, client.ObjectKey{Namespace: cg.Namespace, Name: podName}, worker); err != nil {
-		return nil, err
-	}
-	return worker, nil
 }
 
 func (r *CacheGroupReconciler) createOrUpdateWorker(ctx context.Context, cg *juicefsiov1.CacheGroup, spec juicefsiov1.CacheGroupWorkerTemplate, actual, expect *corev1.Pod) error {

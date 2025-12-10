@@ -111,7 +111,7 @@ func (r *CacheGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, err
 	}
 	l.V(1).Info("reconciler done")
-	if cg.Status.BackUpWorker > 0 || cg.Status.WaitingDeletedWorker > 0 {
+	if cg.Status.BackUpWorker > 0 || cg.Status.WaitingDeletedWorker > 0 || cg.Status.Phase != juicefsiov1.CacheGroupPhaseReady {
 		return ctrl.Result{
 			Requeue:      true,
 			RequeueAfter: 1 * time.Minute,
@@ -147,7 +147,11 @@ func (r *CacheGroupReconciler) sync(ctx context.Context, cg *juicefsiov1.CacheGr
 		if worker.DeletionTimestamp != nil {
 			return true
 		}
-		return !utils.IsPodReady(worker)
+		ready := utils.IsPodReady(worker)
+		if !ready && time.Since(worker.CreationTimestamp.Time) > time.Minute {
+			log.Info("worker is not ready for more than 1 minute", "worker", worker.Name, "since", time.Since(worker.CreationTimestamp.Time), "conditions", utils.FormatPodNotReadyConditions(worker))
+		}
+		return !ready
 	})
 
 	log.Info("sync worker to expect states", "expect", len(expectStates), "actual", len(actualWorkers), "currentUnavailable", numUnavailable)
@@ -166,7 +170,7 @@ func (r *CacheGroupReconciler) sync(ctx context.Context, cg *juicefsiov1.CacheGr
 		}
 
 		if r.actualShouldbeUpdate(updateStrategyType, expectWorker, actualState) {
-			// only update respect maxUnavailable strategy
+			// only update respecting maxUnavailable strategy
 			if actualState != nil {
 				if numUnavailable >= maxUnavailable {
 					log.V(1).Info("maxUnavailable reached, skip updating worker, waiting for next reconciler", "worker", expectWorker.Name)
@@ -560,6 +564,7 @@ func (r *CacheGroupReconciler) calculateStatus(
 	}
 	backupWorker := 0
 	waitingDeletedWorker := 0
+	readyWorker := 0
 	for _, worker := range actualWorks {
 		if _, ok := worker.Annotations[common.AnnoBackupWorker]; ok {
 			backupWorker++
@@ -567,9 +572,6 @@ func (r *CacheGroupReconciler) calculateStatus(
 		if _, ok := worker.Annotations[common.AnnoWaitingDeleteWorker]; ok {
 			waitingDeletedWorker++
 		}
-	}
-	readyWorker := 0
-	for _, worker := range actualWorks {
 		if utils.IsPodReady(worker) {
 			readyWorker++
 		}

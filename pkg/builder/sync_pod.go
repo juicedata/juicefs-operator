@@ -146,7 +146,6 @@ done
 			NodeSelector:                  s.sc.Spec.NodeSelector,
 			Affinity:                      s.sc.Spec.Affinity,
 			Tolerations:                   s.sc.Spec.Tolerations,
-			Resources:                     s.sc.Spec.Resources,
 			RestartPolicy:                 corev1.RestartPolicyNever,
 			TerminationGracePeriodSeconds: utils.ToPtr(int64(0)),
 			Containers: []corev1.Container{
@@ -162,6 +161,9 @@ done
 				},
 			},
 		},
+	}
+	if s.sc.Spec.Resources != nil {
+		pod.Spec.Containers[0].Resources = *s.sc.Spec.Resources
 	}
 
 	if s.sc.Spec.ImagePullSecrets != nil {

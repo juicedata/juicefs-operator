@@ -107,6 +107,26 @@ func (s *SyncPodBuilder) UpdateWorkerIPs(ips []string) {
 	s.workerIPs = ips
 }
 
+func (s *SyncPodBuilder) getWorkerResources() corev1.ResourceRequirements {
+	if s.sc.Spec.WorkerResources != nil {
+		return *s.sc.Spec.WorkerResources
+	}
+	if s.sc.Spec.Resources != nil {
+		return *s.sc.Spec.Resources
+	}
+	return corev1.ResourceRequirements{}
+}
+
+func (s *SyncPodBuilder) getManagerResources() corev1.ResourceRequirements {
+	if s.sc.Spec.ManagerResources != nil {
+		return *s.sc.Spec.ManagerResources
+	}
+	if s.sc.Spec.Resources != nil {
+		return *s.sc.Spec.Resources
+	}
+	return corev1.ResourceRequirements{}
+}
+
 func (s *SyncPodBuilder) newWorkerPod(i int) corev1.Pod {
 	workerSyncCmd := `
 echo "waiting for sync worker start"
@@ -153,6 +173,7 @@ done
 					Name:            common.SyncNamePrefix,
 					Image:           s.sc.Spec.Image,
 					ImagePullPolicy: s.sc.Spec.ImagePullPolicy,
+					Resources:       s.getWorkerResources(),
 					Command: []string{
 						"sh",
 						"-c",
@@ -161,9 +182,6 @@ done
 				},
 			},
 		},
-	}
-	if s.sc.Spec.Resources != nil {
-		pod.Spec.Containers[0].Resources = *s.sc.Spec.Resources
 	}
 
 	if s.sc.Spec.ImagePullSecrets != nil {
@@ -428,6 +446,7 @@ func (s *SyncPodBuilder) NewManagerPod() *corev1.Pod {
 	managerPod.Spec.Containers[0].Env = s.genManagerEnvs()
 	managerPod.Name = common.GenSyncManagerName(s.sc.Name)
 	managerPod.Labels[common.LabelAppType] = common.LabelSyncManagerValue
+	managerPod.Spec.Containers[0].Resources = s.getManagerResources()
 	managerPod.Spec.Containers[0].Command = []string{
 		"sh",
 		"-c",

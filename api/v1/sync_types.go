@@ -165,11 +165,11 @@ type SyncSpec struct {
 	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
 
 	// ManagerResources is the resources for the sync manager pod.
-	// If not specified, Resources will be used. If Resources is also not specified, DefaultSyncManagerResources will be used.
+	// If not specified, Resources will be used. If Resources is also not specified, an empty ResourceRequirements will be used.
 	ManagerResources *corev1.ResourceRequirements `json:"managerResources,omitempty"`
 
 	// WorkerResources is the resources for the sync worker pods.
-	// If not specified, Resources will be used. If Resources is also not specified, DefaultSyncWorkerResources will be used.
+	// If not specified, Resources will be used. If Resources is also not specified, an empty ResourceRequirements will be used.
 	WorkerResources *corev1.ResourceRequirements `json:"workerResources,omitempty"`
 
 	// Sync Options

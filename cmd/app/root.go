@@ -33,6 +33,7 @@ var (
 	metricsAddr          string
 	enableLeaderElection bool
 	probeAddr            string
+	pprofAddr            string
 	secureMetrics        bool
 	enableHTTP2          bool
 )
@@ -59,6 +60,7 @@ func init() {
 	RootCmd.PersistentFlags().BoolVar(&enableLeaderElection, "leader-elect", false, "Enable leader election for controller manager. Enabling this will ensure there is only one active controller manager.")
 	RootCmd.PersistentFlags().BoolVar(&secureMetrics, "metrics-secure", true, "If set, the metrics endpoint is served securely via HTTPS. Use --metrics-secure=false to use HTTP instead.")
 	RootCmd.PersistentFlags().BoolVar(&enableHTTP2, "enable-http2", false, "If set, HTTP/2 will be enabled for the metrics and webhook servers")
+	RootCmd.PersistentFlags().StringVar(&pprofAddr, "pprof-bind-address", ":6060", "The address the pprof endpoint binds to. If empty, pprof endpoint is disabled.")
 
 	RootCmd.AddCommand(ControllerCmd)
 }

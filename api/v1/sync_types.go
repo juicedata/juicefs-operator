@@ -160,8 +160,17 @@ type SyncSpec struct {
 	Labels      map[string]string `json:"labels,omitempty"`
 	Annotations map[string]string `json:"annotations,omitempty"`
 
-	// Resources
+	// Resources is the resources for both manager and worker pods.
+	// Deprecated: Use ManagerResources and WorkerResources instead.
 	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
+
+	// ManagerResources is the resources for the sync manager pod.
+	// If not specified, Resources will be used. If Resources is also not specified, an empty ResourceRequirements will be used.
+	ManagerResources *corev1.ResourceRequirements `json:"managerResources,omitempty"`
+
+	// WorkerResources is the resources for the sync worker pods.
+	// If not specified, Resources will be used. If Resources is also not specified, an empty ResourceRequirements will be used.
+	WorkerResources *corev1.ResourceRequirements `json:"workerResources,omitempty"`
 
 	// Sync Options
 	// ref: https://juicefs.com/docs/cloud/reference/command_reference/#sync

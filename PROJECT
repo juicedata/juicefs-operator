@@ -5,6 +5,8 @@
 domain: juicefs.io
 layout:
 - go.kubebuilder.io/v4
+plugins:
+  grafana.kubebuilder.io/v1-alpha: {}
 projectName: juicefs-operator
 repo: github.com/juicedata/juicefs-operator
 resources:

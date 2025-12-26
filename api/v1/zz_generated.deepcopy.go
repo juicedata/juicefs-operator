@@ -939,6 +939,16 @@ func (in *SyncSpec) DeepCopyInto(out *SyncSpec) {
 		*out = new(corev1.ResourceRequirements)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.ManagerResources != nil {
+		in, out := &in.ManagerResources, &out.ManagerResources
+		*out = new(corev1.ResourceRequirements)
+		(*in).DeepCopyInto(*out)
+	}
+	if in.WorkerResources != nil {
+		in, out := &in.WorkerResources, &out.WorkerResources
+		*out = new(corev1.ResourceRequirements)
+		(*in).DeepCopyInto(*out)
+	}
 	if in.Options != nil {
 		in, out := &in.Options, &out.Options
 		*out = make([]string, len(*in))

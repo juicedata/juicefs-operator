@@ -308,7 +308,7 @@ func (r *SyncReconciler) calculateSyncStats(ctx context.Context, sync *juicefsio
 			return status, nil
 		}
 		if _, ok := metrics["juicefs_sync_scanned"]; !ok {
-			l.Info("metrics do not include the required metric, skip update stats", "metrics", metrics)
+			l.Info("metrics does not include the required metric, skip update stats", "metrics", metrics)
 			return status, nil
 		}
 		stats := juicefsiov1.SyncStats{

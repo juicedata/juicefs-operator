@@ -69,8 +69,11 @@ func (r *SyncReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	l.V(1).Info("sync reconcile")
 	sync := &juicefsiov1.Sync{}
 	if err := r.Get(ctx, req.NamespacedName, sync); err != nil {
+		if apierrors.IsNotFound(err) {
+			return ctrl.Result{}, nil
+		}
 		l.Error(err, "failed to get sync")
-		return ctrl.Result{}, client.IgnoreNotFound(err)
+		return ctrl.Result{}, err
 	}
 
 	if !sync.GetDeletionTimestamp().IsZero() {
@@ -301,6 +304,11 @@ func (r *SyncReconciler) calculateSyncStats(ctx context.Context, sync *juicefsio
 	if utils.IsPodReady(*managerPod) {
 		metrics, err := utils.FetchMetrics(ctx, sync)
 		if err != nil {
+			l.Error(err, "failed to fetch metrics from manager pod")
+			return status, nil
+		}
+		if _, ok := metrics["juicefs_sync_scanned"]; !ok {
+			l.Info("metrics does not include the required metric, skip update stats", "metrics", metrics)
 			return status, nil
 		}
 		stats := juicefsiov1.SyncStats{

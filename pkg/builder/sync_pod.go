@@ -174,6 +174,11 @@ done
 					Image:           s.sc.Spec.Image,
 					ImagePullPolicy: s.sc.Spec.ImagePullPolicy,
 					Resources:       s.getWorkerResources(),
+					SecurityContext: &corev1.SecurityContext{
+						Capabilities: &corev1.Capabilities{
+							Add: []corev1.Capability{"SYS_ADMIN", "SYS_CHROOT"},
+						},
+					},
 					Command: []string{
 						"sh",
 						"-c",

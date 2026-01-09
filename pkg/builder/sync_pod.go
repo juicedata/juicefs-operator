@@ -42,8 +42,11 @@ READ_ONLY_SSH_KEY_PATH=/root/ssh/
 if [ "$IS_DISTRIBUTED" = "true" ]; then
 	# disable strict host key checking
 	sed -i 's/^#\s*\(StrictHostKeyChecking\s*\).*/\1no/' /etc/ssh/ssh_config
+	sed -i 's/^#\?\s*\(UsePAM\s*\).*/\1no/' /etc/ssh/sshd_config
 	echo "    UserKnownHostsFile /dev/null" >> /etc/ssh/ssh_config
-	service ssh start
+
+	ssh-keygen -A
+	/usr/sbin/sshd
 
 	if [ ! -d "$READ_ONLY_SSH_KEY_PATH" ]; then
 		echo "No ssh key found"

@@ -318,6 +318,103 @@ func TestParseSyncSink(t *testing.T) {
 			want:     nil,
 			wantErr:  true,
 		},
+		{
+			name: "HDFS sink with KRB5Principal and KRB5Keytab",
+			sink: juicefsiov1.SyncSink{
+				External: &juicefsiov1.SyncSinkExternal{
+					Uri: "hdfs://example.com/user/test/",
+					KRB5Principal: juicefsiov1.SyncSinkValue{
+						Value: "hdfs/host@EXAMPLE.COM",
+					},
+					KRB5Keytab: juicefsiov1.SyncSinkValue{
+						Value: "/root/keytab/keytab",
+					},
+				},
+			},
+			syncName: "sync4",
+			ref:      "FROM",
+			want: &juicefsiov1.ParsedSyncSink{
+				Uri: "hdfs://example.com/user/test/",
+				Envs: []corev1.EnvVar{
+					{
+						Name: "EXTERNAL_FROM_KRB5KEYTAB",
+						ValueFrom: &corev1.EnvVarSource{
+							SecretKeyRef: &corev1.SecretKeySelector{
+								LocalObjectReference: corev1.LocalObjectReference{
+									Name: common.GenSyncSecretName("sync4"),
+								},
+								Key: "EXTERNAL_FROM_KRB5KEYTAB",
+							},
+						},
+					},
+					{
+						Name: "EXTERNAL_FROM_KRB5PRINCIPAL",
+						ValueFrom: &corev1.EnvVarSource{
+							SecretKeyRef: &corev1.SecretKeySelector{
+								LocalObjectReference: corev1.LocalObjectReference{
+									Name: common.GenSyncSecretName("sync4"),
+								},
+								Key: "EXTERNAL_FROM_KRB5PRINCIPAL",
+							},
+						},
+					},
+				},
+				PrepareCommand: "export KRB5KEYTAB=$EXTERNAL_FROM_KRB5KEYTAB\nexport KRB5PRINCIPAL=$EXTERNAL_FROM_KRB5PRINCIPAL\n",
+			},
+			wantErr: false,
+		},
+		{
+			name: "HDFS sink with KRB5Principal and KRB5KeytabBase64",
+			sink: juicefsiov1.SyncSink{
+				External: &juicefsiov1.SyncSinkExternal{
+					Uri: "hdfs://example.com/user/test/",
+					KRB5Principal: juicefsiov1.SyncSinkValue{
+						Value: "hdfs/host@EXAMPLE.COM",
+					},
+					KRB5KeytabBase64: juicefsiov1.SyncSinkValue{
+						ValueFrom: &corev1.EnvVarSource{
+							SecretKeyRef: &corev1.SecretKeySelector{
+								LocalObjectReference: corev1.LocalObjectReference{
+									Name: "keytabbase64-secret",
+								},
+								Key: "KRB5KEYTAB_BASE64",
+							},
+						},
+					},
+				},
+			},
+			syncName: "sync5",
+			ref:      "FROM",
+			want: &juicefsiov1.ParsedSyncSink{
+				Uri: "hdfs://example.com/user/test/",
+				Envs: []corev1.EnvVar{
+					{
+						Name: "EXTERNAL_FROM_KRB5KEYTAB_BASE64",
+						ValueFrom: &corev1.EnvVarSource{
+							SecretKeyRef: &corev1.SecretKeySelector{
+								LocalObjectReference: corev1.LocalObjectReference{
+									Name: "keytabbase64-secret",
+								},
+								Key: "KRB5KEYTAB_BASE64",
+							},
+						},
+					},
+					{
+						Name: "EXTERNAL_FROM_KRB5PRINCIPAL",
+						ValueFrom: &corev1.EnvVarSource{
+							SecretKeyRef: &corev1.SecretKeySelector{
+								LocalObjectReference: corev1.LocalObjectReference{
+									Name: common.GenSyncSecretName("sync5"),
+								},
+								Key: "EXTERNAL_FROM_KRB5PRINCIPAL",
+							},
+						},
+					},
+				},
+				PrepareCommand: "export KRB5KEYTAB_BASE64=$EXTERNAL_FROM_KRB5KEYTAB_BASE64\nexport KRB5PRINCIPAL=$EXTERNAL_FROM_KRB5PRINCIPAL\n",
+			},
+			wantErr: false,
+		},
 	}
 
 	for _, tt := range tests {

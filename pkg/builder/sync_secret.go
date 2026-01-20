@@ -57,6 +57,16 @@ func genExternalSecretData(external *juicefsiov1.SyncSinkExternal, suffix string
 	if external.SecretKey.Value != "" {
 		data[fmt.Sprintf("%s_SECRET_KEY", suffix)] = external.SecretKey.Value
 	}
+	// HDFS Kerberos credentials
+	if external.KRB5Keytab.Value != "" {
+		data[fmt.Sprintf("%s_KRB5KEYTAB", suffix)] = external.KRB5Keytab.Value
+	}
+	if external.KRB5KeytabBase64.Value != "" {
+		data[fmt.Sprintf("%s_KRB5KEYTAB_BASE64", suffix)] = external.KRB5KeytabBase64.Value
+	}
+	if external.KRB5Principal.Value != "" {
+		data[fmt.Sprintf("%s_KRB5PRINCIPAL", suffix)] = external.KRB5Principal.Value
+	}
 	return data
 }
 

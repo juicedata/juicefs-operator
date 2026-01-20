@@ -77,6 +77,10 @@ type SyncSinkExternal struct {
 	SecretKey SyncSinkValue  `json:"secretKey,omitempty"`
 	FilesFrom *SyncFilesFrom `json:"filesFrom,omitempty"`
 
+	KRB5Keytab       SyncSinkValue `json:"krb5Keytab,omitempty"`
+	KRB5KeytabBase64 SyncSinkValue `json:"krb5KeytabBase64,omitempty"`
+	KRB5Principal    SyncSinkValue `json:"krb5Principal,omitempty"`
+
 	ExtraVolumes []ExtraVolume `json:"extraVolumes,omitempty"`
 }
 

@@ -373,7 +373,7 @@ func (p *PodBuilder) genInitConfigVolumes() {
 	})
 }
 
-func (p *PodBuilder) NewCacheGroupWorker(ctx context.Context) *corev1.Pod {
+func (p *PodBuilder) NewCacheGroupWorker(ctx context.Context, dryrun bool) *corev1.Pod {
 	worker := newBasicPod(p.cg, p.node)
 	p.genInitConfigVolumes()
 	p.genCacheDirs()
@@ -398,7 +398,12 @@ func (p *PodBuilder) NewCacheGroupWorker(ctx context.Context) *corev1.Pod {
 			if spec.Affinity == nil {
 				spec.Affinity = &corev1.Affinity{}
 			}
-			worker.Spec.Affinity = utils.AddNodeNameNodeAffinity(spec.Affinity.DeepCopy(), p.node)
+			// dryrun means just generate the pod spec without binding to a specific node
+			if !dryrun {
+				worker.Spec.Affinity = utils.AddNodeNameNodeAffinity(spec.Affinity.DeepCopy(), p.node)
+			} else {
+				worker.Spec.Affinity = spec.Affinity.DeepCopy()
+			}
 		}
 	}
 	maps.Copy(worker.Labels, spec.Labels)

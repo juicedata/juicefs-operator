@@ -684,7 +684,7 @@ func (r *CacheGroupReconciler) HandleFinalizer(ctx context.Context, cg *juicefsi
 	}
 	for node, expectState := range expectStates {
 		podBuilder := builder.NewPodBuilder(cg, secret, node, expectState, false)
-		expectWorker := podBuilder.NewCacheGroupWorker(ctx, true)
+		expectWorker := podBuilder.NewCacheGroupWorker(ctx, false)
 		if err := r.cleanWorkerCache(ctx, cg, *expectWorker); err != nil {
 			log.Error(err, "failed to clean worker cache", "worker", expectWorker.Name)
 		}

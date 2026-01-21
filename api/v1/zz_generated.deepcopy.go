@@ -781,14 +781,14 @@ func (in *SyncSinkExternal) DeepCopyInto(out *SyncSinkExternal) {
 	*out = *in
 	in.AccessKey.DeepCopyInto(&out.AccessKey)
 	in.SecretKey.DeepCopyInto(&out.SecretKey)
-	in.KRB5Keytab.DeepCopyInto(&out.KRB5Keytab)
-	in.KRB5KeytabBase64.DeepCopyInto(&out.KRB5KeytabBase64)
-	in.KRB5Principal.DeepCopyInto(&out.KRB5Principal)
 	if in.FilesFrom != nil {
 		in, out := &in.FilesFrom, &out.FilesFrom
 		*out = new(SyncFilesFrom)
 		(*in).DeepCopyInto(*out)
 	}
+	in.KRB5Keytab.DeepCopyInto(&out.KRB5Keytab)
+	in.KRB5KeytabBase64.DeepCopyInto(&out.KRB5KeytabBase64)
+	in.KRB5Principal.DeepCopyInto(&out.KRB5Principal)
 	if in.ExtraVolumes != nil {
 		in, out := &in.ExtraVolumes, &out.ExtraVolumes
 		*out = make([]ExtraVolume, len(*in))

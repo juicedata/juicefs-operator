@@ -121,7 +121,7 @@ func (r *SyncReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 
 	// Reject sync when both from and to are HDFS
 	if strings.HasPrefix(from.Uri, "hdfs://") && strings.HasPrefix(to.Uri, "hdfs://") {
-		err := fmt.Errorf("sync between HDFS is not supported")
+		err := fmt.Errorf("HDFS-to-HDFS sync is not supported")
 		l.Error(err, "")
 		sync.Status.Phase = juicefsiov1.SyncPhaseFailed
 		sync.Status.Reason = err.Error()

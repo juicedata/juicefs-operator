@@ -81,4 +81,82 @@ var _ = Describe("Sync Controller", func() {
 			// Example: If you expect a certain status condition after reconciliation, verify it here.
 		})
 	})
+
+	Context("When rejecting HDFS-to-HDFS sync", func() {
+		const hdfsToHdfsResourceName = "hdfs-to-hdfs-sync"
+
+		ctx := context.Background()
+
+		typeNamespacedName := types.NamespacedName{
+			Name:      hdfsToHdfsResourceName,
+			Namespace: "default",
+		}
+
+		BeforeEach(func() {
+			By("creating a Sync resource with both from and to as HDFS")
+			resource := &juicefsiov1.Sync{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      hdfsToHdfsResourceName,
+					Namespace: "default",
+				},
+				Spec: juicefsiov1.SyncSpec{
+					Image: "juicedata/mount:ce-v1.3.0",
+					From: juicefsiov1.SyncSink{
+						External: &juicefsiov1.SyncSinkExternal{
+							Uri: "hdfs://example.com/user/source/",
+							KRB5Principal: juicefsiov1.SyncSinkValue{
+								Value: "hdfs/host@EXAMPLE.COM",
+							},
+							KRB5KeytabBase64: juicefsiov1.SyncSinkValue{
+								Value: "dGVzdC1rZXl0YWItYmFzZTY0",
+							},
+						},
+					},
+					To: juicefsiov1.SyncSink{
+						External: &juicefsiov1.SyncSinkExternal{
+							Uri: "hdfs://example.com/user/destination/",
+							KRB5Principal: juicefsiov1.SyncSinkValue{
+								Value: "hdfs/host@EXAMPLE.COM",
+							},
+							KRB5KeytabBase64: juicefsiov1.SyncSinkValue{
+								Value: "dGVzdC1rZXl0YWItYmFzZTY0",
+							},
+						},
+					},
+				},
+			}
+			err := k8sClient.Get(ctx, typeNamespacedName, &juicefsiov1.Sync{})
+			if err != nil && errors.IsNotFound(err) {
+				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+			}
+		})
+
+		AfterEach(func() {
+			By("cleaning up the HDFS-to-HDFS sync resource")
+			resource := &juicefsiov1.Sync{}
+			err := k8sClient.Get(ctx, typeNamespacedName, resource)
+			if err == nil {
+				Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+			}
+		})
+
+		It("should reject sync and set status to Failed with appropriate reason", func() {
+			By("reconciling the HDFS-to-HDFS sync resource")
+			controllerReconciler := &SyncReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+			}
+
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("verifying the sync status is set to Failed")
+			sync := &juicefsiov1.Sync{}
+			Expect(k8sClient.Get(ctx, typeNamespacedName, sync)).To(Succeed())
+			Expect(sync.Status.Phase).To(Equal(juicefsiov1.SyncPhaseFailed))
+			Expect(sync.Status.Reason).To(ContainSubstring("HDFS-to-HDFS sync is not supported"))
+		})
+	})
 })

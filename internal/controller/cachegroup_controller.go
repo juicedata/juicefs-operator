@@ -162,7 +162,7 @@ func (r *CacheGroupReconciler) sync(ctx context.Context, cg *juicefsiov1.CacheGr
 		}
 		groupBackUp := r.shouldAddGroupBackupOrNot(cg, actualState, expectState)
 		podBuilder := builder.NewPodBuilder(cg, secret, node, expectState, groupBackUp)
-		expectWorker := podBuilder.NewCacheGroupWorker(ctx)
+		expectWorker := podBuilder.NewCacheGroupWorker(ctx, false)
 
 		if actualState != nil && actualState.DeletionTimestamp != nil {
 			log.Info("actual worker is being deleted, skip updating worker, waiting for next reconciler", "worker", expectWorker.Name)
@@ -315,7 +315,7 @@ func (r *CacheGroupReconciler) parseExpectStateByScheduler(ctx context.Context, 
 	for _, node := range nodes {
 		state := expectStates[node.Name]
 		podBuilder := builder.NewPodBuilder(cg, &corev1.Secret{}, node.Name, state, false)
-		pod := podBuilder.NewCacheGroupWorker(ctx)
+		pod := podBuilder.NewCacheGroupWorker(ctx, true)
 		if ok, err := sim.CanSchedulePodOnNode(ctx, pod, &node); err != nil {
 			return nil, err
 		} else {
@@ -684,7 +684,7 @@ func (r *CacheGroupReconciler) HandleFinalizer(ctx context.Context, cg *juicefsi
 	}
 	for node, expectState := range expectStates {
 		podBuilder := builder.NewPodBuilder(cg, secret, node, expectState, false)
-		expectWorker := podBuilder.NewCacheGroupWorker(ctx)
+		expectWorker := podBuilder.NewCacheGroupWorker(ctx, false)
 		if err := r.cleanWorkerCache(ctx, cg, *expectWorker); err != nil {
 			log.Error(err, "failed to clean worker cache", "worker", expectWorker.Name)
 		}

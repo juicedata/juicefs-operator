@@ -62,7 +62,7 @@ func (j *JobBuilder) NewWarmUpJob() *batchv1.Job {
 		Name:            common.WarmUpContainerName,
 		Image:           image,
 		ImagePullPolicy: j.worker.Spec.Containers[0].ImagePullPolicy,
-		Command:         j.getWarmUpCommand(),
+		Command:         j.getWarmUpCommand(image),
 		Env:             j.worker.Spec.Containers[0].Env,
 		SecurityContext: &corev1.SecurityContext{
 			Privileged: utils.ToPtr(true),
@@ -156,7 +156,7 @@ var (
 	ignoreMountOpts = []string{"foreground", "cache-size", "free-space-ratio", "group-weight", "cache-dir", "group-backup"}
 )
 
-func (j *JobBuilder) getWarmUpCommand() []string {
+func (j *JobBuilder) getWarmUpCommand(image string) []string {
 	workerCommad := strings.Split(j.worker.Spec.Containers[0].Command[2], "\n")
 	authCmd := workerCommad[0]
 	volName, opts := utils.MustParseWorkerMountCmds(workerCommad[1])
@@ -241,7 +241,7 @@ func (j *JobBuilder) getWarmUpCommand() []string {
 		cmds = append(cmds, fmt.Sprintf("--%s", opt))
 	}
 	// enable debug mode to get warmup stats log
-	if utils.WarmupSupportStats(j.wu.Spec.Image) && !hasDebug {
+	if utils.WarmupSupportStats(image) && !hasDebug {
 		cmds = append(cmds, "--debug")
 	}
 	return []string{

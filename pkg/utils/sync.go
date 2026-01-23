@@ -114,6 +114,30 @@ func parseExternalSyncSink(external *juicefsiov1.SyncSinkExternal, syncName, ref
 	if len(pss.Envs) == 2 {
 		ep.User = url.UserPassword(fmt.Sprintf("$%s", ak), fmt.Sprintf("$%s", sk))
 	}
+	if ep.Scheme == "hdfs" {
+		krb5Keytab := fmt.Sprintf("EXTERNAL_%s_%s", strings.ToUpper(ref), "KRB5KEYTAB")
+		krb5KeytabBase64 := fmt.Sprintf("EXTERNAL_%s_%s", strings.ToUpper(ref), "KRB5KEYTAB_BASE64")
+		krb5Principal := fmt.Sprintf("EXTERNAL_%s_%s", strings.ToUpper(ref), "KRB5PRINCIPAL")
+
+		hasKeytab := external.KRB5Keytab.Value != "" || external.KRB5Keytab.ValueFrom != nil
+		hasKeytabBase64 := external.KRB5KeytabBase64.Value != "" || external.KRB5KeytabBase64.ValueFrom != nil
+		if hasKeytab && hasKeytabBase64 {
+			return nil, fmt.Errorf("krb5Keytab and krb5KeytabBase64 are mutually exclusive. Please specify only one keytab method for the %s field", strings.ToUpper(ref))
+		}
+		if hasKeytab {
+			pss.Envs = append(pss.Envs, parseSinkValueToEnv(external.KRB5Keytab, syncName, krb5Keytab)...)
+			// Export to standard env var name for juicefs sync compatibility
+			pss.PrepareCommand += fmt.Sprintf("export %s=$%s\n", "KRB5KEYTAB", krb5Keytab)
+		}
+		if hasKeytabBase64 {
+			pss.Envs = append(pss.Envs, parseSinkValueToEnv(external.KRB5KeytabBase64, syncName, krb5KeytabBase64)...)
+			pss.PrepareCommand += fmt.Sprintf("export %s=$%s\n", "KRB5KEYTAB_BASE64", krb5KeytabBase64)
+		}
+		if external.KRB5Principal.Value != "" || external.KRB5Principal.ValueFrom != nil {
+			pss.Envs = append(pss.Envs, parseSinkValueToEnv(external.KRB5Principal, syncName, krb5Principal)...)
+			pss.PrepareCommand += fmt.Sprintf("export %s=$%s\n", "KRB5PRINCIPAL", krb5Principal)
+		}
+	}
 	pss.Uri = ep.String()
 	pss.ExtraVolumes = external.ExtraVolumes
 	return pss, nil

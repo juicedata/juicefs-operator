@@ -77,6 +77,13 @@ type SyncSinkExternal struct {
 	SecretKey SyncSinkValue  `json:"secretKey,omitempty"`
 	FilesFrom *SyncFilesFrom `json:"filesFrom,omitempty"`
 
+	// KRB5Keytab specifies the path to the Kerberos keytab file for HDFS authentication.
+	KRB5Keytab SyncSinkValue `json:"krb5Keytab,omitempty"`
+	// KRB5KeytabBase64 contains the base64-encoded Kerberos keytab content for HDFS authentication.
+	KRB5KeytabBase64 SyncSinkValue `json:"krb5KeytabBase64,omitempty"`
+	// KRB5Principal is the Kerberos principal name used for HDFS authentication.
+	KRB5Principal SyncSinkValue `json:"krb5Principal,omitempty"`
+
 	ExtraVolumes []ExtraVolume `json:"extraVolumes,omitempty"`
 }
 

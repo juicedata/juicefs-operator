@@ -119,6 +119,15 @@ func (r *SyncReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		return ctrl.Result{}, r.updateStatus(ctx, sync)
 	}
 
+	// Reject sync when both from and to are HDFS
+	if strings.HasPrefix(from.Uri, "hdfs://") && strings.HasPrefix(to.Uri, "hdfs://") {
+		err := fmt.Errorf("HDFS-to-HDFS sync is not supported")
+		l.Error(err, "")
+		sync.Status.Phase = juicefsiov1.SyncPhaseFailed
+		sync.Status.Reason = err.Error()
+		return ctrl.Result{}, r.updateStatus(ctx, sync)
+	}
+
 	if strings.HasSuffix(from.Uri, "/") != strings.HasSuffix(to.Uri, "/") {
 		err := fmt.Errorf("FROM and TO should both end with path separator or not")
 		l.Error(err, "")

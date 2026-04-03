@@ -74,27 +74,6 @@ func (r *WarmUpReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	logger.V(1).Info("reconcile WarmUp", "warmup", wu.Name)
 
-	cg := &juicefsiov1.CacheGroup{}
-	if err := r.Get(ctx, types.NamespacedName{
-		Namespace: wu.Namespace,
-		Name:      wu.Spec.CacheGroupName,
-	}, cg); err != nil {
-		// try to get via status
-		cgList := &juicefsiov1.CacheGroupList{}
-		if err := r.List(ctx, cgList, client.MatchingFields{
-			"status.cacheGroup": wu.Spec.CacheGroupName,
-		}); err != nil {
-			logger.Error(err, "unable to fetch CacheGroup", "cache group", wu.Spec.CacheGroupName)
-			return ctrl.Result{}, err
-		}
-		if len(cgList.Items) > 0 {
-			cg = &cgList.Items[0]
-		} else {
-			logger.Error(err, "unable to fetch CacheGroup", "cache group", wu.Spec.CacheGroupName)
-			return ctrl.Result{}, err
-		}
-	}
-
 	if wu.DeletionTimestamp != nil {
 		return ctrl.Result{}, nil
 	}
@@ -105,7 +84,7 @@ func (r *WarmUpReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, nil
 	}
 
-	if result, err := handler.sync(ctx, wu, cg.Name); err != nil {
+	if result, err := handler.sync(ctx, wu); err != nil {
 		logger.Error(err, "unable to sync WarmUp")
 		return result, err
 	} else {
@@ -129,7 +108,7 @@ func (r *WarmUpReconciler) getWarmUpHandler(policyType juicefsiov1.PolicyType) w
 }
 
 type warmUpHandler interface {
-	sync(ctx context.Context, wu *juicefsiov1.WarmUp, cgName string) (result reconcile.Result, err error)
+	sync(ctx context.Context, wu *juicefsiov1.WarmUp) (result reconcile.Result, err error)
 }
 
 type onceHandler struct {
@@ -138,8 +117,67 @@ type onceHandler struct {
 
 var _ warmUpHandler = &onceHandler{}
 
-func (o *onceHandler) sync(ctx context.Context, wu *juicefsiov1.WarmUp, cgName string) (result reconcile.Result, err error) {
+func resolveWarmUpJobBuilder(ctx context.Context, c client.Client, wu *juicefsiov1.WarmUp) (*builder.JobBuilder, string, error) {
+	if wu.Spec.SecretRef != nil {
+		if wu.Spec.Image == "" {
+			return nil, "", fmt.Errorf("spec.image is required when spec.secretRef is set")
+		}
+
+		secret := &corev1.Secret{}
+		if err := c.Get(ctx, types.NamespacedName{
+			Namespace: wu.Namespace,
+			Name:      wu.Spec.SecretRef.Name,
+		}, secret); err != nil {
+			return nil, "", err
+		}
+		return builder.NewJobBuilder(wu, nil, secret, wu.Spec.CacheGroupName), wu.Spec.CacheGroupName, nil
+	}
+
+	cg, err := resolveWarmUpCacheGroup(ctx, c, wu.Namespace, wu.Spec.CacheGroupName)
+	if err != nil {
+		return nil, "", err
+	}
+	cgName := cg.Name
+
+	podList := &corev1.PodList{}
+	if err := c.List(ctx, podList, client.InNamespace(wu.Namespace), client.MatchingLabels{
+		common.LabelCacheGroup: utils.TruncateLabelValue(cgName),
+	}, &client.ListOptions{Limit: 1}); err != nil {
+		return nil, "", err
+	}
+	if len(podList.Items) == 0 {
+		return nil, "", fmt.Errorf("no worker found for cache group %s", cgName)
+	}
+	log.FromContext(ctx).Info("get worker of cacheGroup for warmup", "cacheGroup", cgName, "worker", podList.Items[0].Name)
+	return builder.NewJobBuilder(wu, &podList.Items[0], nil, builder.GenCacheGroupName(cg)), cgName, nil
+}
+
+func resolveWarmUpCacheGroup(ctx context.Context, c client.Client, namespace string, cacheGroupName string) (*juicefsiov1.CacheGroup, error) {
+	cg := &juicefsiov1.CacheGroup{}
+	if err := c.Get(ctx, types.NamespacedName{
+		Namespace: namespace,
+		Name:      cacheGroupName,
+	}, cg); err == nil {
+		return cg, nil
+	} else if !apierrors.IsNotFound(err) {
+		return nil, err
+	}
+
+	cgList := &juicefsiov1.CacheGroupList{}
+	if err := c.List(ctx, cgList, client.InNamespace(namespace), client.MatchingFields{
+		"status.cacheGroup": cacheGroupName,
+	}); err != nil {
+		return nil, err
+	}
+	if len(cgList.Items) == 0 {
+		return nil, fmt.Errorf("unable to fetch CacheGroup %s", cacheGroupName)
+	}
+	return &cgList.Items[0], nil
+}
+
+func (o *onceHandler) sync(ctx context.Context, wu *juicefsiov1.WarmUp) (result reconcile.Result, err error) {
 	l := log.FromContext(ctx)
+	cgName := wu.Spec.CacheGroupName
 	if wu.Status.Phase == juicefsiov1.WarmUpPhaseFailed {
 		return reconcile.Result{}, nil
 	}
@@ -164,20 +202,11 @@ func (o *onceHandler) sync(ctx context.Context, wu *juicefsiov1.WarmUp, cgName s
 	var job batchv1.Job
 	if err := o.Get(ctx, client.ObjectKey{Namespace: wu.Namespace, Name: jobName}, &job); err != nil {
 		if utils.IsNotFound(err) {
-			// create a new job
-			podList := &corev1.PodList{}
-			if err := o.List(ctx, podList, client.MatchingLabels{common.LabelCacheGroup: utils.TruncateLabelValue(cgName)}, &client.ListOptions{
-				Limit: 1,
-			}); err != nil {
-				l.Error(err, "list pod error", "cache group", cgName)
+			jobBuilder, resolvedCgName, err := resolveWarmUpJobBuilder(ctx, o.Client, wu)
+			if err != nil {
 				return reconcile.Result{}, err
 			}
-			if len(podList.Items) == 0 {
-				return reconcile.Result{}, fmt.Errorf("no worker found for cache group %s", cgName)
-			}
-			l.Info("get worker of cacheGroup for warmup", "cacheGroup", cgName, "worker", podList.Items[0].Name)
-
-			jobBuilder := builder.NewJobBuilder(wu, &podList.Items[0])
+			cgName = resolvedCgName
 			newJob := jobBuilder.NewWarmUpJob()
 			l.Info("create warmup job", "job", newJob.Name)
 			err = o.Create(ctx, newJob)
@@ -189,6 +218,11 @@ func (o *onceHandler) sync(ctx context.Context, wu *juicefsiov1.WarmUp, cgName s
 		} else {
 			l.Error(err, "get job error", "job", jobName)
 			return reconcile.Result{}, err
+		}
+	}
+	if wu.Spec.SecretRef == nil {
+		if cg, err := resolveWarmUpCacheGroup(ctx, o.Client, wu.Namespace, wu.Spec.CacheGroupName); err == nil {
+			cgName = cg.Name
 		}
 	}
 
@@ -260,19 +294,13 @@ type cronHandler struct {
 
 var _ warmUpHandler = &cronHandler{}
 
-func (c *cronHandler) sync(ctx context.Context, wu *juicefsiov1.WarmUp, cgName string) (result reconcile.Result, err error) {
+func (c *cronHandler) sync(ctx context.Context, wu *juicefsiov1.WarmUp) (result reconcile.Result, err error) {
 	l := log.FromContext(ctx)
 	var cronjob batchv1.CronJob
-	podList := &corev1.PodList{}
-	if err := c.List(ctx, podList, client.MatchingLabels{common.LabelCacheGroup: utils.TruncateLabelValue(cgName)}, &client.ListOptions{Limit: 1}); err != nil {
-		l.Error(err, "list pod error", "cache group", cgName)
+	cronjobBuilder, cgName, err := resolveWarmUpJobBuilder(ctx, c.Client, wu)
+	if err != nil {
 		return reconcile.Result{}, err
 	}
-	if len(podList.Items) == 0 {
-		return reconcile.Result{}, fmt.Errorf("no worker found for cache group %s", cgName)
-	}
-	l.Info("get worker of cacheGroup for warmup", "cacheGroup", cgName, "worker", podList.Items[0].Name)
-	cronjobBuilder := builder.NewJobBuilder(wu, &podList.Items[0])
 	newCronJob := cronjobBuilder.NewWarmUpCronJob()
 
 	if err := c.Get(ctx, client.ObjectKey{Namespace: wu.Namespace, Name: newCronJob.Name}, &cronjob); err != nil {
@@ -297,7 +325,7 @@ func (c *cronHandler) sync(ctx context.Context, wu *juicefsiov1.WarmUp, cgName s
 		}
 		return reconcile.Result{}, err
 	}
-	newStatus := c.calculateStatus(&cronjob)
+	newStatus := c.calculateStatus(&cronjob, cgName)
 	if !reflect.DeepEqual(wu.Status, newStatus) {
 		wu.Status = *newStatus
 		return reconcile.Result{}, utils.IgnoreConflict(c.Status().Update(ctx, wu))
@@ -305,8 +333,10 @@ func (c *cronHandler) sync(ctx context.Context, wu *juicefsiov1.WarmUp, cgName s
 	return reconcile.Result{}, nil
 }
 
-func (o *cronHandler) calculateStatus(crobjob *batchv1.CronJob) *juicefsiov1.WarmUpStatus {
-	status := &juicefsiov1.WarmUpStatus{}
+func (o *cronHandler) calculateStatus(crobjob *batchv1.CronJob, cgName string) *juicefsiov1.WarmUpStatus {
+	status := &juicefsiov1.WarmUpStatus{
+		CacheGroup: cgName,
+	}
 	if crobjob == nil {
 		status.Phase = juicefsiov1.WarmUpPhasePending
 		return status

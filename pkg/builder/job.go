@@ -17,10 +17,12 @@
 package builder
 
 import (
+	"context"
 	"fmt"
 	"maps"
 	"path"
 	"slices"
+	"sort"
 	"strings"
 
 	batchv1 "k8s.io/api/batch/v1"
@@ -33,18 +35,28 @@ import (
 )
 
 type JobBuilder struct {
-	wu     *juicefsiov1.WarmUp
-	worker *corev1.Pod
+	wu             *juicefsiov1.WarmUp
+	worker         *corev1.Pod
+	secret         *corev1.Secret
+	cacheGroupName string
+}
+
+type warmUpMountInfo struct {
+	authCmd   string
+	volName   string
+	mountOpts []string
 }
 
 const (
 	warmupFileListPath = "/tmp/filelist.txt"
 )
 
-func NewJobBuilder(wu *juicefsiov1.WarmUp, worker *corev1.Pod) *JobBuilder {
+func NewJobBuilder(wu *juicefsiov1.WarmUp, worker *corev1.Pod, secret *corev1.Secret, cacheGroupName string) *JobBuilder {
 	return &JobBuilder{
-		wu:     wu,
-		worker: worker,
+		wu:             wu,
+		worker:         worker,
+		secret:         secret,
+		cacheGroupName: cacheGroupName,
 	}
 }
 
@@ -53,17 +65,14 @@ func (j *JobBuilder) NewWarmUpJob() *batchv1.Job {
 	job.Spec.Template.Spec.RestartPolicy = corev1.RestartPolicyNever
 	job.Spec.Template.Spec.Tolerations = j.wu.Spec.Tolerations
 	job.Spec.Template.Spec.NodeSelector = j.wu.Spec.NodeSelector
-	job.Spec.Template.Spec.ImagePullSecrets = j.worker.Spec.ImagePullSecrets
-	image := j.worker.Spec.Containers[0].Image
-	if j.wu.Spec.Image != "" {
-		image = j.wu.Spec.Image
-	}
+	job.Spec.Template.Spec.ImagePullSecrets = j.getImagePullSecrets()
+	image := j.getImage()
 	job.Spec.Template.Spec.Containers = []corev1.Container{{
 		Name:            common.WarmUpContainerName,
 		Image:           image,
-		ImagePullPolicy: j.worker.Spec.Containers[0].ImagePullPolicy,
+		ImagePullPolicy: j.getImagePullPolicy(),
 		Command:         j.getWarmUpCommand(image),
-		Env:             j.worker.Spec.Containers[0].Env,
+		Env:             j.getEnvs(),
 		SecurityContext: &corev1.SecurityContext{
 			Privileged: utils.ToPtr(true),
 		},
@@ -153,33 +162,154 @@ func (j *JobBuilder) genBaseJob() *batchv1.Job {
 }
 
 var (
-	ignoreMountOpts = []string{"foreground", "cache-size", "free-space-ratio", "group-weight", "cache-dir", "group-backup"}
+	ignoreMountOpts = []string{"foreground", "cache-size", "free-space-ratio", "group-weight", "cache-dir", "group-backup", "cache-group", "no-sharing"}
 )
 
+func (j *JobBuilder) getImage() string {
+	if j.wu.Spec.Image != "" {
+		return j.wu.Spec.Image
+	}
+	if j.worker != nil {
+		return j.worker.Spec.Containers[0].Image
+	}
+	return ""
+}
+
+func (j *JobBuilder) getImagePullSecrets() []corev1.LocalObjectReference {
+	if j.worker != nil {
+		return j.worker.Spec.ImagePullSecrets
+	}
+	return j.wu.Spec.ImagePullSecrets
+}
+
+func (j *JobBuilder) getImagePullPolicy() corev1.PullPolicy {
+	if j.worker != nil {
+		return j.worker.Spec.Containers[0].ImagePullPolicy
+	}
+	return corev1.PullIfNotPresent
+}
+
+func (j *JobBuilder) getEnvs() []corev1.EnvVar {
+	if j.worker != nil {
+		return j.worker.Spec.Containers[0].Env
+	}
+
+	secretData := utils.ParseSecret(j.secret)
+	envs := []corev1.EnvVar{}
+	if v, ok := secretData["envs"]; ok && v != "" {
+		if secretEnvs, err := utils.ParseYamlOrJson(v); err == nil {
+			for k, v := range secretEnvs {
+				envs = append(envs, corev1.EnvVar{
+					Name:  k,
+					Value: fmt.Sprint(v),
+				})
+			}
+		}
+	}
+
+	for _, k := range secretStrippedEnvs {
+		_, isOptional := secretStrippedEnvOptional[k]
+		envs = append(envs, corev1.EnvVar{
+			Name: secretStrippedEnvMap[k],
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					Key:      k,
+					Optional: &isOptional,
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: j.wu.Spec.SecretRef.Name,
+					},
+				},
+			},
+		})
+	}
+
+	sort.SliceStable(envs, func(i, k int) bool {
+		return envs[i].Name < envs[k].Name
+	})
+	return envs
+}
+
+func (j *JobBuilder) getSecretAuthCmd() (string, string) {
+	secretData := utils.ParseSecret(j.secret)
+	volName := secretData["name"]
+
+	if secretData["initconfig"] != "" {
+		return strings.Join([]string{
+			"cp",
+			path.Join(common.InitConfigMountPath, volName+".conf"),
+			"/root/.juicefs",
+		}, " "), volName
+	}
+
+	authCmds := []string{
+		common.JuiceFSBinary,
+		"auth",
+		volName,
+	}
+
+	for _, key := range secretKeys {
+		if value, ok := secretData[key]; ok {
+			if strippedKey, ok := secretStrippedEnvMap[key]; ok {
+				authCmds = append(authCmds, "--"+key, "${"+strippedKey+"}")
+			} else {
+				authCmds = append(authCmds, "--"+key, value)
+			}
+		}
+	}
+
+	if value, ok := secretData["format-options"]; ok {
+		formatOptions := utils.ParseOptions(context.Background(), strings.Split(value, ","))
+		for _, opt := range formatOptions {
+			if opt[1] != "" {
+				authCmds = append(authCmds, "--"+opt[0], opt[1])
+			} else {
+				authCmds = append(authCmds, "--"+opt[0])
+			}
+		}
+	}
+
+	return strings.Join(authCmds, " "), volName
+}
+
+func (j *JobBuilder) getWarmUpMountInfo() warmUpMountInfo {
+	info := warmUpMountInfo{
+		mountOpts: []string{
+			"cache-group=" + j.cacheGroupName,
+			"no-sharing",
+			"cache-size=0",
+		},
+	}
+
+	if j.worker != nil {
+		workerCommand := strings.Split(j.worker.Spec.Containers[0].Command[2], "\n")
+		info.authCmd = workerCommand[0]
+		var opts []string
+		info.volName, opts = utils.MustParseWorkerMountCmds(workerCommand[1])
+		for _, opt := range opts {
+			part := strings.SplitN(opt, "=", 2)
+			if len(part) < 1 {
+				continue
+			}
+			if slices.Contains(ignoreMountOpts, part[0]) {
+				continue
+			}
+			info.mountOpts = append(info.mountOpts, opt)
+		}
+	} else {
+		info.authCmd, info.volName = j.getSecretAuthCmd()
+	}
+	info.mountOpts = appendWarmupMountOpts(info.mountOpts, j.wu.Spec.MountOptions)
+	return info
+}
+
 func (j *JobBuilder) getWarmUpCommand(image string) []string {
-	workerCommad := strings.Split(j.worker.Spec.Containers[0].Command[2], "\n")
-	authCmd := workerCommad[0]
-	volName, opts := utils.MustParseWorkerMountCmds(workerCommad[1])
-	mountOpts := []string{
-		"no-sharing",
-		"cache-size=0",
-	}
-	for _, opt := range opts {
-		part := strings.SplitN(opt, "=", 2)
-		if len(part) < 1 {
-			continue
-		}
-		if slices.Contains(ignoreMountOpts, part[0]) {
-			continue
-		}
-		mountOpts = append(mountOpts, opt)
-	}
+	mountInfo := j.getWarmUpMountInfo()
 	mountCmds := []string{
 		common.JuiceFsMountBinary,
-		volName,
+		mountInfo.volName,
 		common.MountPoint,
 		"-o",
-		strings.Join(mountOpts, ","),
+		strings.Join(mountInfo.mountOpts, ","),
 	}
 
 	targetsCmd := ""
@@ -247,7 +377,7 @@ func (j *JobBuilder) getWarmUpCommand(image string) []string {
 	return []string{
 		"/bin/sh",
 		"-c",
-		authCmd + "\n" +
+		mountInfo.authCmd + "\n" +
 			strings.Join(mountCmds, " ") + "\n" +
 			targetsCmd + "\n" +
 			"cd " + common.MountPoint + "\n" +
@@ -255,19 +385,70 @@ func (j *JobBuilder) getWarmUpCommand(image string) []string {
 	}
 }
 
+func appendWarmupMountOpts(base []string, extra []string) []string {
+	existing := make(map[string]struct{}, len(base))
+	for _, opt := range base {
+		part := strings.SplitN(opt, "=", 2)
+		if len(part) == 0 || part[0] == "" {
+			continue
+		}
+		existing[part[0]] = struct{}{}
+	}
+
+	for _, opt := range utils.ParseOptions(context.Background(), extra) {
+		key := opt[0]
+		if key == "" || slices.Contains(ignoreMountOpts, key) {
+			continue
+		}
+		if _, ok := existing[key]; ok {
+			continue
+		}
+		if opt[1] != "" {
+			base = append(base, key+"="+opt[1])
+		} else {
+			base = append(base, key)
+		}
+		existing[key] = struct{}{}
+	}
+	return base
+}
+
 func (j *JobBuilder) getWarmupVolumes() ([]corev1.Volume, []corev1.VolumeMount) {
 	volumes := []corev1.Volume{}
 	volumeMounts := []corev1.VolumeMount{}
-	for _, volume := range j.worker.Spec.Volumes {
-		if volume.Name == common.InitConfigVolumeName {
-			volumes = append(volumes, volume)
-			break
+	if j.worker != nil {
+		for _, volume := range j.worker.Spec.Volumes {
+			if volume.Name == common.InitConfigVolumeName {
+				volumes = append(volumes, volume)
+				break
+			}
 		}
-	}
-	for _, mount := range j.worker.Spec.Containers[0].VolumeMounts {
-		if mount.Name == common.InitConfigVolumeName {
-			volumeMounts = append(volumeMounts, mount)
-			break
+		for _, mount := range j.worker.Spec.Containers[0].VolumeMounts {
+			if mount.Name == common.InitConfigVolumeName {
+				volumeMounts = append(volumeMounts, mount)
+				break
+			}
+		}
+	} else {
+		secretData := utils.ParseSecret(j.secret)
+		volName := secretData["name"]
+		if secretData["initconfig"] != "" {
+			volumes = append(volumes, corev1.Volume{
+				Name: common.InitConfigVolumeName,
+				VolumeSource: corev1.VolumeSource{
+					Secret: &corev1.SecretVolumeSource{
+						SecretName: j.wu.Spec.SecretRef.Name,
+						Items: []corev1.KeyToPath{{
+							Key:  common.InitConfigVolumeKey,
+							Path: volName + ".conf",
+						}},
+					},
+				},
+			})
+			volumeMounts = append(volumeMounts, corev1.VolumeMount{
+				Name:      common.InitConfigVolumeName,
+				MountPath: common.InitConfigMountPath,
+			})
 		}
 	}
 

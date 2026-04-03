@@ -26,6 +26,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/juicedata/juicefs-operator/pkg/common"
@@ -668,9 +669,15 @@ var _ = Describe("controller", Ordered, func() {
 	})
 
 	Context("WarmUp Controller", func() {
-		wuName := "e2e-test-warmup"
+		const (
+			wuName                = "e2e-test-warmup"
+			defaultWarmupConfig   = "test/e2e/config/e2e-test-warmup.yaml"
+			secretRefWarmupConfig = "test/e2e/config/e2e-test-warmup.secretref.yaml"
+		)
+		warmupConfig := defaultWarmupConfig
 
 		BeforeEach(func() {
+			warmupConfig = defaultWarmupConfig
 			cmd := exec.Command("kubectl", "label", "nodes", "--all", "juicefs.io/cg-worker-", "--overwrite")
 			_, err := utils.Run(cmd)
 			ExpectWithOffset(1, err).NotTo(HaveOccurred())
@@ -713,9 +720,11 @@ var _ = Describe("controller", Ordered, func() {
 			Eventually(verifyCgStatusUpToDate, 5*time.Minute, time.Second).Should(Succeed())
 
 			time.Sleep(5 * time.Second)
+		})
 
-			cmd = exec.Command("kubectl", "apply", "-f", "test/e2e/config/e2e-test-warmup.yaml", "-n", namespace)
-			_, err = utils.Run(cmd)
+		JustBeforeEach(func() {
+			cmd := exec.Command("kubectl", "apply", "-f", warmupConfig, "-n", namespace)
+			_, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
@@ -788,7 +797,7 @@ var _ = Describe("controller", Ordered, func() {
 			Fail(message, callerSkip...)
 		})
 
-		It("should reconcile the WarmUp", func() {
+		assertWarmUpReconciled := func(extraAssert func()) {
 			By("validating that the WarmUp resource is reconciled")
 			verifyWarmUpReconciled := func() error {
 				cmd := exec.Command("kubectl", "get", "warmups.juicefs.io", wuName, "-o", "jsonpath={.status.phase}", "-n", namespace)
@@ -830,6 +839,10 @@ var _ = Describe("controller", Ordered, func() {
 			}
 			Eventually(verifyWarmUpJobRunning, 1*time.Minute, time.Second).Should(Succeed())
 
+			if extraAssert != nil {
+				extraAssert()
+			}
+
 			By("validating that the WarmUp status is up to date")
 			verifyWarmUpStatus := func() error {
 				cmd := exec.Command("kubectl", "get", "warmups.juicefs.io", wuName, "-o", "jsonpath={.status.phase}", "-n", namespace)
@@ -851,6 +864,47 @@ var _ = Describe("controller", Ordered, func() {
 				return nil
 			}
 			Eventually(verifyWarmUpStatus, 5*time.Minute, time.Second).Should(Succeed())
+		}
+
+		It("should reconcile the WarmUp", func() {
+			assertWarmUpReconciled(nil)
+		})
+
+		Context("with secretRef config", func() {
+			BeforeEach(func() {
+				warmupConfig = secretRefWarmupConfig
+			})
+
+			It("should reconcile the WarmUp", func() {
+				assertWarmUpReconciled(func() {
+					By("validating warmup job is built from secretRef config")
+					verifyWarmUpJobCommand := func() error {
+						cmd := exec.Command("kubectl", "get", "job", pkgutils.GenJobName(wuName), "-n", namespace, "-o", "json")
+						result, err := utils.Run(cmd)
+						if err != nil {
+							return fmt.Errorf("get warmup job failed, %+v", err)
+						}
+
+						job := batchv1.Job{}
+						if err := json.Unmarshal(result, &job); err != nil {
+							return fmt.Errorf("unmarshal warmup job failed, %+v", err)
+						}
+						if len(job.Spec.Template.Spec.Containers) != 1 {
+							return fmt.Errorf("expect 1 warmup container, but got %d", len(job.Spec.Template.Spec.Containers))
+						}
+
+						command := job.Spec.Template.Spec.Containers[0].Command[2]
+						if !strings.Contains(command, "cache-group=juicefs-operator-system-e2e-test-cachegroup,no-sharing,cache-size=0") {
+							return fmt.Errorf("unexpected warmup mount command: %s", command)
+						}
+						if strings.Contains(command, "no-update") {
+							return fmt.Errorf("warmup job should use secretRef config instead of inheriting worker mount options: %s", command)
+						}
+						return nil
+					}
+					Eventually(verifyWarmUpJobCommand, time.Minute, time.Second).Should(Succeed())
+				})
+			})
 		})
 	})
 

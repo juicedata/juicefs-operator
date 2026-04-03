@@ -47,6 +47,8 @@ type WarmUpStats struct {
 // WarmUpSpec defines the desired state of WarmUp
 type WarmUpSpec struct {
 	CacheGroupName          string                      `json:"cacheGroupName"`
+	SecretRef               *corev1.SecretEnvSource     `json:"secretRef,omitempty"`
+	MountOptions            []string                    `json:"mountOptions,omitempty"`
 	BackoffLimit            *int32                      `json:"backoffLimit,omitempty"`
 	TTLSecondsAfterFinished *int32                      `json:"ttlSecondsAfterFinished,omitempty"`
 	Metadata                Metadata                    `json:"metadata,omitempty"`
@@ -61,6 +63,10 @@ type WarmUpSpec struct {
 	// Image to use for the warmup job
 	// defaults to cachegroup pod image
 	Image string `json:"image,omitempty"`
+	// +optional
+	// ImagePullSecrets to use for the warmup job
+	// defaults to cachegroup pod imagePullSecrets
+	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
 }
 
 type Metadata struct {

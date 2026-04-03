@@ -57,6 +57,15 @@ spec:
                 type: string
               image:
                 type: string
+              imagePullSecrets:
+                items:
+                  properties:
+                    name:
+                      default: ""
+                      type: string
+                  type: object
+                  x-kubernetes-map-type: atomic
+                type: array
               metadata:
                 properties:
                   annotations:
@@ -68,6 +77,10 @@ spec:
                       type: string
                     type: object
                 type: object
+              mountOptions:
+                items:
+                  type: string
+                type: array
               nodeSelector:
                 additionalProperties:
                   type: string
@@ -121,6 +134,15 @@ spec:
                       x-kubernetes-int-or-string: true
                     type: object
                 type: object
+              secretRef:
+                properties:
+                  name:
+                    default: ""
+                    type: string
+                  optional:
+                    type: boolean
+                type: object
+                x-kubernetes-map-type: atomic
               targets:
                 items:
                   type: string

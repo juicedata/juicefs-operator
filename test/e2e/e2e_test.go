@@ -39,7 +39,7 @@ const (
 	running        = "Running"
 	trueValue      = "true"
 	ReadyStr       = "Ready"
-	image          = "registry.cn-hangzhou.aliyuncs.com/juicedata/mount:ee-5.1.2-59d9736"
+	image          = "juicedata/mount:ee-5.3.6-c8ec652ee"
 	cgName         = "e2e-test-cachegroup"
 	cgNameReplicas = "e2e-test-cachegroup-replicas"
 )

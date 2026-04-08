@@ -17,7 +17,7 @@ spec:
   options: 
     - debug
     - threads=10
-  image: registry.cn-hangzhou.aliyuncs.com/juicedata/mount:ee-5.1.9-d809773
+  image: juicedata/mount:ee-5.3.6-c8ec652
   from:
     external:
       uri: oss://sync-test.oss-cn-hangzhou.aliyuncs.com/sync-src-test/

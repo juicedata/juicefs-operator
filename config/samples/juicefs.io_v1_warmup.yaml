@@ -4,3 +4,6 @@ metadata:
   name: warmup-sample
 spec:
   cacheGroupName: cachegroup-sample
+  secretRef:
+    name: juicefs-secret
+  image: juicedata/mount:latest

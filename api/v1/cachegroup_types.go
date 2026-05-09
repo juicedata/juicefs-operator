@@ -39,6 +39,12 @@ type CacheDir struct {
 	// required for HostPath type
 	// +optional
 	Path string `json:"path,omitempty"`
+	// HostPathType for HostPath type cache directories
+	// Only valid when Type is HostPath
+	// Defaults to DirectoryOrCreate if not specified
+	// +kubebuilder:validation:Enum=Directory;DirectoryOrCreate
+	// +optional
+	HostPathType *corev1.HostPathType `json:"hostPathType,omitempty"`
 	// required for PVC type
 	// +optional
 	Name string `json:"name,omitempty"`

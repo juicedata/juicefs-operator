@@ -251,12 +251,16 @@ func (p *PodBuilder) genCacheDirs() {
 		})
 		switch dir.Type {
 		case juicefsiov1.CacheDirTypeHostPath:
+			hostPathType := corev1.HostPathDirectoryOrCreate
+			if dir.HostPathType != nil {
+				hostPathType = *dir.HostPathType
+			}
 			p.spec.Volumes = append(p.spec.Volumes, corev1.Volume{
 				Name: volumeName,
 				VolumeSource: corev1.VolumeSource{
 					HostPath: &corev1.HostPathVolumeSource{
 						Path: dir.Path,
-						Type: utils.ToPtr(corev1.HostPathDirectoryOrCreate),
+						Type: &hostPathType,
 					},
 				},
 			})

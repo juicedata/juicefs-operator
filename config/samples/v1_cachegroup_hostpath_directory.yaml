@@ -1,0 +1,28 @@
+apiVersion: juicefs.io/v1
+kind: CacheGroup
+metadata:
+  labels:
+    app.kubernetes.io/name: juicefs-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: cachegroup-hostpath-directory-sample
+spec:
+  secretRef:
+    name: juicefs-secret
+  worker:
+    template:
+      image: juicedata/mount:ee-5.1.1-ca439c2
+      # Example 1: Using Directory type - directory must pre-exist
+      # If /mnt/cache does not exist, Pod will fail to start
+      cacheDirs:
+        - type: HostPath
+          path: /mnt/cache
+          hostPathType: Directory
+      # Example 2: Using DirectoryOrCreate (explicit)
+      # If /mnt/cache2 does not exist, it will be created
+      # - type: HostPath
+      #   path: /mnt/cache2
+      #   hostPathType: DirectoryOrCreate
+      # Example 3: Default behavior (backward compatible)
+      # If /mnt/cache3 does not exist, it will be created
+      # - type: HostPath
+      #   path: /mnt/cache3

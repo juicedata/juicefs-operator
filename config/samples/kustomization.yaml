@@ -1,6 +1,7 @@
 ## Append samples of your project ##
 resources:
 - v1_cachegroup.yaml
+- v1_cachegroup_hostpath_directory.yaml
 - juicefs.io_v1_warmup.yaml
 - v1_sync.yaml
 - v1_cronsync.yaml

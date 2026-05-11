@@ -338,3 +338,104 @@ func TestPodBuilder_genEnvs(t *testing.T) {
 		})
 	}
 }
+
+func TestPodBuilder_genCacheDirs_HostPathType(t *testing.T) {
+	tests := []struct {
+		name             string
+		cacheDirs        []juicefsiov1.CacheDir
+		expectedPathType *corev1.HostPathType
+	}{
+		{
+			name: "default hostPathType (nil)",
+			cacheDirs: []juicefsiov1.CacheDir{
+				{
+					Type: juicefsiov1.CacheDirTypeHostPath,
+					Path: "/mnt/cache",
+				},
+			},
+			expectedPathType: utils.ToPtr(corev1.HostPathDirectoryOrCreate),
+		},
+		{
+			name: "explicit DirectoryOrCreate",
+			cacheDirs: []juicefsiov1.CacheDir{
+				{
+					Type:         juicefsiov1.CacheDirTypeHostPath,
+					Path:         "/mnt/cache",
+					HostPathType: utils.ToPtr(corev1.HostPathDirectoryOrCreate),
+				},
+			},
+			expectedPathType: utils.ToPtr(corev1.HostPathDirectoryOrCreate),
+		},
+		{
+			name: "Directory type",
+			cacheDirs: []juicefsiov1.CacheDir{
+				{
+					Type:         juicefsiov1.CacheDirTypeHostPath,
+					Path:         "/mnt/cache",
+					HostPathType: utils.ToPtr(corev1.HostPathDirectory),
+				},
+			},
+			expectedPathType: utils.ToPtr(corev1.HostPathDirectory),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			podBuilder := &PodBuilder{
+				spec: juicefsiov1.CacheGroupWorkerTemplate{
+					CacheDirs: tt.cacheDirs,
+				},
+			}
+
+			podBuilder.genCacheDirs()
+
+			// Verify the volume was created with correct HostPathType
+			if len(podBuilder.spec.Volumes) != 1 {
+				t.Fatalf("Expected 1 volume, got %d", len(podBuilder.spec.Volumes))
+			}
+
+			volume := podBuilder.spec.Volumes[0]
+			if volume.VolumeSource.HostPath == nil {
+				t.Fatal("Expected HostPath volume source, got nil")
+			}
+
+			if volume.VolumeSource.HostPath.Type == nil {
+				t.Fatal("Expected HostPath Type to be set, got nil")
+			}
+
+			if *volume.VolumeSource.HostPath.Type != *tt.expectedPathType {
+				t.Errorf("Expected HostPathType %v, got %v", *tt.expectedPathType, *volume.VolumeSource.HostPath.Type)
+			}
+		})
+	}
+}
+
+func TestPodBuilder_genCacheDirs_PVCIgnoresHostPathType(t *testing.T) {
+	podBuilder := &PodBuilder{
+		spec: juicefsiov1.CacheGroupWorkerTemplate{
+			CacheDirs: []juicefsiov1.CacheDir{
+				{
+					Type:         juicefsiov1.CacheDirTypePVC,
+					Name:         "my-pvc",
+					HostPathType: utils.ToPtr(corev1.HostPathDirectory), // Should be ignored
+				},
+			},
+		},
+	}
+
+	podBuilder.genCacheDirs()
+
+	// Verify PVC volume was created (not HostPath)
+	if len(podBuilder.spec.Volumes) != 1 {
+		t.Fatalf("Expected 1 volume, got %d", len(podBuilder.spec.Volumes))
+	}
+
+	volume := podBuilder.spec.Volumes[0]
+	if volume.VolumeSource.PersistentVolumeClaim == nil {
+		t.Fatal("Expected PVC volume source, got nil")
+	}
+
+	if volume.VolumeSource.HostPath != nil {
+		t.Fatal("Expected no HostPath volume source for PVC type")
+	}
+}

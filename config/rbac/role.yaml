@@ -48,6 +48,30 @@ rules:
   verbs:
   - get
 - apiGroups:
+  - ""
+  resources:
+  - services
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
   - batch
   resources:
   - cronjobs
@@ -73,6 +97,7 @@ rules:
   resources:
   - cachegroups
   - cronsyncs
+  - gateways
   - syncs
   - warmups
   verbs:
@@ -88,6 +113,7 @@ rules:
   resources:
   - cachegroups/finalizers
   - cronsyncs/finalizers
+  - gateways/finalizers
   - syncs/finalizers
   - warmups/finalizers
   verbs:
@@ -97,6 +123,7 @@ rules:
   resources:
   - cachegroups/status
   - cronsyncs/status
+  - gateways/status
   - syncs/status
   - warmups/status
   verbs:

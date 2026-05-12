@@ -27,6 +27,7 @@ const (
 	KindCaCheGroup = "CacheGroup"
 	KindSync       = "Sync"
 	KindWarmUp     = "WarmUp"
+	KindGateway    = "Gateway"
 
 	// CacheGroupContainerName is the name of cache group worker container
 	WorkerContainerName     = "juicefs-cg-worker"
@@ -35,7 +36,8 @@ const (
 	// WorkerNamePrefix is the prefix of worker name
 	WorkerNamePrefix = "juicefs-cg-worker"
 	WarmUpNamePrefix = "juicefs-warmup"
-	SyncNamePrefix   = "juicefs-sync"
+	SyncNamePrefix    = "juicefs-sync"
+	GatewayNamePrefix = "juicefs-gateway"
 	// Finalizer is the finalizer for CacheGroup
 	Finalizer = "juicefs.io/finalizer"
 	// juicefs binary path
@@ -62,6 +64,12 @@ const (
 	LabelSyncWorkerValue    = "juicefs-sync-worker"
 	LabelSyncManagerValue   = "juicefs-sync-manager"
 	LabelCronSync           = "juicefs.io/cron-sync"
+	LabelGateway            = "juicefs.io/gateway"
+	LabelGatewayValue       = "juicefs-gateway"
+
+	GatewayContainerName    = "juicefs-gateway"
+	GatewayDefaultAddress   = "0.0.0.0:9000"
+	GatewayDefaultPort      = 9000
 
 	AnnoBackupWorker        = "juicefs.io/backup-worker"
 	AnnoWaitingDeleteWorker = "juicefs.io/waiting-delete-worker"
@@ -102,9 +110,10 @@ var (
 	DefaultBackupWorkerDuration = 10 * time.Minute
 	DefaultWaitingMaxDuration   = 1 * time.Hour
 
-	MaxSyncConcurrentReconciles   = 10
-	MaxWarmupConcurrentReconciles = 10
-	MaxCGConcurrentReconciles     = 10
+	MaxSyncConcurrentReconciles    = 10
+	MaxWarmupConcurrentReconciles  = 10
+	MaxCGConcurrentReconciles      = 10
+	MaxGatewayConcurrentReconciles = 10
 
 	UpdateWarmupStatsInterval = 3 * time.Second
 

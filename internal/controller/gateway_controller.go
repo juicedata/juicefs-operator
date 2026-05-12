@@ -164,7 +164,7 @@ func (r *GatewayReconciler) syncStatus(ctx context.Context, gw *juicefsiov1.Gate
 	}
 
 	phase := juicefsiov1.GatewayPhaseProgressing
-	if deploy.Status.ReadyReplicas > 0 && deploy.Status.ReadyReplicas == deploy.Status.Replicas {
+	if deploy.Status.Replicas > 0 && deploy.Status.ReadyReplicas == deploy.Status.Replicas {
 		phase = juicefsiov1.GatewayPhaseReady
 	}
 

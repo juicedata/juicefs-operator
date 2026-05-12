@@ -71,7 +71,7 @@ func (b *GatewayBuilder) gatewayPort() int32 {
 	addr := b.address()
 	parts := strings.Split(addr, ":")
 	if len(parts) == 2 {
-		if p, err := strconv.Atoi(parts[1]); err == nil {
+		if p, err := strconv.Atoi(parts[1]); err == nil && p > 0 && p <= 65535 {
 			return int32(p)
 		}
 	}

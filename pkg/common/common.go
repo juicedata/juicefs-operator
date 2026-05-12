@@ -34,8 +34,8 @@ const (
 	WarmUpContainerName     = "juicefs-warmup"
 	CleanCacheContainerName = "juicefs-clean-cache"
 	// WorkerNamePrefix is the prefix of worker name
-	WorkerNamePrefix = "juicefs-cg-worker"
-	WarmUpNamePrefix = "juicefs-warmup"
+	WorkerNamePrefix  = "juicefs-cg-worker"
+	WarmUpNamePrefix  = "juicefs-warmup"
 	SyncNamePrefix    = "juicefs-sync"
 	GatewayNamePrefix = "juicefs-gateway"
 	// Finalizer is the finalizer for CacheGroup
@@ -67,9 +67,9 @@ const (
 	LabelGateway            = "juicefs.io/gateway"
 	LabelGatewayValue       = "juicefs-gateway"
 
-	GatewayContainerName    = "juicefs-gateway"
-	GatewayDefaultAddress   = "0.0.0.0:9000"
-	GatewayDefaultPort      = 9000
+	GatewayContainerName  = "juicefs-gateway"
+	GatewayDefaultAddress = "0.0.0.0:9000"
+	GatewayDefaultPort    = 9000
 
 	AnnoBackupWorker        = "juicefs.io/backup-worker"
 	AnnoWaitingDeleteWorker = "juicefs.io/waiting-delete-worker"

@@ -348,6 +348,11 @@ func (in *CacheGroupWorkerTemplate) DeepCopyInto(out *CacheGroupWorkerTemplate) 
 		*out = new(corev1.Affinity)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.EnableServiceLinks != nil {
+		in, out := &in.EnableServiceLinks, &out.EnableServiceLinks
+		*out = new(bool)
+		**out = **in
+	}
 	if in.Opts != nil {
 		in, out := &in.Opts, &out.Opts
 		*out = make([]string, len(*in))

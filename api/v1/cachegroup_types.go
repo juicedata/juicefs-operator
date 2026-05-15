@@ -134,6 +134,12 @@ type CacheGroupWorkerTemplate struct {
 	// +optional
 	Affinity *corev1.Affinity `json:"affinity,omitempty" protobuf:"bytes,18,opt,name=affinity"`
 
+	// EnableServiceLinks indicates whether information about services should be injected into pod's
+	// environment variables, matching the syntax of Docker links.
+	// Optional: Defaults to true.
+	// +optional
+	EnableServiceLinks *bool `json:"enableServiceLinks,omitempty"`
+
 	Opts []string `json:"opts,omitempty"`
 }
 

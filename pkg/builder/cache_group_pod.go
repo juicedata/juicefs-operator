@@ -415,6 +415,7 @@ func (p *PodBuilder) NewCacheGroupWorker(ctx context.Context, dryrun bool) *core
 	worker.Spec.Tolerations = spec.Tolerations
 	worker.Spec.SchedulerName = spec.SchedulerName
 	worker.Spec.ServiceAccountName = spec.ServiceAccountName
+	worker.Spec.EnableServiceLinks = spec.EnableServiceLinks
 	worker.Spec.Volumes = spec.Volumes
 	worker.Spec.Containers[0].Image = spec.Image
 	worker.Spec.Containers[0].ImagePullPolicy = spec.ImagePullPolicy
@@ -484,6 +485,9 @@ func (p *PodBuilder) NewCacheGroupWorker(ctx context.Context, dryrun bool) *core
 func MergeCacheGroupWorkerTemplate(template *juicefsiov1.CacheGroupWorkerTemplate, overwrite juicefsiov1.CacheGroupWorkerOverwrite) {
 	if overwrite.ServiceAccountName != "" {
 		template.ServiceAccountName = overwrite.ServiceAccountName
+	}
+	if overwrite.EnableServiceLinks != nil {
+		template.EnableServiceLinks = overwrite.EnableServiceLinks
 	}
 	if overwrite.HostNetwork != nil {
 		template.HostNetwork = overwrite.HostNetwork

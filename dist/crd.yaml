@@ -537,6 +537,11 @@ spec:
                         cacheDirs:
                           items:
                             properties:
+                              hostPathType:
+                                enum:
+                                - Directory
+                                - DirectoryOrCreate
+                                type: string
                               name:
                                 type: string
                               path:
@@ -732,6 +737,8 @@ spec:
                           type: array
                         dnsPolicy:
                           type: string
+                        enableServiceLinks:
+                          type: boolean
                         env:
                           items:
                             properties:
@@ -2602,6 +2609,11 @@ spec:
                       cacheDirs:
                         items:
                           properties:
+                            hostPathType:
+                              enum:
+                              - Directory
+                              - DirectoryOrCreate
+                              type: string
                             name:
                               type: string
                             path:
@@ -2797,6 +2809,8 @@ spec:
                         type: array
                       dnsPolicy:
                         type: string
+                      enableServiceLinks:
+                        type: boolean
                       env:
                         items:
                           properties:

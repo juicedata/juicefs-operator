@@ -738,6 +738,8 @@ spec:
                           type: array
                         dnsPolicy:
                           type: string
+                        enableServiceLinks:
+                          type: boolean
                         env:
                           items:
                             properties:
@@ -2808,6 +2810,8 @@ spec:
                         type: array
                       dnsPolicy:
                         type: string
+                      enableServiceLinks:
+                        type: boolean
                       env:
                         items:
                           properties:

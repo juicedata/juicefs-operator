@@ -410,6 +410,95 @@ func TestPodBuilder_genCacheDirs_HostPathType(t *testing.T) {
 	}
 }
 
+func TestPodBuilder_NewCacheGroupWorker_EnableServiceLinks(t *testing.T) {
+	makeCG := func() *juicefsiov1.CacheGroup {
+		return &juicefsiov1.CacheGroup{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-cg",
+				Namespace: "default",
+			},
+			Spec: juicefsiov1.CacheGroupSpec{
+				SecretRef: &corev1.SecretEnvSource{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: "test-secret",
+					},
+				},
+			},
+		}
+	}
+	secret := &corev1.Secret{
+		Data: map[string][]byte{
+			"name":  []byte("test-vol"),
+			"token": []byte("test-token"),
+		},
+	}
+
+	t.Run("EnableServiceLinks not set (nil)", func(t *testing.T) {
+		pb := NewPodBuilder(makeCG(), secret, "node1", juicefsiov1.CacheGroupWorkerTemplate{}, false)
+		worker := pb.NewCacheGroupWorker(context.TODO(), false)
+		if worker.Spec.EnableServiceLinks != nil {
+			t.Errorf("expected EnableServiceLinks to be nil, got %v", worker.Spec.EnableServiceLinks)
+		}
+	})
+
+	t.Run("EnableServiceLinks set to false", func(t *testing.T) {
+		spec := juicefsiov1.CacheGroupWorkerTemplate{
+			EnableServiceLinks: utils.ToPtr(false),
+		}
+		pb := NewPodBuilder(makeCG(), secret, "node1", spec, false)
+		worker := pb.NewCacheGroupWorker(context.TODO(), false)
+		if worker.Spec.EnableServiceLinks == nil {
+			t.Fatal("expected EnableServiceLinks to be set, got nil")
+		}
+		if *worker.Spec.EnableServiceLinks != false {
+			t.Errorf("expected EnableServiceLinks=false, got %v", *worker.Spec.EnableServiceLinks)
+		}
+	})
+
+	t.Run("EnableServiceLinks set to true", func(t *testing.T) {
+		spec := juicefsiov1.CacheGroupWorkerTemplate{
+			EnableServiceLinks: utils.ToPtr(true),
+		}
+		pb := NewPodBuilder(makeCG(), secret, "node1", spec, false)
+		worker := pb.NewCacheGroupWorker(context.TODO(), false)
+		if worker.Spec.EnableServiceLinks == nil {
+			t.Fatal("expected EnableServiceLinks to be set, got nil")
+		}
+		if *worker.Spec.EnableServiceLinks != true {
+			t.Errorf("expected EnableServiceLinks=true, got %v", *worker.Spec.EnableServiceLinks)
+		}
+	})
+}
+
+func TestMergeCacheGroupWorkerTemplate_EnableServiceLinks(t *testing.T) {
+	t.Run("overwrite EnableServiceLinks", func(t *testing.T) {
+		template := &juicefsiov1.CacheGroupWorkerTemplate{}
+		overwrite := juicefsiov1.CacheGroupWorkerOverwrite{
+			CacheGroupWorkerTemplate: juicefsiov1.CacheGroupWorkerTemplate{
+				EnableServiceLinks: utils.ToPtr(false),
+			},
+		}
+		MergeCacheGroupWorkerTemplate(template, overwrite)
+		if template.EnableServiceLinks == nil {
+			t.Fatal("expected EnableServiceLinks to be set after merge")
+		}
+		if *template.EnableServiceLinks != false {
+			t.Errorf("expected EnableServiceLinks=false, got %v", *template.EnableServiceLinks)
+		}
+	})
+
+	t.Run("overwrite nil does not change template", func(t *testing.T) {
+		template := &juicefsiov1.CacheGroupWorkerTemplate{
+			EnableServiceLinks: utils.ToPtr(true),
+		}
+		overwrite := juicefsiov1.CacheGroupWorkerOverwrite{}
+		MergeCacheGroupWorkerTemplate(template, overwrite)
+		if template.EnableServiceLinks == nil || !*template.EnableServiceLinks {
+			t.Errorf("expected EnableServiceLinks to remain true")
+		}
+	})
+}
+
 func TestPodBuilder_genCacheDirs_PVCIgnoresHostPathType(t *testing.T) {
 	podBuilder := &PodBuilder{
 		spec: juicefsiov1.CacheGroupWorkerTemplate{

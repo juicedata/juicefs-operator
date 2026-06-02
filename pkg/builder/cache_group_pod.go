@@ -274,7 +274,11 @@ func (p *PodBuilder) genCacheDirs() {
 				},
 			})
 		case juicefsiov1.CacheDirTypeVolumeClaimTemplates:
-			pvcName := common.GenPVCName(dir.VolumeClaimTemplate.Name, p.node)
+			workerName := p.node
+			if p.cg.Spec.Replicas == nil {
+				workerName = common.GenWorkerName(p.cg.Name, p.node)
+			}
+			pvcName := common.GenPVCName(dir.VolumeClaimTemplate.Name, workerName)
 			p.spec.Volumes = append(p.spec.Volumes, corev1.Volume{
 				Name: volumeName,
 				VolumeSource: corev1.VolumeSource{

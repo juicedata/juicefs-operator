@@ -17,6 +17,16 @@ spec:
   options: 
     - debug
     - threads=10
+  # 可选：自定义环境变量，注入到 manager 和 worker 容器
+  # 注意：用户自定义的变量不会覆盖操作符管理的变量（如 WORKER_IPS 及凭证变量）
+  # env:
+  #   - name: MY_CUSTOM_VAR
+  #     value: my-value
+  #   - name: MY_SECRET_VAR
+  #     valueFrom:
+  #       secretKeyRef:
+  #         name: my-secret
+  #         key: my-key
   image: juicedata/mount:ee-5.3.6-c8ec652
   from:
     external:

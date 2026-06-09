@@ -183,6 +183,11 @@ type SyncSpec struct {
 	// ref: https://juicefs.com/docs/cloud/reference/command_reference/#sync
 	Options []string `json:"options,omitempty"`
 
+	// Env is a list of environment variables to inject into both manager and worker containers.
+	// User-defined variables will not override operator-managed environment variables.
+	// +optional
+	Env []corev1.EnvVar `json:"env,omitempty"`
+
 	// +kubebuilder:validation:Required
 	From SyncSink `json:"from,omitempty"`
 	// +kubebuilder:validation:Required

@@ -176,6 +176,7 @@ done
 					Name:            common.SyncNamePrefix,
 					Image:           s.sc.Spec.Image,
 					ImagePullPolicy: s.sc.Spec.ImagePullPolicy,
+					Env:             append([]corev1.EnvVar{}, s.sc.Spec.Env...),
 					Resources:       s.getWorkerResources(),
 					SecurityContext: &corev1.SecurityContext{
 						Capabilities: &corev1.Capabilities{
@@ -437,7 +438,10 @@ func (s *SyncPodBuilder) genPrepareCommand() string {
 }
 
 func (s *SyncPodBuilder) genManagerEnvs() []corev1.EnvVar {
-	envs := []corev1.EnvVar{}
+	// User-defined envs are placed first so that operator-managed envs
+	// (WORKER_IPS, source/destination credentials) always take precedence
+	// on any name collision.
+	envs := append([]corev1.EnvVar{}, s.sc.Spec.Env...)
 	if len(s.workerIPs) > 0 {
 		envs = append(envs, corev1.EnvVar{
 			Name:  "WORKER_IPS",

@@ -967,6 +967,13 @@ func (in *SyncSpec) DeepCopyInto(out *SyncSpec) {
 		*out = make([]string, len(*in))
 		copy(*out, *in)
 	}
+	if in.Env != nil {
+		in, out := &in.Env, &out.Env
+		*out = make([]corev1.EnvVar, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
+	}
 	in.From.DeepCopyInto(&out.From)
 	in.To.DeepCopyInto(&out.To)
 	if in.TTLSecondsAfterFinished != nil {

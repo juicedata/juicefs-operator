@@ -23,11 +23,17 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const (
+	testEnvMyVar      = "MY_VAR"
+	testEnvAnotherVar = "ANOTHER_VAR"
+	testEnvCustomEnv  = "CUSTOM_ENV"
+)
+
 // newTestSync returns a minimal Sync object for use in builder tests.
-func newTestSync(name string, replicas int32, env []corev1.EnvVar) *juicefsiov1.Sync {
+func newTestSync(replicas int32, env []corev1.EnvVar) *juicefsiov1.Sync {
 	return &juicefsiov1.Sync{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
+			Name:      "test-sync",
 			Namespace: "default",
 		},
 		Spec: juicefsiov1.SyncSpec{
@@ -47,10 +53,10 @@ func newTestSyncPodBuilder(sc *juicefsiov1.Sync) *SyncPodBuilder {
 
 func TestSyncPodBuilder_genManagerEnvs_UserEnvsFirst(t *testing.T) {
 	userEnvs := []corev1.EnvVar{
-		{Name: "MY_VAR", Value: "user-value"},
-		{Name: "ANOTHER_VAR", Value: "another"},
+		{Name: testEnvMyVar, Value: "user-value"},
+		{Name: testEnvAnotherVar, Value: "another"},
 	}
-	sc := newTestSync("test-sync", 1, userEnvs)
+	sc := newTestSync(1, userEnvs)
 	b := newTestSyncPodBuilder(sc)
 
 	envs := b.genManagerEnvs()
@@ -58,10 +64,10 @@ func TestSyncPodBuilder_genManagerEnvs_UserEnvsFirst(t *testing.T) {
 	if len(envs) < 2 {
 		t.Fatalf("expected at least 2 envs, got %d", len(envs))
 	}
-	if envs[0].Name != "MY_VAR" || envs[0].Value != "user-value" {
+	if envs[0].Name != testEnvMyVar || envs[0].Value != "user-value" {
 		t.Errorf("expected first env to be MY_VAR=user-value, got %v", envs[0])
 	}
-	if envs[1].Name != "ANOTHER_VAR" || envs[1].Value != "another" {
+	if envs[1].Name != testEnvAnotherVar || envs[1].Value != "another" {
 		t.Errorf("expected second env to be ANOTHER_VAR=another, got %v", envs[1])
 	}
 }
@@ -71,7 +77,7 @@ func TestSyncPodBuilder_genManagerEnvs_OperatorEnvsOverrideUserEnvs(t *testing.T
 	userEnvs := []corev1.EnvVar{
 		{Name: "WORKER_IPS", Value: "10.0.0.1"},
 	}
-	sc := newTestSync("test-sync", 3, userEnvs)
+	sc := newTestSync(3, userEnvs)
 	b := newTestSyncPodBuilder(sc)
 	b.UpdateWorkerIPs([]string{"192.168.1.1", "192.168.1.2"})
 
@@ -91,14 +97,14 @@ func TestSyncPodBuilder_genManagerEnvs_OperatorEnvsOverrideUserEnvs(t *testing.T
 }
 
 func TestSyncPodBuilder_genManagerEnvs_NoUserEnvs(t *testing.T) {
-	sc := newTestSync("test-sync", 1, nil)
+	sc := newTestSync(1, nil)
 	b := newTestSyncPodBuilder(sc)
 
 	envs := b.genManagerEnvs()
 
 	// No user envs defined – verify no unexpected user-defined vars are present.
 	for _, e := range envs {
-		if e.Name == "MY_VAR" || e.Name == "ANOTHER_VAR" || e.Name == "CUSTOM_ENV" {
+		if e.Name == testEnvMyVar || e.Name == testEnvAnotherVar || e.Name == testEnvCustomEnv {
 			t.Errorf("unexpected user-defined env var %q found when spec.Env is nil", e.Name)
 		}
 	}
@@ -106,9 +112,9 @@ func TestSyncPodBuilder_genManagerEnvs_NoUserEnvs(t *testing.T) {
 
 func TestSyncPodBuilder_WorkerPod_UserEnvsInjected(t *testing.T) {
 	userEnvs := []corev1.EnvVar{
-		{Name: "MY_VAR", Value: "worker-value"},
+		{Name: testEnvMyVar, Value: "worker-value"},
 	}
-	sc := newTestSync("test-sync", 3, userEnvs)
+	sc := newTestSync(3, userEnvs)
 	b := newTestSyncPodBuilder(sc)
 
 	pods := b.NewWorkerPods()
@@ -118,7 +124,7 @@ func TestSyncPodBuilder_WorkerPod_UserEnvsInjected(t *testing.T) {
 	container := pods[0].Spec.Containers[0]
 	found := false
 	for _, e := range container.Env {
-		if e.Name == "MY_VAR" && e.Value == "worker-value" {
+		if e.Name == testEnvMyVar && e.Value == "worker-value" {
 			found = true
 			break
 		}
@@ -130,16 +136,16 @@ func TestSyncPodBuilder_WorkerPod_UserEnvsInjected(t *testing.T) {
 
 func TestSyncPodBuilder_ManagerPod_UserEnvsInjected(t *testing.T) {
 	userEnvs := []corev1.EnvVar{
-		{Name: "CUSTOM_ENV", Value: "custom-value"},
+		{Name: testEnvCustomEnv, Value: "custom-value"},
 	}
-	sc := newTestSync("test-sync", 1, userEnvs)
+	sc := newTestSync(1, userEnvs)
 	b := newTestSyncPodBuilder(sc)
 
 	pod := b.NewManagerPod()
 	container := pod.Spec.Containers[0]
 	found := false
 	for _, e := range container.Env {
-		if e.Name == "CUSTOM_ENV" && e.Value == "custom-value" {
+		if e.Name == testEnvCustomEnv && e.Value == "custom-value" {
 			found = true
 			break
 		}
@@ -150,7 +156,7 @@ func TestSyncPodBuilder_ManagerPod_UserEnvsInjected(t *testing.T) {
 }
 
 func TestSyncPodBuilder_WorkerPod_NoEnvWhenSpecEmpty(t *testing.T) {
-	sc := newTestSync("test-sync", 3, nil)
+	sc := newTestSync(3, nil)
 	b := newTestSyncPodBuilder(sc)
 
 	pods := b.NewWorkerPods()
@@ -160,7 +166,7 @@ func TestSyncPodBuilder_WorkerPod_NoEnvWhenSpecEmpty(t *testing.T) {
 	container := pods[0].Spec.Containers[0]
 	// No user envs defined – verify no unexpected user-defined vars are present.
 	for _, e := range container.Env {
-		if e.Name == "MY_VAR" || e.Name == "ANOTHER_VAR" || e.Name == "CUSTOM_ENV" {
+		if e.Name == testEnvMyVar || e.Name == testEnvAnotherVar || e.Name == testEnvCustomEnv {
 			t.Errorf("unexpected user-defined env var %q found when spec.Env is nil", e.Name)
 		}
 	}

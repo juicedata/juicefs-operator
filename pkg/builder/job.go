@@ -231,7 +231,7 @@ func (j *JobBuilder) getEnvs() []corev1.EnvVar {
 
 func (j *JobBuilder) getSecretAuthCmd() (string, string) {
 	secretData := utils.ParseSecret(j.secret)
-	volName := secretData["name"]
+	volName := strings.TrimSpace(secretData["name"])
 
 	if secretData["initconfig"] != "" {
 		return strings.Join([]string{
@@ -417,21 +417,23 @@ func (j *JobBuilder) getWarmupVolumes() ([]corev1.Volume, []corev1.VolumeMount) 
 	volumes := []corev1.Volume{}
 	volumeMounts := []corev1.VolumeMount{}
 	if j.worker != nil {
+		workerVolumes := map[string]corev1.Volume{}
 		for _, volume := range j.worker.Spec.Volumes {
-			if volume.Name == common.InitConfigVolumeName {
-				volumes = append(volumes, volume)
-				break
-			}
+			workerVolumes[volume.Name] = volume
 		}
 		for _, mount := range j.worker.Spec.Containers[0].VolumeMounts {
-			if mount.Name == common.InitConfigVolumeName {
+			if mount.Name == common.InitConfigVolumeName || strings.HasPrefix(mount.Name, configVolumeNamePrefix) {
+				volume, ok := workerVolumes[mount.Name]
+				if !ok {
+					continue
+				}
+				volumes = append(volumes, volume)
 				volumeMounts = append(volumeMounts, mount)
-				break
 			}
 		}
 	} else {
 		secretData := utils.ParseSecret(j.secret)
-		volName := secretData["name"]
+		volName := strings.TrimSpace(secretData["name"])
 		if secretData["initconfig"] != "" {
 			volumes = append(volumes, corev1.Volume{
 				Name: common.InitConfigVolumeName,
@@ -450,6 +452,7 @@ func (j *JobBuilder) getWarmupVolumes() ([]corev1.Volume, []corev1.VolumeMount) 
 				MountPath: common.InitConfigMountPath,
 			})
 		}
+		volumes, volumeMounts = appendSecretConfigVolumes(volumes, volumeMounts, secretData)
 	}
 
 	if j.wu.Spec.TargetsFrom != nil && j.wu.Spec.TargetsFrom.ConfigMap != nil {
@@ -475,7 +478,6 @@ func (j *JobBuilder) getWarmupVolumes() ([]corev1.Volume, []corev1.VolumeMount) 
 		})
 	}
 
-	// FIXME: we need to mount the config volume for object storage. like ceph
 	return volumes, volumeMounts
 }
 

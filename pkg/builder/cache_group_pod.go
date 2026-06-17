@@ -59,6 +59,8 @@ var (
 	}
 )
 
+const configVolumeNamePrefix = "jfs-config-"
+
 type PodBuilder struct {
 	volName              string
 	cg                   *juicefsiov1.CacheGroup
@@ -78,7 +80,7 @@ func NewPodBuilder(cg *juicefsiov1.CacheGroup, secret *corev1.Secret, node strin
 	}
 	return &PodBuilder{
 		secretData:  secretData,
-		volName:     secretData["name"],
+		volName:     strings.TrimSpace(secretData["name"]),
 		cg:          cg,
 		node:        node,
 		spec:        spec,
@@ -311,6 +313,91 @@ func (p *PodBuilder) genCacheDirs() {
 	}
 }
 
+func parseSecretConfigs(secretData map[string]string) map[string]string {
+	v := secretData["configs"]
+	if v == "" {
+		return nil
+	}
+	rawConfigs, err := utils.ParseYamlOrJson(v)
+	if err != nil {
+		return nil
+	}
+
+	configs := map[string]string{}
+	for k, v := range rawConfigs {
+		secretName := strings.TrimSpace(k)
+		mountPath, ok := v.(string)
+		if !ok {
+			continue
+		}
+		mountPath = strings.TrimSpace(mountPath)
+		if secretName == "" || mountPath == "" || !strings.HasPrefix(mountPath, "/") {
+			continue
+		}
+		configs[secretName] = mountPath
+	}
+	return configs
+}
+
+func appendSecretConfigVolumes(volumes []corev1.Volume, volumeMounts []corev1.VolumeMount, secretData map[string]string) ([]corev1.Volume, []corev1.VolumeMount) {
+	configs := parseSecretConfigs(secretData)
+	if len(configs) == 0 {
+		return volumes, volumeMounts
+	}
+
+	usedVolumeNames := map[string]struct{}{}
+	for _, volume := range volumes {
+		usedVolumeNames[volume.Name] = struct{}{}
+	}
+
+	usedMountPaths := map[string]struct{}{}
+	for _, mount := range volumeMounts {
+		usedMountPaths[mount.MountPath] = struct{}{}
+	}
+
+	secretNames := make([]string, 0, len(configs))
+	for secretName := range configs {
+		secretNames = append(secretNames, secretName)
+	}
+	sort.Strings(secretNames)
+
+	next := 1
+	for _, secretName := range secretNames {
+		mountPath := configs[secretName]
+		if _, ok := usedMountPaths[mountPath]; ok {
+			continue
+		}
+
+		volumeName := nextConfigVolumeName(usedVolumeNames, &next)
+		volumes = append(volumes, corev1.Volume{
+			Name: volumeName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: secretName,
+				},
+			},
+		})
+		volumeMounts = append(volumeMounts, corev1.VolumeMount{
+			Name:      volumeName,
+			MountPath: mountPath,
+		})
+
+		usedVolumeNames[volumeName] = struct{}{}
+		usedMountPaths[mountPath] = struct{}{}
+	}
+	return volumes, volumeMounts
+}
+
+func nextConfigVolumeName(used map[string]struct{}, next *int) string {
+	for {
+		name := fmt.Sprintf("%s%d", configVolumeNamePrefix, *next)
+		*next = *next + 1
+		if _, ok := used[name]; !ok {
+			return name
+		}
+	}
+}
+
 func (p *PodBuilder) genCommands(ctx context.Context) []string {
 	authCmds := p.genAuthCmds(ctx)
 	cacheGroup := GenCacheGroupName(p.cg)
@@ -385,6 +472,7 @@ func (p *PodBuilder) NewCacheGroupWorker(ctx context.Context, dryrun bool) *core
 	worker := newBasicPod(p.cg, p.node)
 	p.genInitConfigVolumes()
 	p.genCacheDirs()
+	p.spec.Volumes, p.spec.VolumeMounts = appendSecretConfigVolumes(p.spec.Volumes, p.spec.VolumeMounts, p.secretData)
 	spec := p.spec
 	if spec.HostNetwork != nil {
 		worker.Spec.HostNetwork = *spec.HostNetwork

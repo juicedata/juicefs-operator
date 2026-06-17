@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"reflect"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -219,7 +220,7 @@ func (r *CacheGroupReconciler) sync(ctx context.Context, cg *juicefsiov1.CacheGr
 	}
 
 	// calculate status
-	newStatus := r.calculateStatus(cg, string(secret.Data["name"]), expectStates, actualWorks)
+	newStatus := r.calculateStatus(cg, strings.TrimSpace(string(secret.Data["name"])), expectStates, actualWorks)
 	if !reflect.DeepEqual(cg.Status, newStatus) {
 		cg.Status = newStatus
 		return utils.IgnoreConflict(r.Status().Update(ctx, cg))

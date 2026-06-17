@@ -397,7 +397,7 @@ func TestAppendSecretConfigVolumes(t *testing.T) {
 		"configs": `{"secret-b":"/config/b","secret-a":"/config/a","secret-skip":"/existing"}`,
 	}
 
-	appendSecretConfigVolumes(&volumes, &volumeMounts, secretData)
+	volumes, volumeMounts = appendSecretConfigVolumes(volumes, volumeMounts, secretData)
 
 	expectedVolumes := []corev1.Volume{
 		{

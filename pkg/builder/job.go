@@ -452,7 +452,7 @@ func (j *JobBuilder) getWarmupVolumes() ([]corev1.Volume, []corev1.VolumeMount) 
 				MountPath: common.InitConfigMountPath,
 			})
 		}
-		appendSecretConfigVolumes(&volumes, &volumeMounts, secretData)
+		volumes, volumeMounts = appendSecretConfigVolumes(volumes, volumeMounts, secretData)
 	}
 
 	if j.wu.Spec.TargetsFrom != nil && j.wu.Spec.TargetsFrom.ConfigMap != nil {

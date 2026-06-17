@@ -335,20 +335,19 @@ func parseSecretConfigs(secretData map[string]string) map[string]string {
 	return configs
 }
 
-func appendSecretConfigVolumes(volumes *[]corev1.Volume, volumeMounts *[]corev1.VolumeMount, secretData map[string]string) {
+func appendSecretConfigVolumes(volumes []corev1.Volume, volumeMounts []corev1.VolumeMount, secretData map[string]string) ([]corev1.Volume, []corev1.VolumeMount) {
 	configs := parseSecretConfigs(secretData)
 	if len(configs) == 0 {
-		return
+		return volumes, volumeMounts
 	}
 
 	usedVolumeNames := map[string]struct{}{}
-	for _, volume := range *volumes {
+	for _, volume := range volumes {
 		usedVolumeNames[volume.Name] = struct{}{}
 	}
 
 	usedMountPaths := map[string]struct{}{}
-	for _, mount := range *volumeMounts {
-		usedVolumeNames[mount.Name] = struct{}{}
+	for _, mount := range volumeMounts {
 		usedMountPaths[mount.MountPath] = struct{}{}
 	}
 
@@ -366,7 +365,7 @@ func appendSecretConfigVolumes(volumes *[]corev1.Volume, volumeMounts *[]corev1.
 		}
 
 		volumeName := nextConfigVolumeName(usedVolumeNames, &next)
-		*volumes = append(*volumes, corev1.Volume{
+		volumes = append(volumes, corev1.Volume{
 			Name: volumeName,
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
@@ -374,7 +373,7 @@ func appendSecretConfigVolumes(volumes *[]corev1.Volume, volumeMounts *[]corev1.
 				},
 			},
 		})
-		*volumeMounts = append(*volumeMounts, corev1.VolumeMount{
+		volumeMounts = append(volumeMounts, corev1.VolumeMount{
 			Name:      volumeName,
 			MountPath: mountPath,
 		})
@@ -382,6 +381,7 @@ func appendSecretConfigVolumes(volumes *[]corev1.Volume, volumeMounts *[]corev1.
 		usedVolumeNames[volumeName] = struct{}{}
 		usedMountPaths[mountPath] = struct{}{}
 	}
+	return volumes, volumeMounts
 }
 
 func nextConfigVolumeName(used map[string]struct{}, next *int) string {
@@ -468,7 +468,7 @@ func (p *PodBuilder) NewCacheGroupWorker(ctx context.Context, dryrun bool) *core
 	worker := newBasicPod(p.cg, p.node)
 	p.genInitConfigVolumes()
 	p.genCacheDirs()
-	appendSecretConfigVolumes(&p.spec.Volumes, &p.spec.VolumeMounts, p.secretData)
+	p.spec.Volumes, p.spec.VolumeMounts = appendSecretConfigVolumes(p.spec.Volumes, p.spec.VolumeMounts, p.secretData)
 	spec := p.spec
 	if spec.HostNetwork != nil {
 		worker.Spec.HostNetwork = *spec.HostNetwork

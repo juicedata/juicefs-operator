@@ -17,6 +17,7 @@ limitations under the License.
 package e2e
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -325,6 +326,76 @@ var _ = Describe("controller", Ordered, func() {
 				return nil
 			}
 			Eventually(verifyCgStatusUpToDate, 5*time.Minute, time.Second).Should(Succeed())
+		})
+
+		It("should mount secret configs to the worker", func() {
+			const (
+				configSecretName = "e2e-config-secret"
+				configMountPath  = "/etc/juicefs/config"
+			)
+
+			cmd := exec.Command("kubectl", "delete", "secret", configSecretName, "-n", namespace, "--ignore-not-found=true")
+			_, _ = utils.Run(cmd)
+
+			cmd = exec.Command("kubectl", "create", "secret", "generic",
+				configSecretName,
+				"--from-literal=config=test",
+				"-n", namespace,
+			)
+			_, err := utils.Run(cmd)
+			ExpectWithOffset(1, err).NotTo(HaveOccurred())
+			DeferCleanup(func() {
+				cmd := exec.Command("kubectl", "delete", "secret", configSecretName, "-n", namespace, "--ignore-not-found=true")
+				_, _ = utils.Run(cmd)
+			})
+
+			configs := fmt.Sprintf(`{"%s":"%s"}`, configSecretName, configMountPath)
+			patch := fmt.Sprintf(`{"data":{"configs":%q}}`, base64.StdEncoding.EncodeToString([]byte(configs)))
+			cmd = exec.Command("kubectl", "patch", "secret", utils.SecretName, "-n", namespace, "--type", "merge", "-p", patch)
+			_, err = utils.Run(cmd)
+			ExpectWithOffset(1, err).NotTo(HaveOccurred())
+			DeferCleanup(func() {
+				cmd := exec.Command("kubectl", "patch", "secret", utils.SecretName, "-n", namespace, "--type", "json", "-p", `[{"op":"remove","path":"/data/configs"}]`)
+				_, _ = utils.Run(cmd)
+			})
+
+			nodeName := utils.GetKindNodeName("worker")
+			cmd = exec.Command("kubectl", "label", "nodes", nodeName, "juicefs.io/cg-worker=true", "--overwrite")
+			_, err = utils.Run(cmd)
+			ExpectWithOffset(1, err).NotTo(HaveOccurred())
+
+			By("validating worker mounts the config secret")
+			verifySecretMounted := func() error {
+				cmd := exec.Command("kubectl", "get", "pod", common.GenWorkerName(cgName, nodeName), "-n", namespace, "-o", "json")
+				result, err := utils.Run(cmd)
+				if err != nil {
+					return fmt.Errorf("get worker pod failed, %+v", err)
+				}
+
+				worker := corev1.Pod{}
+				if err := json.Unmarshal(result, &worker); err != nil {
+					return fmt.Errorf("unmarshal worker pod failed, %+v", err)
+				}
+
+				volumeName := ""
+				for _, volume := range worker.Spec.Volumes {
+					if volume.Secret != nil && volume.Secret.SecretName == configSecretName {
+						volumeName = volume.Name
+						break
+					}
+				}
+				if volumeName == "" {
+					return fmt.Errorf("config secret volume not found")
+				}
+
+				for _, mount := range worker.Spec.Containers[0].VolumeMounts {
+					if mount.Name == volumeName && mount.MountPath == configMountPath {
+						return nil
+					}
+				}
+				return fmt.Errorf("config secret mount not found")
+			}
+			Eventually(verifySecretMounted, time.Minute, time.Second).Should(Succeed())
 		})
 
 		It("should reconcile the worker with node labels update", func() {

@@ -537,6 +537,11 @@ spec:
                         cacheDirs:
                           items:
                             properties:
+                              hostPathType:
+                                enum:
+                                - Directory
+                                - DirectoryOrCreate
+                                type: string
                               name:
                                 type: string
                               path:
@@ -2602,6 +2607,11 @@ spec:
                       cacheDirs:
                         items:
                           properties:
+                            hostPathType:
+                              enum:
+                              - Directory
+                              - DirectoryOrCreate
+                              type: string
                             name:
                               type: string
                             path:

@@ -339,6 +339,115 @@ func TestPodBuilder_genEnvs(t *testing.T) {
 	}
 }
 
+func TestParseSecretConfigs(t *testing.T) {
+	tests := []struct {
+		name       string
+		secretData map[string]string
+		expected   map[string]string
+	}{
+		{
+			name:       "missing configs",
+			secretData: map[string]string{},
+		},
+		{
+			name: "invalid configs",
+			secretData: map[string]string{
+				"configs": "-",
+			},
+		},
+		{
+			name: "valid configs",
+			secretData: map[string]string{
+				"configs": `{" juicefs-ca-cert ":" /root/.juicefs/juicefs-ca-cert ","relative":"tmp/config","empty":"","number":1}`,
+			},
+			expected: map[string]string{
+				"juicefs-ca-cert": "/root/.juicefs/juicefs-ca-cert",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := parseSecretConfigs(tt.secretData)
+			if !reflect.DeepEqual(got, tt.expected) {
+				t.Errorf("parseSecretConfigs() = %v, want %v", got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestAppendSecretConfigVolumes(t *testing.T) {
+	volumes := []corev1.Volume{
+		{
+			Name: "jfs-config-1",
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: "existing-secret",
+				},
+			},
+		},
+	}
+	volumeMounts := []corev1.VolumeMount{
+		{
+			Name:      "jfs-config-1",
+			MountPath: "/existing",
+		},
+	}
+	secretData := map[string]string{
+		"configs": `{"secret-b":"/config/b","secret-a":"/config/a","secret-skip":"/existing"}`,
+	}
+
+	appendSecretConfigVolumes(&volumes, &volumeMounts, secretData)
+
+	expectedVolumes := []corev1.Volume{
+		{
+			Name: "jfs-config-1",
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: "existing-secret",
+				},
+			},
+		},
+		{
+			Name: "jfs-config-2",
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: "secret-a",
+				},
+			},
+		},
+		{
+			Name: "jfs-config-3",
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: "secret-b",
+				},
+			},
+		},
+	}
+	expectedVolumeMounts := []corev1.VolumeMount{
+		{
+			Name:      "jfs-config-1",
+			MountPath: "/existing",
+		},
+		{
+			Name:      "jfs-config-2",
+			MountPath: "/config/a",
+		},
+		{
+			Name:      "jfs-config-3",
+			MountPath: "/config/b",
+		},
+	}
+
+	if !reflect.DeepEqual(volumes, expectedVolumes) {
+		t.Errorf("appendSecretConfigVolumes() volumes = %v, want %v", volumes, expectedVolumes)
+	}
+	if !reflect.DeepEqual(volumeMounts, expectedVolumeMounts) {
+		t.Errorf("appendSecretConfigVolumes() volumeMounts = %v, want %v", volumeMounts, expectedVolumeMounts)
+	}
+}
+
 func TestPodBuilder_genCacheDirs_HostPathType(t *testing.T) {
 	tests := []struct {
 		name             string

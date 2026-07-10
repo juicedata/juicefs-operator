@@ -162,7 +162,7 @@ func (j *JobBuilder) genBaseJob() *batchv1.Job {
 }
 
 var (
-	ignoreMountOpts = []string{"foreground", "cache-size", "free-space-ratio", "group-weight", "cache-dir", "group-backup", "cache-group", "no-sharing"}
+	ignoreMountOpts = []string{"foreground", "cache-size", "free-space-ratio", "group-weight", "cache-dir", "group-backup", "cache-group", "no-sharing", "log", "no-syslog"}
 )
 
 func (j *JobBuilder) getImage() string {
@@ -277,6 +277,8 @@ func (j *JobBuilder) getWarmUpMountInfo() warmUpMountInfo {
 			"cache-group=" + j.cacheGroupName,
 			"no-sharing",
 			"cache-size=0",
+			"log=/dev/stdout",
+			"no-syslog",
 		},
 	}
 

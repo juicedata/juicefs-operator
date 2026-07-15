@@ -1,0 +1,42 @@
+# JuiceFS Gateway sample for Enterprise Edition (EE)
+# The gateway exposes the JuiceFS filesystem as an S3-compatible API.
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: juicefs-secret
+  namespace: default
+type: Opaque
+stringData:
+  name: juicefs-xx
+  token: xx
+  access-key: xx
+  secret-key: xx
+---
+apiVersion: juicefs.io/v1
+kind: Gateway
+metadata:
+  name: gateway-sample
+  namespace: default
+spec:
+  # Image of the JuiceFS mount/gateway container.
+  image: juicedata/mount:ee-5.1.1-1faf43b
+  # Number of gateway pod replicas.
+  replicas: 1
+  # Reference to the secret containing JuiceFS EE credentials.
+  secretRef:
+    name: juicefs-secret
+  # Listen address for the S3 gateway (default: 0.0.0.0:9000).
+  address: "0.0.0.0:9000"
+  # Extra options passed to `juicefs gateway`.
+  options:
+    - --keep-etag
+  # Type of Kubernetes Service to create (ClusterIP, NodePort, LoadBalancer).
+  serviceType: ClusterIP
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 1
+      memory: 1Gi

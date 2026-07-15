@@ -79,7 +79,7 @@ if [ "$IS_DISTRIBUTED" = "true" ]; then
 	# copy auth files to workers
 	if ls /root/.juicefs/*.conf >/dev/null 2>&1; then
 		for ip in $(echo $WORKER_IPS | sed "s/,/ /g"); do
-			scp -r -o StrictHostKeyChecking=no /root/.juicefs/*.conf root@$ip:/root/.juicefs
+			scp -r -o ConnectTimeout=10 -o StrictHostKeyChecking=no /root/.juicefs/*.conf root@$ip:/root/.juicefs
 		done
 	fi
 fi

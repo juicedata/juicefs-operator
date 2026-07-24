@@ -126,7 +126,7 @@ func (r *CacheGroupReconciler) sync(ctx context.Context, cg *juicefsiov1.CacheGr
 	log := log.FromContext(ctx)
 	updateStrategyType, maxUnavailable := utils.ParseUpdateStrategy(cg.Spec.UpdateStrategy, len(expectStates))
 	wg := sync.WaitGroup{}
-	errCh := make(chan error, 2*maxUnavailable)
+	errCh := make(chan error, len(expectStates))
 	// TODO: add a webook to validate the cache group worker template
 	secret := &corev1.Secret{}
 	if err := r.Get(ctx, client.ObjectKey{Namespace: cg.Namespace, Name: cg.Spec.SecretRef.Name}, secret); err != nil {
@@ -345,6 +345,9 @@ func (r *CacheGroupReconciler) createOrUpdateWorker(ctx context.Context, cg *jui
 	if actual == nil {
 		log.Info("create worker")
 		return r.createCacheGroupWorker(ctx, cg, spec, expect)
+	}
+	if err := r.ensurePVCsForWorker(ctx, cg, expect.Name, spec); err != nil {
+		return fmt.Errorf("failed to ensure PVCs for worker %s: %w", expect.Name, err)
 	}
 	return r.updateCacheGroupWorker(ctx, actual, expect)
 }
@@ -680,12 +683,15 @@ func (r *CacheGroupReconciler) HandleFinalizer(ctx context.Context, cg *juicefsi
 	}
 	secret := &corev1.Secret{}
 	if err := r.Get(ctx, client.ObjectKey{Namespace: cg.Namespace, Name: cg.Spec.SecretRef.Name}, secret); err != nil {
-		if apierrors.IsNotFound(err) {
-			log.Info("secret not found, skip cleaning cache", "secret", cg.Spec.SecretRef.Name)
+		if !apierrors.IsNotFound(err) {
+			log.Error(err, "failed to get secret", "secret", cg.Spec.SecretRef.Name)
+			return err
+		}
+		if cg.Status.FileSystem == "" {
+			log.Info("secret not found and file system is unknown, skip cleaning cache", "secret", cg.Spec.SecretRef.Name)
 			return nil
 		}
-		log.Error(err, "failed to get secret", "secret", cg.Spec.SecretRef.Name)
-		return err
+		log.Info("secret not found, continue cleaning cache using status", "secret", cg.Spec.SecretRef.Name, "fileSystem", cg.Status.FileSystem)
 	}
 	for node, expectState := range expectStates {
 		podBuilder := builder.NewPodBuilder(cg, secret, node, expectState, false)
@@ -699,25 +705,28 @@ func (r *CacheGroupReconciler) HandleFinalizer(ctx context.Context, cg *juicefsi
 
 // deletePVCForCacheGroup deletes a PVC created by VolumeClaimTemplates for a cache group
 func (r *CacheGroupReconciler) deletePVCForCacheGroup(ctx context.Context, cg *juicefsiov1.CacheGroup, worker corev1.Pod) error {
-	pvcName := ""
-	for _, v := range worker.Spec.Volumes {
-		if v.VolumeSource.PersistentVolumeClaim != nil {
-			pvcName = v.VolumeSource.PersistentVolumeClaim.ClaimName
-			break
-		}
-	}
-	if pvcName == "" {
-		return nil
-	}
 	log := log.FromContext(ctx)
-	pvc := &corev1.PersistentVolumeClaim{}
-	if err := r.Get(ctx, client.ObjectKey{Namespace: cg.Namespace, Name: pvcName}, pvc); err != nil {
-		return client.IgnoreNotFound(err)
-	}
+	for _, v := range worker.Spec.Volumes {
+		if !strings.HasPrefix(v.Name, common.CacheDirVolumeNamePrefix) || v.VolumeSource.PersistentVolumeClaim == nil {
+			continue
+		}
+		pvcName := v.VolumeSource.PersistentVolumeClaim.ClaimName
+		pvc := &corev1.PersistentVolumeClaim{}
+		if err := r.Get(ctx, client.ObjectKey{Namespace: cg.Namespace, Name: pvcName}, pvc); err != nil {
+			if apierrors.IsNotFound(err) {
+				continue
+			}
+			return err
+		}
+		if !metav1.IsControlledBy(pvc, cg) {
+			continue
+		}
 
-	log.Info("deleting PVC for cache group", "pvc", pvc.Name, "cacheGroup", cg.Name)
-	if err := r.Delete(ctx, pvc); err != nil {
-		if !apierrors.IsNotFound(err) {
+		log.Info("deleting PVC for cache group", "pvc", pvc.Name, "cacheGroup", cg.Name)
+		if err := r.Delete(ctx, pvc); err != nil {
+			if apierrors.IsNotFound(err) {
+				continue
+			}
 			log.Error(err, "failed to delete PVC", "pvc", pvc.Name)
 			return err
 		}

@@ -755,10 +755,12 @@ spec:
                               rule: self.type != 'VolumeClaimTemplates' || has(self.volumeClaimTemplate)
                             - message: volumeMode is only valid for PVC type
                               rule: '!has(self.volumeMode) || self.type == ''PVC'''
-                            - message: format is only valid for PVC and VolumeClaimTemplates
-                                types
-                              rule: '!has(self.format) || self.type == ''PVC'' ||
-                                self.type == ''VolumeClaimTemplates'''
+                            - message: format is only valid for Block volume mode
+                              rule: '!has(self.format) || (self.type == ''PVC'' &&
+                                has(self.volumeMode) && self.volumeMode == ''Block'')
+                                || (self.type == ''VolumeClaimTemplates'' && has(self.volumeClaimTemplate)
+                                && has(self.volumeClaimTemplate.spec) && has(self.volumeClaimTemplate.spec.volumeMode)
+                                && self.volumeClaimTemplate.spec.volumeMode == ''Block'')'
                           type: array
                         dnsPolicy:
                           type: string
@@ -2852,10 +2854,12 @@ spec:
                             rule: self.type != 'VolumeClaimTemplates' || has(self.volumeClaimTemplate)
                           - message: volumeMode is only valid for PVC type
                             rule: '!has(self.volumeMode) || self.type == ''PVC'''
-                          - message: format is only valid for PVC and VolumeClaimTemplates
-                              types
-                            rule: '!has(self.format) || self.type == ''PVC'' || self.type
-                              == ''VolumeClaimTemplates'''
+                          - message: format is only valid for Block volume mode
+                            rule: '!has(self.format) || (self.type == ''PVC'' && has(self.volumeMode)
+                              && self.volumeMode == ''Block'') || (self.type == ''VolumeClaimTemplates''
+                              && has(self.volumeClaimTemplate) && has(self.volumeClaimTemplate.spec)
+                              && has(self.volumeClaimTemplate.spec.volumeMode) &&
+                              self.volumeClaimTemplate.spec.volumeMode == ''Block'')'
                         type: array
                       dnsPolicy:
                         type: string

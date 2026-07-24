@@ -506,11 +506,31 @@ func NewCleanCacheJob(cg juicefsiov1.CacheGroup, worker corev1.Pod) *batchv1.Job
 	}
 
 	cacheVolumeMounts := []corev1.VolumeMount{}
+	cacheVolumeDevices := []corev1.VolumeDevice{}
+	cacheDeviceMountCmds := []string{}
 	for _, volume := range cacheVolumes {
-		cacheVolumeMounts = append(cacheVolumeMounts, corev1.VolumeMount{
-			Name:      volume.Name,
-			MountPath: fmt.Sprintf("/var/jfsCache/%s", volume.Name),
-		})
+		mountPath := fmt.Sprintf("/var/jfsCache/%s", volume.Name)
+		isVolumeDevice := false
+		for _, device := range worker.Spec.Containers[0].VolumeDevices {
+			if device.Name == volume.Name {
+				isVolumeDevice = true
+				cacheVolumeDevices = append(cacheVolumeDevices, device)
+				cacheDeviceMountCmds = append(cacheDeviceMountCmds,
+					fmt.Sprintf("mkdir -p %s && mount %s %s || exit 1", mountPath, device.DevicePath, mountPath))
+				break
+			}
+		}
+		if !isVolumeDevice {
+			cacheVolumeMounts = append(cacheVolumeMounts, corev1.VolumeMount{
+				Name:      volume.Name,
+				MountPath: mountPath,
+			})
+		}
+	}
+	cacheDeviceMountCmds = append(cacheDeviceMountCmds, "rm -rf /var/jfsCache/*/"+cg.Status.FileSystem)
+	var securityContext *corev1.SecurityContext
+	if len(cacheVolumeDevices) > 0 {
+		securityContext = worker.Spec.Containers[0].SecurityContext
 	}
 
 	podAnnotations := maps.Clone(worker.Annotations)
@@ -541,11 +561,13 @@ func NewCleanCacheJob(cg juicefsiov1.CacheGroup, worker corev1.Pod) *batchv1.Job
 					Tolerations:   worker.Spec.Tolerations,
 					NodeSelector:  worker.Spec.NodeSelector,
 					Containers: []corev1.Container{{
-						Name:         common.CleanCacheContainerName,
-						Image:        worker.Spec.Containers[0].Image,
-						Command:      []string{"/bin/sh", "-c", "rm -rf /var/jfsCache/*/" + cg.Status.FileSystem},
-						VolumeMounts: cacheVolumeMounts,
-						Resources:    common.DefaultForCleanCacheResources,
+						Name:            common.CleanCacheContainerName,
+						Image:           worker.Spec.Containers[0].Image,
+						Command:         []string{"/bin/sh", "-c", strings.Join(cacheDeviceMountCmds, "\n")},
+						VolumeMounts:    cacheVolumeMounts,
+						VolumeDevices:   cacheVolumeDevices,
+						SecurityContext: securityContext,
+						Resources:       common.DefaultForCleanCacheResources,
 					}},
 					ServiceAccountName: worker.Spec.ServiceAccountName,
 					Volumes:            cacheVolumes,

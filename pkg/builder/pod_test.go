@@ -184,6 +184,160 @@ func TestPodBuilder_genCommands(t *testing.T) {
 	}
 }
 
+func TestPodBuilder_genCacheDirs_VolumeDevice(t *testing.T) {
+	tests := []struct {
+		name                  string
+		node                  string
+		cacheDir              juicefsiov1.CacheDir
+		expectedVolumes       []corev1.Volume
+		expectedVolumeDevices []corev1.VolumeDevice
+		expectedCommands      []string
+	}{
+		{
+			name: "PVC",
+			cacheDir: juicefsiov1.CacheDir{
+				Type:       juicefsiov1.CacheDirTypePVC,
+				Name:       "cache-pvc",
+				VolumeMode: corev1.PersistentVolumeBlock,
+			},
+			expectedVolumes: []corev1.Volume{{
+				Name: "jfs-cache-dir-0",
+				VolumeSource: corev1.VolumeSource{
+					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+						ClaimName: "cache-pvc",
+					},
+				},
+			}},
+			expectedVolumeDevices: []corev1.VolumeDevice{{
+				Name:       "jfs-cache-dir-0",
+				DevicePath: "/dev/jfs-cache-dir-0",
+			}},
+			expectedCommands: []string{
+				"sh",
+				"-c",
+				`/usr/bin/juicefs auth test-name --token ${TOKEN} --secret-key ${SECRET_KEY}
+CACHE_DEVICE=/dev/jfs-cache-dir-0
+CACHE_DIR=/var/jfsCache-0
+FORMAT_DEVICE=false
+
+mkdir -p "$CACHE_DIR" || exit 1
+blkid "$CACHE_DEVICE" >/dev/null 2>&1
+case $? in
+	0)
+		;;
+	2)
+		if [ "$FORMAT_DEVICE" != "true" ]; then
+			echo "Cache device $CACHE_DEVICE does not contain a recognized filesystem; set cacheDirs[].format to true to format it" >&2
+			exit 1
+		fi
+		mkfs.ext4 -F "$CACHE_DEVICE" || exit 1
+		;;
+	*)
+		exit 1
+		;;
+esac
+
+mount "$CACHE_DEVICE" "$CACHE_DIR" || exit 1
+exec /sbin/mount.juicefs test-name /mnt/jfs -o foreground,no-update,cache-group=default-test-cg,cache-dir=/var/jfsCache-0`,
+			},
+		},
+		{
+			name: "VolumeClaimTemplate with format",
+			node: "node-1",
+			cacheDir: juicefsiov1.CacheDir{
+				Type:   juicefsiov1.CacheDirTypeVolumeClaimTemplates,
+				Format: true,
+				VolumeClaimTemplate: &corev1.PersistentVolumeClaim{
+					ObjectMeta: metav1.ObjectMeta{Name: "cache-template"},
+					Spec: corev1.PersistentVolumeClaimSpec{
+						VolumeMode: utils.ToPtr(corev1.PersistentVolumeBlock),
+					},
+				},
+			},
+			expectedVolumes: []corev1.Volume{{
+				Name: "jfs-cache-dir-0",
+				VolumeSource: corev1.VolumeSource{
+					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+						ClaimName: "cache-template-juicefs-cg-worker-test-cg-node-1",
+					},
+				},
+			}},
+			expectedVolumeDevices: []corev1.VolumeDevice{{
+				Name:       "jfs-cache-dir-0",
+				DevicePath: "/dev/jfs-cache-dir-0",
+			}},
+			expectedCommands: []string{
+				"sh",
+				"-c",
+				`/usr/bin/juicefs auth test-name --token ${TOKEN} --secret-key ${SECRET_KEY}
+CACHE_DEVICE=/dev/jfs-cache-dir-0
+CACHE_DIR=/var/jfsCache-0
+FORMAT_DEVICE=true
+
+mkdir -p "$CACHE_DIR" || exit 1
+blkid "$CACHE_DEVICE" >/dev/null 2>&1
+case $? in
+	0)
+		;;
+	2)
+		if [ "$FORMAT_DEVICE" != "true" ]; then
+			echo "Cache device $CACHE_DEVICE does not contain a recognized filesystem; set cacheDirs[].format to true to format it" >&2
+			exit 1
+		fi
+		mkfs.ext4 -F "$CACHE_DEVICE" || exit 1
+		;;
+	*)
+		exit 1
+		;;
+esac
+
+mount "$CACHE_DEVICE" "$CACHE_DIR" || exit 1
+exec /sbin/mount.juicefs test-name /mnt/jfs -o foreground,no-update,cache-group=default-test-cg,cache-dir=/var/jfsCache-0`,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			podBuilder := &PodBuilder{
+				volName: "test-name",
+				node:    tt.node,
+				cg: &juicefsiov1.CacheGroup{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-cg",
+						Namespace: "default",
+					},
+				},
+				secretData: map[string]string{
+					"token":      "test-token",
+					"secret-key": "test-secret-key",
+				},
+				spec: juicefsiov1.CacheGroupWorkerTemplate{
+					CacheDirs: []juicefsiov1.CacheDir{tt.cacheDir},
+				},
+			}
+
+			podBuilder.genCacheDirs()
+
+			if len(podBuilder.spec.VolumeMounts) != 0 {
+				t.Errorf("VolumeMounts = %v, want none", podBuilder.spec.VolumeMounts)
+			}
+
+			if !reflect.DeepEqual(podBuilder.spec.Volumes, tt.expectedVolumes) {
+				t.Errorf("Volumes = %v, want %v", podBuilder.spec.Volumes, tt.expectedVolumes)
+			}
+
+			if !reflect.DeepEqual(podBuilder.spec.VolumeDevices, tt.expectedVolumeDevices) {
+				t.Errorf("VolumeDevices = %v, want %v", podBuilder.spec.VolumeDevices, tt.expectedVolumeDevices)
+			}
+
+			if got := podBuilder.genCommands(context.TODO()); !reflect.DeepEqual(got, tt.expectedCommands) {
+				t.Errorf("genCommands() = %v, want %v", got, tt.expectedCommands)
+			}
+		})
+	}
+}
+
 func TestUpdateWorkerGroupWeight(t *testing.T) {
 	tests := []struct {
 		name     string

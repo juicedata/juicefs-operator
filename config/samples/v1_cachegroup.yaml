@@ -53,6 +53,10 @@ spec:
       cacheDirs:
         - path: /var/jfsCache-0
           type: HostPath
+        # - type: PVC
+        #   name: block-cache-pvc
+        #   volumeMode: Block
+        #   format: true
         # - type: VolumeClaimTemplates
         #   volumeClaimTemplate:
         #     metadata:

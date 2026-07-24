@@ -37,7 +37,7 @@ var (
 // +kubebuilder:validation:XValidation:rule="self.type != 'PVC' || (has(self.name) && self.name.size() > 0)",message="name is required when type is PVC"
 // +kubebuilder:validation:XValidation:rule="self.type != 'VolumeClaimTemplates' || has(self.volumeClaimTemplate)",message="volumeClaimTemplate is required when type is VolumeClaimTemplates"
 // +kubebuilder:validation:XValidation:rule="!has(self.volumeMode) || self.type == 'PVC'",message="volumeMode is only valid for PVC type"
-// +kubebuilder:validation:XValidation:rule="!has(self.format) || self.type == 'PVC' || self.type == 'VolumeClaimTemplates'",message="format is only valid for PVC and VolumeClaimTemplates types"
+// +kubebuilder:validation:XValidation:rule="!has(self.format) || (self.type == 'PVC' && has(self.volumeMode) && self.volumeMode == 'Block') || (self.type == 'VolumeClaimTemplates' && has(self.volumeClaimTemplate) && has(self.volumeClaimTemplate.spec) && has(self.volumeClaimTemplate.spec.volumeMode) && self.volumeClaimTemplate.spec.volumeMode == 'Block')",message="format is only valid for Block volume mode"
 type CacheDir struct {
 	// +kubebuilder:validation:Enum=HostPath;PVC;VolumeClaimTemplates
 	// +kubebuilder:validation:Required

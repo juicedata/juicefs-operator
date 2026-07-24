@@ -180,7 +180,50 @@ func TestCacheDirValidation(t *testing.T) {
 				"path":   "/var/jfs-cache",
 				"format": true,
 			},
-			expectedError: "format is only valid for PVC and VolumeClaimTemplates types",
+			expectedError: "format is only valid for Block volume mode",
+		},
+		{
+			name: "PVC filesystem rejects format",
+			cacheDir: map[string]interface{}{
+				"type":       "PVC",
+				"name":       "cache-pvc",
+				"volumeMode": "Filesystem",
+				"format":     true,
+			},
+			expectedError: "format is only valid for Block volume mode",
+		},
+		{
+			name: "PVC default filesystem rejects format",
+			cacheDir: map[string]interface{}{
+				"type":   "PVC",
+				"name":   "cache-pvc",
+				"format": true,
+			},
+			expectedError: "format is only valid for Block volume mode",
+		},
+		{
+			name: "VolumeClaimTemplates filesystem rejects format",
+			cacheDir: map[string]interface{}{
+				"type":   "VolumeClaimTemplates",
+				"format": true,
+				"volumeClaimTemplate": map[string]interface{}{
+					"spec": map[string]interface{}{
+						"volumeMode": "Filesystem",
+					},
+				},
+			},
+			expectedError: "format is only valid for Block volume mode",
+		},
+		{
+			name: "VolumeClaimTemplates default filesystem rejects format",
+			cacheDir: map[string]interface{}{
+				"type":   "VolumeClaimTemplates",
+				"format": true,
+				"volumeClaimTemplate": map[string]interface{}{
+					"spec": map[string]interface{}{},
+				},
+			},
+			expectedError: "format is only valid for Block volume mode",
 		},
 	}
 

@@ -600,8 +600,18 @@ func (r *CacheGroupReconciler) cleanWorkerCache(ctx context.Context, cg *juicefs
 		return nil
 	}
 
-	if cg.Spec.Replicas != nil {
-		return r.deletePVCForCacheGroup(ctx, cg, worker)
+	skippedVolumes, err := r.deletePVCForCacheGroup(ctx, cg, worker)
+	if err != nil {
+		return err
+	}
+	if len(skippedVolumes) > 0 {
+		volumes := make([]corev1.Volume, 0, len(worker.Spec.Volumes)-len(skippedVolumes))
+		for _, volume := range worker.Spec.Volumes {
+			if _, ok := skippedVolumes[volume.Name]; !ok {
+				volumes = append(volumes, volume)
+			}
+		}
+		worker.Spec.Volumes = volumes
 	}
 
 	job := builder.NewCleanCacheJob(*cg, worker)
@@ -609,7 +619,7 @@ func (r *CacheGroupReconciler) cleanWorkerCache(ctx context.Context, cg *juicefs
 		return nil
 	}
 	log.Info("worker is to be deleted, create job to clean cache", "job", job.Name)
-	err := r.Get(ctx, client.ObjectKey{Namespace: job.Namespace, Name: job.Name}, &batchv1.Job{})
+	err = r.Get(ctx, client.ObjectKey{Namespace: job.Namespace, Name: job.Name}, &batchv1.Job{})
 	if err == nil {
 		log.Info("clean cache job already exists", "job", job.Name)
 		return nil
@@ -703,9 +713,10 @@ func (r *CacheGroupReconciler) HandleFinalizer(ctx context.Context, cg *juicefsi
 	return nil
 }
 
-// deletePVCForCacheGroup deletes a PVC created by VolumeClaimTemplates for a cache group
-func (r *CacheGroupReconciler) deletePVCForCacheGroup(ctx context.Context, cg *juicefsiov1.CacheGroup, worker corev1.Pod) error {
+// deletePVCForCacheGroup deletes PVCs created by VolumeClaimTemplates and returns volumes that need no cache cleanup.
+func (r *CacheGroupReconciler) deletePVCForCacheGroup(ctx context.Context, cg *juicefsiov1.CacheGroup, worker corev1.Pod) (map[string]struct{}, error) {
 	log := log.FromContext(ctx)
+	skippedVolumes := map[string]struct{}{}
 	for _, v := range worker.Spec.Volumes {
 		if !strings.HasPrefix(v.Name, common.CacheDirVolumeNamePrefix) || v.VolumeSource.PersistentVolumeClaim == nil {
 			continue
@@ -714,9 +725,10 @@ func (r *CacheGroupReconciler) deletePVCForCacheGroup(ctx context.Context, cg *j
 		pvc := &corev1.PersistentVolumeClaim{}
 		if err := r.Get(ctx, client.ObjectKey{Namespace: cg.Namespace, Name: pvcName}, pvc); err != nil {
 			if apierrors.IsNotFound(err) {
+				skippedVolumes[v.Name] = struct{}{}
 				continue
 			}
-			return err
+			return nil, err
 		}
 		if !metav1.IsControlledBy(pvc, cg) {
 			continue
@@ -725,13 +737,15 @@ func (r *CacheGroupReconciler) deletePVCForCacheGroup(ctx context.Context, cg *j
 		log.Info("deleting PVC for cache group", "pvc", pvc.Name, "cacheGroup", cg.Name)
 		if err := r.Delete(ctx, pvc); err != nil {
 			if apierrors.IsNotFound(err) {
+				skippedVolumes[v.Name] = struct{}{}
 				continue
 			}
 			log.Error(err, "failed to delete PVC", "pvc", pvc.Name)
-			return err
+			return nil, err
 		}
+		skippedVolumes[v.Name] = struct{}{}
 	}
-	return nil
+	return skippedVolumes, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

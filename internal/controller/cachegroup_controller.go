@@ -172,7 +172,7 @@ func (r *CacheGroupReconciler) sync(ctx context.Context, cg *juicefsiov1.CacheGr
 
 		if r.actualShouldbeUpdate(updateStrategyType, expectWorker, actualState) {
 			// only update respecting maxUnavailable strategy
-			if actualState != nil {
+			if actualState != nil && utils.IsPodReady(*actualState) {
 				if numUnavailable >= maxUnavailable {
 					log.V(1).Info("maxUnavailable reached, skip updating worker, waiting for next reconciler", "worker", expectWorker.Name)
 					continue
@@ -680,6 +680,10 @@ func (r *CacheGroupReconciler) HandleFinalizer(ctx context.Context, cg *juicefsi
 	}
 	secret := &corev1.Secret{}
 	if err := r.Get(ctx, client.ObjectKey{Namespace: cg.Namespace, Name: cg.Spec.SecretRef.Name}, secret); err != nil {
+		if apierrors.IsNotFound(err) {
+			log.Info("secret not found, skip cleaning cache", "secret", cg.Spec.SecretRef.Name)
+			return nil
+		}
 		log.Error(err, "failed to get secret", "secret", cg.Spec.SecretRef.Name)
 		return err
 	}

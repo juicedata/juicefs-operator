@@ -58,6 +58,22 @@ case $? in
 		;;
 esac
 
+FS_TYPE=$(blkid -s TYPE -o value "$CACHE_DEVICE") || exit 1
+if [ "$FS_TYPE" = "ext4" ]; then
+	resize2fs "$CACHE_DEVICE"
+	if [ $? -ne 0 ]; then
+		e2fsck -pf "$CACHE_DEVICE"
+		case $? in
+			0|1)
+				;;
+			*)
+				exit 1
+				;;
+		esac
+		resize2fs "$CACHE_DEVICE" || exit 1
+	fi
+fi
+
 mount "$CACHE_DEVICE" "$CACHE_DIR" || exit 1`
 
 var (

@@ -164,6 +164,9 @@ func (r *CacheGroupReconciler) sync(ctx context.Context, cg *juicefsiov1.CacheGr
 		groupBackUp := r.shouldAddGroupBackupOrNot(cg, actualState, expectState)
 		podBuilder := builder.NewPodBuilder(cg, secret, node, expectState, groupBackUp)
 		expectWorker := podBuilder.NewCacheGroupWorker(ctx, false)
+		if err := r.ensurePVCsForWorker(ctx, cg, expectWorker.Name, expectState); err != nil {
+			return fmt.Errorf("failed to ensure PVCs for worker %s: %w", expectWorker.Name, err)
+		}
 
 		if actualState != nil && actualState.DeletionTimestamp != nil {
 			log.Info("actual worker is being deleted, skip updating worker, waiting for next reconciler", "worker", expectWorker.Name)
@@ -346,18 +349,15 @@ func (r *CacheGroupReconciler) createOrUpdateWorker(ctx context.Context, cg *jui
 		log.Info("create worker")
 		return r.createCacheGroupWorker(ctx, cg, spec, expect)
 	}
-	if err := r.ensurePVCsForWorker(ctx, cg, expect.Name, spec); err != nil {
-		return fmt.Errorf("failed to ensure PVCs for worker %s: %w", expect.Name, err)
-	}
 	return r.updateCacheGroupWorker(ctx, actual, expect)
 }
 
-// ensurePVCsForWorker ensures all PVCs for a worker are created
+// ensurePVCsForWorker ensures all PVCs for a worker are created and expanded when requested.
 func (r *CacheGroupReconciler) ensurePVCsForWorker(ctx context.Context, cg *juicefsiov1.CacheGroup, workerName string, spec juicefsiov1.CacheGroupWorkerTemplate) error {
 	for i, cacheDir := range spec.CacheDirs {
 		if cacheDir.Type == juicefsiov1.CacheDirTypeVolumeClaimTemplates {
-			if err := r.createPVCForVolumeClaimTemplate(ctx, cg, workerName, cacheDir.VolumeClaimTemplate); err != nil {
-				return fmt.Errorf("failed to create PVC for cache dir %d: %w", i, err)
+			if err := r.ensurePVCForVolumeClaimTemplate(ctx, cg, workerName, cacheDir.VolumeClaimTemplate); err != nil {
+				return fmt.Errorf("failed to ensure PVC for cache dir %d: %w", i, err)
 			}
 		}
 	}
@@ -365,10 +365,6 @@ func (r *CacheGroupReconciler) ensurePVCsForWorker(ctx context.Context, cg *juic
 }
 
 func (r *CacheGroupReconciler) createCacheGroupWorker(ctx context.Context, cg *juicefsiov1.CacheGroup, spec juicefsiov1.CacheGroupWorkerTemplate, expectWorker *corev1.Pod) error {
-	if err := r.ensurePVCsForWorker(ctx, cg, expectWorker.Name, spec); err != nil {
-		return fmt.Errorf("failed to ensure PVCs for worker %s: %w", expectWorker.Name, err)
-	}
-
 	err := r.Create(ctx, expectWorker)
 	if err != nil {
 		if apierrors.IsAlreadyExists(err) {
@@ -599,62 +595,74 @@ func (r *CacheGroupReconciler) cleanWorkerCache(ctx context.Context, cg *juicefs
 	if !cg.Spec.CleanCache {
 		return nil
 	}
-
-	skippedVolumes, err := r.deletePVCForCacheGroup(ctx, cg, worker)
-	if err != nil {
-		return err
+	if cg.Spec.Replicas != nil {
+		// Replica workers are scheduled dynamically, so only delete their PVCs.
+		return r.deletePVCForCacheGroup(ctx, cg, worker)
 	}
-	if len(skippedVolumes) > 0 {
-		volumes := make([]corev1.Volume, 0, len(worker.Spec.Volumes)-len(skippedVolumes))
-		for _, volume := range worker.Spec.Volumes {
-			if _, ok := skippedVolumes[volume.Name]; !ok {
-				volumes = append(volumes, volume)
-			}
+
+	// PVCs are deleted separately; the clean cache job only handles HostPath cache directories.
+	cleanVolumes := make([]corev1.Volume, 0, len(worker.Spec.Volumes))
+	for _, volume := range worker.Spec.Volumes {
+		if strings.HasPrefix(volume.Name, common.CacheDirVolumeNamePrefix) && volume.HostPath != nil {
+			cleanVolumes = append(cleanVolumes, volume)
 		}
-		worker.Spec.Volumes = volumes
 	}
-
-	job := builder.NewCleanCacheJob(*cg, worker)
+	workerForCleanup := worker
+	workerForCleanup.Spec.Volumes = cleanVolumes
+	job := builder.NewCleanCacheJob(*cg, workerForCleanup)
 	if job == nil {
-		return nil
+		return r.deletePVCForCacheGroup(ctx, cg, worker)
 	}
 	log.Info("worker is to be deleted, create job to clean cache", "job", job.Name)
-	err = r.Get(ctx, client.ObjectKey{Namespace: job.Namespace, Name: job.Name}, &batchv1.Job{})
+	err := r.Get(ctx, client.ObjectKey{Namespace: job.Namespace, Name: job.Name}, &batchv1.Job{})
 	if err == nil {
 		log.Info("clean cache job already exists", "job", job.Name)
-		return nil
+	} else {
+		if !apierrors.IsNotFound(err) {
+			log.Error(err, "failed to get clean cache job", "job", job.Name)
+			return err
+		}
+		if err := r.Create(ctx, job); err != nil {
+			log.Error(err, "failed to create clean cache job", "job", job.Name)
+			return err
+		}
 	}
-	if !apierrors.IsNotFound(err) {
-		log.Error(err, "failed to get clean cache job", "job", job.Name)
-		return err
-	}
-	if err := r.Create(ctx, job); err != nil {
-		log.Error(err, "failed to create clean cache job", "job", job.Name)
-		return err
-	}
-	return nil
+	return r.deletePVCForCacheGroup(ctx, cg, worker)
 }
 
-// createPVCForVolumeClaimTemplate creates a PVC for a VolumeClaimTemplate
-func (r *CacheGroupReconciler) createPVCForVolumeClaimTemplate(ctx context.Context, cg *juicefsiov1.CacheGroup, workerName string, vct *corev1.PersistentVolumeClaim) error {
+// ensurePVCForVolumeClaimTemplate creates a PVC or expands its storage request.
+func (r *CacheGroupReconciler) ensurePVCForVolumeClaimTemplate(ctx context.Context, cg *juicefsiov1.CacheGroup, workerName string, vct *corev1.PersistentVolumeClaim) error {
 	if vct == nil {
 		return fmt.Errorf("volumeClaimTemplate is required for VolumeClaimTemplates type")
 	}
 
 	pvcName := common.GenPVCName(vct.Name, workerName)
 
-	// Check if PVC already exists
 	pvc := &corev1.PersistentVolumeClaim{}
 	err := r.Get(ctx, client.ObjectKey{Namespace: cg.Namespace, Name: pvcName}, pvc)
 	if err == nil {
-		// PVC already exists, no need to create
-		return nil
+		if !metav1.IsControlledBy(pvc, cg) {
+			return nil
+		}
+		expectedStorage, ok := vct.Spec.Resources.Requests[corev1.ResourceStorage]
+		if !ok {
+			return nil
+		}
+		currentStorage := pvc.Spec.Resources.Requests[corev1.ResourceStorage]
+		if expectedStorage.Cmp(currentStorage) <= 0 {
+			return nil
+		}
+		if pvc.Spec.Resources.Requests == nil {
+			pvc.Spec.Resources.Requests = corev1.ResourceList{}
+		}
+		pvc.Spec.Resources.Requests[corev1.ResourceStorage] = expectedStorage
+		log.FromContext(ctx).Info("expanding PVC for cache group", "pvc", pvc.Name, "storage", expectedStorage.String())
+		return r.Update(ctx, pvc)
 	}
 	if !apierrors.IsNotFound(err) {
 		return err
 	}
 
-	// Create new PVC based on the template
 	pvc = &corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      pvcName,
@@ -713,10 +721,9 @@ func (r *CacheGroupReconciler) HandleFinalizer(ctx context.Context, cg *juicefsi
 	return nil
 }
 
-// deletePVCForCacheGroup deletes PVCs created by VolumeClaimTemplates and returns volumes that need no cache cleanup.
-func (r *CacheGroupReconciler) deletePVCForCacheGroup(ctx context.Context, cg *juicefsiov1.CacheGroup, worker corev1.Pod) (map[string]struct{}, error) {
+// deletePVCForCacheGroup deletes PVCs created by VolumeClaimTemplates.
+func (r *CacheGroupReconciler) deletePVCForCacheGroup(ctx context.Context, cg *juicefsiov1.CacheGroup, worker corev1.Pod) error {
 	log := log.FromContext(ctx)
-	skippedVolumes := map[string]struct{}{}
 	for _, v := range worker.Spec.Volumes {
 		if !strings.HasPrefix(v.Name, common.CacheDirVolumeNamePrefix) || v.VolumeSource.PersistentVolumeClaim == nil {
 			continue
@@ -725,10 +732,9 @@ func (r *CacheGroupReconciler) deletePVCForCacheGroup(ctx context.Context, cg *j
 		pvc := &corev1.PersistentVolumeClaim{}
 		if err := r.Get(ctx, client.ObjectKey{Namespace: cg.Namespace, Name: pvcName}, pvc); err != nil {
 			if apierrors.IsNotFound(err) {
-				skippedVolumes[v.Name] = struct{}{}
 				continue
 			}
-			return nil, err
+			return err
 		}
 		if !metav1.IsControlledBy(pvc, cg) {
 			continue
@@ -737,15 +743,13 @@ func (r *CacheGroupReconciler) deletePVCForCacheGroup(ctx context.Context, cg *j
 		log.Info("deleting PVC for cache group", "pvc", pvc.Name, "cacheGroup", cg.Name)
 		if err := r.Delete(ctx, pvc); err != nil {
 			if apierrors.IsNotFound(err) {
-				skippedVolumes[v.Name] = struct{}{}
 				continue
 			}
 			log.Error(err, "failed to delete PVC", "pvc", pvc.Name)
-			return nil, err
+			return err
 		}
-		skippedVolumes[v.Name] = struct{}{}
 	}
-	return skippedVolumes, nil
+	return nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

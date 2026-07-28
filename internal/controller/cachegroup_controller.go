@@ -600,10 +600,27 @@ func (r *CacheGroupReconciler) cleanWorkerCache(ctx context.Context, cg *juicefs
 		return r.deletePVCForCacheGroup(ctx, cg, worker)
 	}
 
-	// PVCs are deleted separately; the clean cache job only handles HostPath cache directories.
+	// PVCs owned by the CacheGroup are deleted separately; external PVCs still need cache cleanup.
 	cleanVolumes := make([]corev1.Volume, 0, len(worker.Spec.Volumes))
 	for _, volume := range worker.Spec.Volumes {
-		if strings.HasPrefix(volume.Name, common.CacheDirVolumeNamePrefix) && volume.HostPath != nil {
+		if !strings.HasPrefix(volume.Name, common.CacheDirVolumeNamePrefix) {
+			continue
+		}
+		if volume.HostPath != nil {
+			cleanVolumes = append(cleanVolumes, volume)
+			continue
+		}
+		if volume.PersistentVolumeClaim == nil {
+			continue
+		}
+		pvc := &corev1.PersistentVolumeClaim{}
+		if err := r.Get(ctx, client.ObjectKey{Namespace: cg.Namespace, Name: volume.PersistentVolumeClaim.ClaimName}, pvc); err != nil {
+			if apierrors.IsNotFound(err) {
+				continue
+			}
+			return err
+		}
+		if !metav1.IsControlledBy(pvc, cg) {
 			cleanVolumes = append(cleanVolumes, volume)
 		}
 	}

@@ -53,7 +53,7 @@ func TestPodBuilder_genCommands(t *testing.T) {
 			expected: []string{
 				"sh",
 				"-c",
-				common.JuiceFSBinary + " auth test-name --token ${TOKEN} --secret-key ${SECRET_KEY}\n" +
+				common.JuiceFSBinary + " auth test-name --token ${TOKEN} --secret-key ${SECRET_KEY} || exit 1\n" +
 					"exec " + common.JuiceFsMountBinary + " test-name " + common.MountPoint + " -o foreground,no-update,cache-group=default-test-cg,cache-dir=/var/jfsCache",
 			},
 		},
@@ -83,7 +83,7 @@ func TestPodBuilder_genCommands(t *testing.T) {
 			expected: []string{
 				"sh",
 				"-c",
-				common.JuiceFSBinary + " auth test-name --token ${TOKEN} --secret-key ${SECRET_KEY}\n" +
+				common.JuiceFSBinary + " auth test-name --token ${TOKEN} --secret-key ${SECRET_KEY} || exit 1\n" +
 					"exec " + common.JuiceFsMountBinary + " test-name " + common.MountPoint + " -o foreground,no-update,cache-group=default-test-cg,cache-dir=/var/jfsCache-0",
 			},
 		},
@@ -108,7 +108,7 @@ func TestPodBuilder_genCommands(t *testing.T) {
 			expected: []string{
 				"sh",
 				"-c",
-				common.JuiceFSBinary + " auth test-name --token ${TOKEN} --secret-key ${SECRET_KEY}\n" +
+				common.JuiceFSBinary + " auth test-name --token ${TOKEN} --secret-key ${SECRET_KEY} || exit 1\n" +
 					"exec " + common.JuiceFsMountBinary + " test-name " + common.MountPoint + " -o foreground,no-update,cache-group=default-test-cg,a=b,verbose,cache-dir=/var/jfsCache",
 			},
 		},
@@ -134,7 +134,7 @@ func TestPodBuilder_genCommands(t *testing.T) {
 			expected: []string{
 				"sh",
 				"-c",
-				common.JuiceFSBinary + " auth test-name --token ${TOKEN} --secret-key ${SECRET_KEY} --format-options --format-options2\n" +
+				common.JuiceFSBinary + " auth test-name --token ${TOKEN} --secret-key ${SECRET_KEY} --format-options --format-options2 || exit 1\n" +
 					"exec " + common.JuiceFsMountBinary + " test-name " + common.MountPoint + " -o foreground,no-update,cache-group=default-test-cg,verbose,cache-dir=/var/jfsCache",
 			},
 		},
@@ -165,7 +165,7 @@ func TestPodBuilder_genCommands(t *testing.T) {
 			expected: []string{
 				"sh",
 				"-c",
-				"cp /etc/juicefs/test-name.conf /root/.juicefs\n" +
+				"cp /etc/juicefs/test-name.conf /root/.juicefs || exit 1\n" +
 					"exec " + common.JuiceFsMountBinary + " test-name " + common.MountPoint + " -o foreground,no-update,cache-group=default-test-cg,cache-dir=/var/jfsCache",
 			},
 		},
@@ -215,7 +215,7 @@ func TestPodBuilder_genCacheDirs_VolumeDevice(t *testing.T) {
 			expectedCommands: []string{
 				"sh",
 				"-c",
-				`/usr/bin/juicefs auth test-name --token ${TOKEN} --secret-key ${SECRET_KEY}
+				`/usr/bin/juicefs auth test-name --token ${TOKEN} --secret-key ${SECRET_KEY} || exit 1
 CACHE_DEVICE=/dev/jfs-cache-dir-0
 CACHE_DIR=/var/jfsCache-0
 FORMAT_DEVICE=false
@@ -285,7 +285,7 @@ exec /sbin/mount.juicefs test-name /mnt/jfs -o foreground,no-update,cache-group=
 			expectedCommands: []string{
 				"sh",
 				"-c",
-				`/usr/bin/juicefs auth test-name --token ${TOKEN} --secret-key ${SECRET_KEY}
+				`/usr/bin/juicefs auth test-name --token ${TOKEN} --secret-key ${SECRET_KEY} || exit 1
 CACHE_DEVICE=/dev/jfs-cache-dir-0
 CACHE_DIR=/var/jfsCache-0
 FORMAT_DEVICE=true

@@ -188,7 +188,7 @@ func (r *CacheGroupReconciler) sync(ctx context.Context, cg *juicefsiov1.CacheGr
 				if groupBackUp {
 					log.V(1).Info("new worker added, add group-backup option", "worker", expectWorker.Name)
 				}
-				if err := r.createOrUpdateWorker(ctx, cg, expectState, actualState, expectWorker); err != nil {
+				if err := r.createOrUpdateWorker(ctx, actualState, expectWorker); err != nil {
 					log.Error(err, "failed to create or update worker", "worker", expectWorker.Name)
 					errCh <- err
 					return
@@ -343,11 +343,11 @@ func (r *CacheGroupReconciler) getPodName(cg *juicefsiov1.CacheGroup, node strin
 	}
 }
 
-func (r *CacheGroupReconciler) createOrUpdateWorker(ctx context.Context, cg *juicefsiov1.CacheGroup, spec juicefsiov1.CacheGroupWorkerTemplate, actual, expect *corev1.Pod) error {
+func (r *CacheGroupReconciler) createOrUpdateWorker(ctx context.Context, actual, expect *corev1.Pod) error {
 	log := log.FromContext(ctx).WithValues("worker", expect.Name)
 	if actual == nil {
 		log.Info("create worker")
-		return r.createCacheGroupWorker(ctx, cg, spec, expect)
+		return r.createCacheGroupWorker(ctx, expect)
 	}
 	return r.updateCacheGroupWorker(ctx, actual, expect)
 }
@@ -364,7 +364,7 @@ func (r *CacheGroupReconciler) ensurePVCsForWorker(ctx context.Context, cg *juic
 	return nil
 }
 
-func (r *CacheGroupReconciler) createCacheGroupWorker(ctx context.Context, cg *juicefsiov1.CacheGroup, spec juicefsiov1.CacheGroupWorkerTemplate, expectWorker *corev1.Pod) error {
+func (r *CacheGroupReconciler) createCacheGroupWorker(ctx context.Context, expectWorker *corev1.Pod) error {
 	err := r.Create(ctx, expectWorker)
 	if err != nil {
 		if apierrors.IsAlreadyExists(err) {

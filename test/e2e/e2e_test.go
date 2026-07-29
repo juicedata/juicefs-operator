@@ -419,6 +419,7 @@ spec:
       nodeSelector:
         kubernetes.io/hostname: %s
       image: %s
+      dnsPolicy: ClusterFirstWithHostNet
       cacheDirs:
         - type: PVC
           name: %s

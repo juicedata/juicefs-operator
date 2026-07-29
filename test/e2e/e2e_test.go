@@ -435,7 +435,29 @@ spec:
 				cmd := exec.Command("kubectl", "wait", "pod/"+workerName,
 					"--for", "condition=Ready", "-n", namespace, "--timeout=15s")
 				_, err := utils.Run(cmd)
-				return err
+				if err == nil {
+					return nil
+				}
+
+				cmd = exec.Command("kubectl", "get", "pod", workerName, "-n", namespace, "-o", "json")
+				output, getErr := utils.Run(cmd)
+				if getErr != nil {
+					return err
+				}
+				worker := corev1.Pod{}
+				if json.Unmarshal(output, &worker) != nil || len(worker.Status.ContainerStatuses) == 0 ||
+					worker.Status.ContainerStatuses[0].RestartCount == 0 {
+					return err
+				}
+
+				cmd = exec.Command("kubectl", "describe", "pod", workerName, "-n", namespace)
+				describe, _ := utils.Run(cmd)
+				cmd = exec.Command("kubectl", "logs", workerName, "-n", namespace)
+				logs, _ := utils.Run(cmd)
+				cmd = exec.Command("kubectl", "logs", workerName, "-n", namespace, "--previous")
+				previousLogs, _ := utils.Run(cmd)
+				return StopTrying("worker container restarted").Wrap(err).Attach("worker diagnostics", fmt.Sprintf(
+					"describe:\n%s\nlogs:\n%s\nprevious logs:\n%s", describe, logs, previousLogs))
 			}
 			Eventually(waitWorkerReady, 5*time.Minute, 5*time.Second).Should(Succeed())
 

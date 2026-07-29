@@ -58,8 +58,7 @@ type CacheDir struct {
 	// +kubebuilder:validation:Enum=Filesystem;Block
 	// +optional
 	VolumeMode corev1.PersistentVolumeMode `json:"volumeMode,omitempty"`
-	// Format controls whether to format a block device as ext4 when blkid returns exit status 2,
-	// meaning it cannot identify the device content or read device information.
+	// Format controls whether to format a block device as ext4 when it does not contain a recognized filesystem.
 	// When false, the worker exits without formatting the device. Formatting erases existing data.
 	// Only valid for block volume modes. Defaults to false.
 	// +optional

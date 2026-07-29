@@ -33,48 +33,26 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-// blkid(8) exit status:
-// 0 = device content was identified
-// 2 = device could not be identified or no device information could be read
 // https://man7.org/linux/man-pages/man8/blkid.8.html#EXIT_STATUS
 const cacheDeviceMountScript = `CACHE_DEVICE=%s
 CACHE_DIR=%s
 FORMAT_DEVICE=%t
 
 mkdir -p "$CACHE_DIR" || exit 1
-blkid "$CACHE_DEVICE" >/dev/null 2>&1
-case $? in
-	0)
-		;;
-	2)
-		if [ "$FORMAT_DEVICE" != "true" ]; then
-			echo "Cache device $CACHE_DEVICE does not contain a recognized filesystem; set cacheDirs[].format to true to format it" >&2
-			exit 1
-		fi
-		mkfs.ext4 -F "$CACHE_DEVICE" || exit 1
-		;;
-	*)
+FS_TYPE=$(blkid -p -u filesystem -s TYPE -o value "$CACHE_DEVICE" 2>/dev/null)
+if [ -z "$FS_TYPE" ]; then
+	if [ "$FORMAT_DEVICE" != "true" ]; then
+		echo "Cache device $CACHE_DEVICE does not contain a recognized filesystem; set cacheDirs[].format to true to format it" >&2
 		exit 1
-		;;
-esac
-
-FS_TYPE=$(blkid -s TYPE -o value "$CACHE_DEVICE") || exit 1
-if [ "$FS_TYPE" = "ext4" ]; then
-	resize2fs "$CACHE_DEVICE"
-	if [ $? -ne 0 ]; then
-		e2fsck -pf "$CACHE_DEVICE"
-		case $? in
-			0|1)
-				;;
-			*)
-				exit 1
-				;;
-		esac
-		resize2fs "$CACHE_DEVICE" || exit 1
 	fi
+	mkfs.ext4 -F "$CACHE_DEVICE" || exit 1
+	FS_TYPE=ext4
 fi
 
-mount "$CACHE_DEVICE" "$CACHE_DIR" || exit 1`
+mount "$CACHE_DEVICE" "$CACHE_DIR" || exit 1
+if [ "$FS_TYPE" = "ext4" ]; then
+	resize2fs "$CACHE_DEVICE" || exit 1
+fi`
 
 var (
 	secretKeys = []string{

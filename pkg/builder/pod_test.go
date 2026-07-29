@@ -221,39 +221,20 @@ CACHE_DIR=/var/jfsCache-0
 FORMAT_DEVICE=false
 
 mkdir -p "$CACHE_DIR" || exit 1
-blkid "$CACHE_DEVICE" >/dev/null 2>&1
-case $? in
-	0)
-		;;
-	2)
-		if [ "$FORMAT_DEVICE" != "true" ]; then
-			echo "Cache device $CACHE_DEVICE does not contain a recognized filesystem; set cacheDirs[].format to true to format it" >&2
-			exit 1
-		fi
-		mkfs.ext4 -F "$CACHE_DEVICE" || exit 1
-		;;
-	*)
+FS_TYPE=$(blkid -p -u filesystem -s TYPE -o value "$CACHE_DEVICE" 2>/dev/null)
+if [ -z "$FS_TYPE" ]; then
+	if [ "$FORMAT_DEVICE" != "true" ]; then
+		echo "Cache device $CACHE_DEVICE does not contain a recognized filesystem; set cacheDirs[].format to true to format it" >&2
 		exit 1
-		;;
-esac
-
-FS_TYPE=$(blkid -s TYPE -o value "$CACHE_DEVICE") || exit 1
-if [ "$FS_TYPE" = "ext4" ]; then
-	resize2fs "$CACHE_DEVICE"
-	if [ $? -ne 0 ]; then
-		e2fsck -pf "$CACHE_DEVICE"
-		case $? in
-			0|1)
-				;;
-			*)
-				exit 1
-				;;
-		esac
-		resize2fs "$CACHE_DEVICE" || exit 1
 	fi
+	mkfs.ext4 -F "$CACHE_DEVICE" || exit 1
+	FS_TYPE=ext4
 fi
 
 mount "$CACHE_DEVICE" "$CACHE_DIR" || exit 1
+if [ "$FS_TYPE" = "ext4" ]; then
+	resize2fs "$CACHE_DEVICE" || exit 1
+fi
 exec /sbin/mount.juicefs test-name /mnt/jfs -o foreground,no-update,cache-group=default-test-cg,cache-dir=/var/jfsCache-0`,
 			},
 		},
@@ -291,39 +272,20 @@ CACHE_DIR=/var/jfsCache-0
 FORMAT_DEVICE=true
 
 mkdir -p "$CACHE_DIR" || exit 1
-blkid "$CACHE_DEVICE" >/dev/null 2>&1
-case $? in
-	0)
-		;;
-	2)
-		if [ "$FORMAT_DEVICE" != "true" ]; then
-			echo "Cache device $CACHE_DEVICE does not contain a recognized filesystem; set cacheDirs[].format to true to format it" >&2
-			exit 1
-		fi
-		mkfs.ext4 -F "$CACHE_DEVICE" || exit 1
-		;;
-	*)
+FS_TYPE=$(blkid -p -u filesystem -s TYPE -o value "$CACHE_DEVICE" 2>/dev/null)
+if [ -z "$FS_TYPE" ]; then
+	if [ "$FORMAT_DEVICE" != "true" ]; then
+		echo "Cache device $CACHE_DEVICE does not contain a recognized filesystem; set cacheDirs[].format to true to format it" >&2
 		exit 1
-		;;
-esac
-
-FS_TYPE=$(blkid -s TYPE -o value "$CACHE_DEVICE") || exit 1
-if [ "$FS_TYPE" = "ext4" ]; then
-	resize2fs "$CACHE_DEVICE"
-	if [ $? -ne 0 ]; then
-		e2fsck -pf "$CACHE_DEVICE"
-		case $? in
-			0|1)
-				;;
-			*)
-				exit 1
-				;;
-		esac
-		resize2fs "$CACHE_DEVICE" || exit 1
 	fi
+	mkfs.ext4 -F "$CACHE_DEVICE" || exit 1
+	FS_TYPE=ext4
 fi
 
 mount "$CACHE_DEVICE" "$CACHE_DIR" || exit 1
+if [ "$FS_TYPE" = "ext4" ]; then
+	resize2fs "$CACHE_DEVICE" || exit 1
+fi
 exec /sbin/mount.juicefs test-name /mnt/jfs -o foreground,no-update,cache-group=default-test-cg,cache-dir=/var/jfsCache-0`,
 			},
 		},

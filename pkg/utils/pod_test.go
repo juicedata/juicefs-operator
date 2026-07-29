@@ -38,6 +38,27 @@ func TestParseWorkerMountCmds(t *testing.T) {
 			expectedVolName: "test-vol",
 			expectedOptions: []string{""},
 		},
+		{
+			name: "valid worker command with block cache setup",
+			cmds: `/usr/bin/juicefs auth test-vol || exit 1
+CACHE_DEVICE=/dev/jfs-cache-dir-0
+exec /sbin/mount.juicefs test-vol /mnt/jfs -o option1,option2`,
+			expectedVolName: "test-vol",
+			expectedOptions: []string{"option1", "option2"},
+		},
+		{
+			name: "valid worker command any command",
+			cmds: `/usr/bin/juicefs auth test-vol || exit 1
+CACHE_DEVICE=/dev/jfs-cache-dir-0
+asd
+asd
+asd
+asd as || exit 1
+asd
+exec /sbin/mount.juicefs test-vol /mnt/jfs -o option1,option2`,
+			expectedVolName: "test-vol",
+			expectedOptions: []string{"option1", "option2"},
+		},
 	}
 
 	for _, tt := range tests {

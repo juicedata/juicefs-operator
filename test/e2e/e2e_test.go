@@ -328,6 +328,171 @@ var _ = Describe("controller", Ordered, func() {
 			Eventually(verifyCgStatusUpToDate, 5*time.Minute, time.Second).Should(Succeed())
 		})
 
+		It("should format and resize a raw block cache directory", func() {
+			const (
+				blockCGName    = "e2e-test-cachegroup-block"
+				blockPVName    = "e2e-test-cachegroup-block-pv"
+				blockPVCName   = "e2e-test-cachegroup-block-pvc"
+				blockDevice    = "/dev/jfs-cache-dir-0"
+				blockCacheDir  = "/var/jfsCache-0"
+				blockImagePath = "/var/lib/e2e-test-cachegroup-block.img"
+			)
+
+			nodeName := utils.GetKindNodeName("worker")
+			cmd := exec.Command("docker", "exec", nodeName, "truncate", "-s", "128M", blockImagePath)
+			_, err := utils.Run(cmd)
+			ExpectWithOffset(1, err).NotTo(HaveOccurred())
+			DeferCleanup(func() {
+				cmd := exec.Command("docker", "exec", nodeName, "rm", "-f", blockImagePath)
+				_, _ = utils.Run(cmd)
+			})
+
+			cmd = exec.Command("docker", "exec", nodeName, "losetup", "--find", "--show", blockImagePath)
+			output, err := utils.Run(cmd)
+			ExpectWithOffset(1, err).NotTo(HaveOccurred())
+			loopDevice := strings.TrimSpace(string(output))
+			DeferCleanup(func() {
+				cmd := exec.Command("docker", "exec", nodeName, "losetup", "-d", loopDevice)
+				_, _ = utils.Run(cmd)
+			})
+			ExpectWithOffset(1, loopDevice).Should(HavePrefix("/dev/loop"))
+
+			workerName := common.GenWorkerName(blockCGName, nodeName)
+			DeferCleanup(func() {
+				cmd := exec.Command("kubectl", "delete", "cachegroup", blockCGName, "-n", namespace, "--ignore-not-found=true")
+				_, _ = utils.Run(cmd)
+				cmd = exec.Command("kubectl", "delete", "pod", workerName, "-n", namespace,
+					"--ignore-not-found=true", "--wait=true", "--timeout=2m")
+				_, _ = utils.Run(cmd)
+				cmd = exec.Command("kubectl", "delete", "pvc", blockPVCName, "-n", namespace, "--ignore-not-found=true")
+				_, _ = utils.Run(cmd)
+				cmd = exec.Command("kubectl", "delete", "pv", blockPVName, "--ignore-not-found=true")
+				_, _ = utils.Run(cmd)
+			})
+
+			manifest := fmt.Sprintf(`apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: %s
+spec:
+  capacity:
+    storage: 128Mi
+  volumeMode: Block
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: raw-block
+  local:
+    path: %s
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - %s
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: %s
+spec:
+  accessModes:
+    - ReadWriteOnce
+  volumeMode: Block
+  storageClassName: raw-block
+  volumeName: %s
+  resources:
+    requests:
+      storage: 128Mi
+---
+apiVersion: juicefs.io/v1
+kind: CacheGroup
+metadata:
+  name: %s
+spec:
+  secretRef:
+    name: juicefs-secret
+  worker:
+    template:
+      nodeSelector:
+        kubernetes.io/hostname: %s
+      image: %s
+      cacheDirs:
+        - type: PVC
+          name: %s
+          volumeMode: Block
+          format: true
+`, blockPVName, loopDevice, nodeName, blockPVCName, blockPVName, blockCGName, nodeName, image, blockPVCName)
+
+			cmd = exec.Command("kubectl", "apply", "-f", "-", "-n", namespace)
+			cmd.Stdin = strings.NewReader(manifest)
+			_, err = utils.Run(cmd)
+			ExpectWithOffset(1, err).NotTo(HaveOccurred())
+
+			waitWorkerReady := func() error {
+				cmd := exec.Command("kubectl", "wait", "pod/"+workerName,
+					"--for", "condition=Ready", "-n", namespace, "--timeout=15s")
+				_, err := utils.Run(cmd)
+				return err
+			}
+			Eventually(waitWorkerReady, 5*time.Minute, 5*time.Second).Should(Succeed())
+
+			cmd = exec.Command("kubectl", "get", "pod", workerName, "-n", namespace, "-o", "json")
+			output, err = utils.Run(cmd)
+			ExpectWithOffset(1, err).NotTo(HaveOccurred())
+			worker := corev1.Pod{}
+			err = json.Unmarshal(output, &worker)
+			ExpectWithOffset(1, err).NotTo(HaveOccurred())
+			workerCommand := worker.Spec.Containers[0].Command[2]
+			mountIndex := strings.Index(workerCommand, `mount "$CACHE_DEVICE" "$CACHE_DIR" || exit 1`)
+			resizeIndex := strings.Index(workerCommand, `resize2fs "$CACHE_DEVICE" || exit 1`)
+			ExpectWithOffset(1, mountIndex).Should(BeNumerically(">=", 0))
+			ExpectWithOffset(1, resizeIndex).Should(BeNumerically(">", mountIndex))
+
+			By("validating the raw block device was formatted and mounted as ext4")
+			cmd = exec.Command("docker", "exec", nodeName, "blkid", "-s", "TYPE", "-o", "value", loopDevice)
+			output, err = utils.Run(cmd)
+			ExpectWithOffset(1, err).NotTo(HaveOccurred())
+			ExpectWithOffset(1, strings.TrimSpace(string(output))).Should(Equal("ext4"))
+
+			cmd = exec.Command("kubectl", "exec", workerName, "-n", namespace, "--", "sh", "-c",
+				fmt.Sprintf("grep -q ' %s ext4 ' /proc/mounts && touch %s/e2e", blockCacheDir, blockCacheDir))
+			_, err = utils.Run(cmd)
+			ExpectWithOffset(1, err).NotTo(HaveOccurred())
+
+			By("expanding the raw block device and recreating the worker")
+			cmd = exec.Command("docker", "exec", nodeName, "truncate", "-s", "256M", blockImagePath)
+			_, err = utils.Run(cmd)
+			ExpectWithOffset(1, err).NotTo(HaveOccurred())
+			cmd = exec.Command("docker", "exec", nodeName, "losetup", "-c", loopDevice)
+			_, err = utils.Run(cmd)
+			ExpectWithOffset(1, err).NotTo(HaveOccurred())
+
+			cmd = exec.Command("kubectl", "delete", "pod", workerName, "-n", namespace, "--wait=true", "--timeout=2m")
+			_, err = utils.Run(cmd)
+			ExpectWithOffset(1, err).NotTo(HaveOccurred())
+			Eventually(waitWorkerReady, 5*time.Minute, 5*time.Second).Should(Succeed())
+
+			By("validating the mounted ext4 filesystem was resized to the device size")
+			cmd = exec.Command("kubectl", "exec", workerName, "-n", namespace, "--", "sh", "-c", fmt.Sprintf(`
+FS_INFO=$(LC_ALL=C dumpe2fs -h %s 2>/dev/null) || exit 1
+FS_BLOCK_COUNT=$(printf '%%s\n' "$FS_INFO" | awk -F: '$1 == "Block count" { gsub(/[[:space:]]/, "", $2); print $2 }')
+FS_BLOCK_SIZE=$(printf '%%s\n' "$FS_INFO" | awk -F: '$1 == "Block size" { gsub(/[[:space:]]/, "", $2); print $2 }')
+DEVICE_SIZE=$(blockdev --getsize64 %s) || exit 1
+test $((FS_BLOCK_COUNT * FS_BLOCK_SIZE)) -eq "$DEVICE_SIZE"
+test -f %s/e2e
+`, blockDevice, blockDevice, blockCacheDir))
+			_, err = utils.Run(cmd)
+			ExpectWithOffset(1, err).NotTo(HaveOccurred())
+
+			cmd = exec.Command("kubectl", "logs", workerName, "-n", namespace)
+			output, err = utils.Run(cmd)
+			ExpectWithOffset(1, err).NotTo(HaveOccurred())
+			ExpectWithOffset(1, string(output)).NotTo(ContainSubstring("Please run 'e2fsck"))
+		})
+
 		It("should mount secret configs to the worker", func() {
 			const (
 				configSecretName = "e2e-config-secret"

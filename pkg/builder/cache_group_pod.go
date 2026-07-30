@@ -474,7 +474,7 @@ func (p *PodBuilder) genCommands(ctx context.Context) []string {
 		opts = append(opts, "group-backup")
 	}
 	mountCmds = append(mountCmds, "-o", strings.Join(opts, ","))
-	commandLines := []string{strings.Join(authCmds, " ") + " || exit 1"}
+	commandLines := []string{strings.Join(authCmds, " ")}
 	commandLines = append(commandLines, p.cacheDeviceMountCmds...)
 	commandLines = append(commandLines, strings.Join(mountCmds, " "))
 	cmds := []string{

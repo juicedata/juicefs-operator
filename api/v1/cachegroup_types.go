@@ -33,8 +33,14 @@ var (
 	CacheDirTypeVolumeClaimTemplates CacheDirType = "VolumeClaimTemplates"
 )
 
+// +kubebuilder:validation:XValidation:rule="self.type != 'HostPath' || (has(self.path) && self.path.size() > 0)",message="path is required when type is HostPath"
+// +kubebuilder:validation:XValidation:rule="self.type != 'PVC' || (has(self.name) && self.name.size() > 0)",message="name is required when type is PVC"
+// +kubebuilder:validation:XValidation:rule="self.type != 'VolumeClaimTemplates' || has(self.volumeClaimTemplate)",message="volumeClaimTemplate is required when type is VolumeClaimTemplates"
+// +kubebuilder:validation:XValidation:rule="!has(self.volumeMode) || self.type == 'PVC'",message="volumeMode is only valid for PVC type"
+// +kubebuilder:validation:XValidation:rule="!has(self.format) || (self.type == 'PVC' && has(self.volumeMode) && self.volumeMode == 'Block') || (self.type == 'VolumeClaimTemplates' && has(self.volumeClaimTemplate) && has(self.volumeClaimTemplate.spec) && has(self.volumeClaimTemplate.spec.volumeMode) && self.volumeClaimTemplate.spec.volumeMode == 'Block')",message="format is only valid for Block volume mode"
 type CacheDir struct {
 	// +kubebuilder:validation:Enum=HostPath;PVC;VolumeClaimTemplates
+	// +kubebuilder:validation:Required
 	Type CacheDirType `json:"type,omitempty"`
 	// required for HostPath type
 	// +optional
@@ -48,6 +54,15 @@ type CacheDir struct {
 	// required for PVC type
 	// +optional
 	Name string `json:"name,omitempty"`
+	// VolumeMode for PVC type cache directories. Defaults to Filesystem
+	// +kubebuilder:validation:Enum=Filesystem;Block
+	// +optional
+	VolumeMode corev1.PersistentVolumeMode `json:"volumeMode,omitempty"`
+	// Format controls whether to format a block device as ext4 when it does not contain a recognized filesystem.
+	// When false, the worker exits without formatting the device. Formatting erases existing data.
+	// Only valid for block volume modes. Defaults to false.
+	// +optional
+	Format bool `json:"format,omitempty"`
 	// required for VolumeClaimTemplates type
 	// +optional
 	VolumeClaimTemplate *corev1.PersistentVolumeClaim `json:"volumeClaimTemplate,omitempty"`

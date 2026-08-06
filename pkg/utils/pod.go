@@ -152,6 +152,8 @@ func MustParseWorkerMountCmds(cmds string) (volName string, options []string) {
 	if cmds == "" {
 		panic("empty worker mount cmds")
 	}
+	commandLines := strings.Split(cmds, "\n")
+	cmds = commandLines[len(commandLines)-1]
 	if !strings.HasPrefix(cmds, "exec") {
 		panic("invalid worker mount cmds")
 	}

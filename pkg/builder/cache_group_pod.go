@@ -33,6 +33,32 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
+// https://man7.org/linux/man-pages/man8/blkid.8.html#EXIT_STATUS
+const cacheDeviceMountScript = `CACHE_DEVICE=%s
+CACHE_DIR=%s
+FORMAT_DEVICE=%t
+
+mkdir -p "$CACHE_DIR" || exit 1
+FS_TYPE=$(blkid -p -u filesystem -s TYPE -o value "$CACHE_DEVICE" 2>/dev/null)
+if [ -z "$FS_TYPE" ]; then
+	if [ "$FORMAT_DEVICE" != "true" ]; then
+		echo "Cache device $CACHE_DEVICE does not contain a recognized filesystem; set cacheDirs[].format to true to format it" >&2
+		exit 1
+	fi
+	WIPEFS_OUTPUT=$(wipefs --no-act --noheadings --output TYPE "$CACHE_DEVICE") || exit 1
+	if [ -n "$WIPEFS_OUTPUT" ]; then
+		echo "Cache device $CACHE_DEVICE contains a recognized signature; refusing to format it automatically" >&2
+		exit 1
+	fi
+	mkfs.ext4 "$CACHE_DEVICE" || exit 1
+	FS_TYPE=ext4
+fi
+
+mount "$CACHE_DEVICE" "$CACHE_DIR" || exit 1
+if [ "$FS_TYPE" = "ext4" ]; then
+	resize2fs "$CACHE_DEVICE" || exit 1
+fi`
+
 var (
 	secretKeys = []string{
 		"token",
@@ -70,6 +96,7 @@ type PodBuilder struct {
 	initConfig           string
 	groupBackup          bool
 	cacheDirsInContainer []string
+	cacheDeviceMountCmds []string
 }
 
 func NewPodBuilder(cg *juicefsiov1.CacheGroup, secret *corev1.Secret, node string, spec juicefsiov1.CacheGroupWorkerTemplate, groupBackup bool) *PodBuilder {
@@ -247,10 +274,27 @@ func (p *PodBuilder) genCacheDirs() {
 	for i, dir := range p.spec.CacheDirs {
 		cachePathInContainer := fmt.Sprintf("%s%d", common.CacheDirVolumeMountPathPrefix, i)
 		volumeName := fmt.Sprintf("%s%d", common.CacheDirVolumeNamePrefix, i)
-		p.spec.VolumeMounts = append(p.spec.VolumeMounts, corev1.VolumeMount{
-			Name:      volumeName,
-			MountPath: cachePathInContainer,
-		})
+		isVolumeDevice := dir.Type == juicefsiov1.CacheDirTypePVC &&
+			dir.VolumeMode == corev1.PersistentVolumeBlock
+		if dir.Type == juicefsiov1.CacheDirTypeVolumeClaimTemplates &&
+			dir.VolumeClaimTemplate.Spec.VolumeMode != nil &&
+			*dir.VolumeClaimTemplate.Spec.VolumeMode == corev1.PersistentVolumeBlock {
+			isVolumeDevice = true
+		}
+		if isVolumeDevice {
+			devicePath := "/dev/" + volumeName
+			p.spec.VolumeDevices = append(p.spec.VolumeDevices, corev1.VolumeDevice{
+				Name:       volumeName,
+				DevicePath: devicePath,
+			})
+			p.cacheDeviceMountCmds = append(p.cacheDeviceMountCmds,
+				fmt.Sprintf(cacheDeviceMountScript, devicePath, cachePathInContainer, dir.Format))
+		} else {
+			p.spec.VolumeMounts = append(p.spec.VolumeMounts, corev1.VolumeMount{
+				Name:      volumeName,
+				MountPath: cachePathInContainer,
+			})
+		}
 		switch dir.Type {
 		case juicefsiov1.CacheDirTypeHostPath:
 			hostPathType := corev1.HostPathDirectoryOrCreate
@@ -435,10 +479,13 @@ func (p *PodBuilder) genCommands(ctx context.Context) []string {
 		opts = append(opts, "group-backup")
 	}
 	mountCmds = append(mountCmds, "-o", strings.Join(opts, ","))
+	commandLines := []string{strings.Join(authCmds, " ")}
+	commandLines = append(commandLines, p.cacheDeviceMountCmds...)
+	commandLines = append(commandLines, strings.Join(mountCmds, " "))
 	cmds := []string{
 		"sh",
 		"-c",
-		strings.Join(authCmds, " ") + "\n" + strings.Join(mountCmds, " "),
+		strings.Join(commandLines, "\n"),
 	}
 	return cmds
 }

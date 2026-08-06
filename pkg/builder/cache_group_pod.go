@@ -50,7 +50,7 @@ if [ -z "$FS_TYPE" ]; then
 		echo "Cache device $CACHE_DEVICE contains a recognized signature; refusing to format it automatically" >&2
 		exit 1
 	fi
-	mkfs.ext4 -F "$CACHE_DEVICE" || exit 1
+	mkfs.ext4 "$CACHE_DEVICE" || exit 1
 	FS_TYPE=ext4
 fi
 

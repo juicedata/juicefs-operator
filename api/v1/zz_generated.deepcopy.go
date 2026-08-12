@@ -1159,6 +1159,26 @@ func (in *WarmUpSpec) DeepCopyInto(out *WarmUpSpec) {
 			(*out)[key] = val
 		}
 	}
+	if in.HostNetwork != nil {
+		in, out := &in.HostNetwork, &out.HostNetwork
+		*out = new(bool)
+		**out = **in
+	}
+	if in.DNSPolicy != nil {
+		in, out := &in.DNSPolicy, &out.DNSPolicy
+		*out = new(corev1.DNSPolicy)
+		**out = **in
+	}
+	if in.Affinity != nil {
+		in, out := &in.Affinity, &out.Affinity
+		*out = new(corev1.Affinity)
+		(*in).DeepCopyInto(*out)
+	}
+	if in.EnableServiceLinks != nil {
+		in, out := &in.EnableServiceLinks, &out.EnableServiceLinks
+		*out = new(bool)
+		**out = **in
+	}
 	if in.Targets != nil {
 		in, out := &in.Targets, &out.Targets
 		*out = make([]string, len(*in))
@@ -1180,6 +1200,13 @@ func (in *WarmUpSpec) DeepCopyInto(out *WarmUpSpec) {
 		in, out := &in.ImagePullSecrets, &out.ImagePullSecrets
 		*out = make([]corev1.LocalObjectReference, len(*in))
 		copy(*out, *in)
+	}
+	if in.Env != nil {
+		in, out := &in.Env, &out.Env
+		*out = make([]corev1.EnvVar, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
 	}
 }
 

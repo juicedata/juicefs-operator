@@ -65,6 +65,32 @@ func (j *JobBuilder) NewWarmUpJob() *batchv1.Job {
 	job.Spec.Template.Spec.RestartPolicy = corev1.RestartPolicyNever
 	job.Spec.Template.Spec.Tolerations = j.wu.Spec.Tolerations
 	job.Spec.Template.Spec.NodeSelector = j.wu.Spec.NodeSelector
+	if j.worker != nil {
+		job.Spec.Template.Spec.ServiceAccountName = j.worker.Spec.ServiceAccountName
+		job.Spec.Template.Spec.HostNetwork = j.worker.Spec.HostNetwork
+		job.Spec.Template.Spec.SchedulerName = j.worker.Spec.SchedulerName
+		job.Spec.Template.Spec.DNSPolicy = j.worker.Spec.DNSPolicy
+		job.Spec.Template.Spec.Affinity = j.worker.Spec.Affinity
+		job.Spec.Template.Spec.EnableServiceLinks = j.worker.Spec.EnableServiceLinks
+	}
+	if j.wu.Spec.ServiceAccountName != "" {
+		job.Spec.Template.Spec.ServiceAccountName = j.wu.Spec.ServiceAccountName
+	}
+	if j.wu.Spec.HostNetwork != nil {
+		job.Spec.Template.Spec.HostNetwork = *j.wu.Spec.HostNetwork
+	}
+	if j.wu.Spec.SchedulerName != "" {
+		job.Spec.Template.Spec.SchedulerName = j.wu.Spec.SchedulerName
+	}
+	if j.wu.Spec.DNSPolicy != nil {
+		job.Spec.Template.Spec.DNSPolicy = *j.wu.Spec.DNSPolicy
+	}
+	if j.wu.Spec.Affinity != nil {
+		job.Spec.Template.Spec.Affinity = j.wu.Spec.Affinity
+	}
+	if j.wu.Spec.EnableServiceLinks != nil {
+		job.Spec.Template.Spec.EnableServiceLinks = j.wu.Spec.EnableServiceLinks
+	}
 	job.Spec.Template.Spec.ImagePullSecrets = j.getImagePullSecrets()
 	image := j.getImage()
 	job.Spec.Template.Spec.Containers = []corev1.Container{{
@@ -73,6 +99,7 @@ func (j *JobBuilder) NewWarmUpJob() *batchv1.Job {
 		ImagePullPolicy: j.getImagePullPolicy(),
 		Command:         j.getWarmUpCommand(image),
 		Env:             j.getEnvs(),
+		Resources:       j.wu.Spec.Resources,
 		SecurityContext: &corev1.SecurityContext{
 			Privileged: utils.ToPtr(true),
 		},
@@ -176,13 +203,19 @@ func (j *JobBuilder) getImage() string {
 }
 
 func (j *JobBuilder) getImagePullSecrets() []corev1.LocalObjectReference {
+	if j.wu.Spec.ImagePullSecrets != nil {
+		return j.wu.Spec.ImagePullSecrets
+	}
 	if j.worker != nil {
 		return j.worker.Spec.ImagePullSecrets
 	}
-	return j.wu.Spec.ImagePullSecrets
+	return nil
 }
 
 func (j *JobBuilder) getImagePullPolicy() corev1.PullPolicy {
+	if j.wu.Spec.ImagePullPolicy != "" {
+		return j.wu.Spec.ImagePullPolicy
+	}
 	if j.worker != nil {
 		return j.worker.Spec.Containers[0].ImagePullPolicy
 	}
@@ -191,7 +224,8 @@ func (j *JobBuilder) getImagePullPolicy() corev1.PullPolicy {
 
 func (j *JobBuilder) getEnvs() []corev1.EnvVar {
 	if j.worker != nil {
-		return j.worker.Spec.Containers[0].Env
+		envs := append([]corev1.EnvVar{}, j.worker.Spec.Containers[0].Env...)
+		return append(envs, j.wu.Spec.Env...)
 	}
 
 	secretData := utils.ParseSecret(j.secret)
@@ -223,6 +257,7 @@ func (j *JobBuilder) getEnvs() []corev1.EnvVar {
 		})
 	}
 
+	envs = append(envs, j.wu.Spec.Env...)
 	sort.SliceStable(envs, func(i, k int) bool {
 		return envs[i].Name < envs[k].Name
 	})

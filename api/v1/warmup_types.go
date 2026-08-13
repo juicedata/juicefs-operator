@@ -54,6 +54,12 @@ type WarmUpSpec struct {
 	Metadata                Metadata                    `json:"metadata,omitempty"`
 	Tolerations             []corev1.Toleration         `json:"tolerations,omitempty"`
 	NodeSelector            map[string]string           `json:"nodeSelector,omitempty"`
+	ServiceAccountName      string                      `json:"serviceAccountName,omitempty"`
+	HostNetwork             *bool                       `json:"hostNetwork,omitempty"`
+	SchedulerName           string                      `json:"schedulerName,omitempty"`
+	DNSPolicy               *corev1.DNSPolicy           `json:"dnsPolicy,omitempty"`
+	Affinity                *corev1.Affinity            `json:"affinity,omitempty"`
+	EnableServiceLinks      *bool                       `json:"enableServiceLinks,omitempty"`
 	Targets                 []string                    `json:"targets,omitempty"` // @deprecated
 	TargetsFrom             *WarmUpTargetsFrom          `json:"targetsFrom,omitempty"`
 	Options                 []string                    `json:"options,omitempty"`
@@ -62,11 +68,13 @@ type WarmUpSpec struct {
 	// +optional
 	// Image to use for the warmup job
 	// defaults to cachegroup pod image
-	Image string `json:"image,omitempty"`
+	Image           string            `json:"image,omitempty"`
+	ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy,omitempty"`
 	// +optional
 	// ImagePullSecrets to use for the warmup job
 	// defaults to cachegroup pod imagePullSecrets
 	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
+	Env              []corev1.EnvVar               `json:"env,omitempty"`
 }
 
 type Metadata struct {

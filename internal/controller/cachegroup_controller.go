@@ -472,7 +472,7 @@ func (r *CacheGroupReconciler) removeRedundantWorkers(
 	return nil
 }
 
-// change pod options `group-weight` to zero, delete and recreate the worker pod
+// Trigger data migration before deleting a cache group worker.
 func (r *CacheGroupReconciler) gracefulShutdownWorker(
 	ctx context.Context,
 	cg *juicefsiov1.CacheGroup,
@@ -503,9 +503,24 @@ func (r *CacheGroupReconciler) gracefulShutdownWorker(
 			log.Info("redundant worker still has cache blocks, waiting for data migration timeout, delete it", "worker", worker.Name)
 			return true, nil
 		}
-		// already set group-weight to 0
+		// already started migration
 		return false, nil
 	}
+
+	if utils.WorkerSupportsDecommission(*worker) {
+		log.V(1).Info("redundant worker has cache blocks, recreate with decommission", "worker", worker.Name, "cacheBytes", cacheBytes)
+		if err := r.deleteCacheGroupWorker(ctx, worker, true); err != nil {
+			return false, err
+		}
+		builder.UpdateWorkerDecommission(worker)
+		worker.ResourceVersion = ""
+		worker.Annotations[common.AnnoWaitingDeleteWorker] = time.Now().Format(time.RFC3339)
+		if err := r.Create(ctx, worker); err != nil {
+			return false, err
+		}
+		return false, nil
+	}
+
 	log.V(1).Info("redundant worker has cache blocks, recreate to set group-weight to 0", "worker", worker.Name, "cacheBytes", cacheBytes)
 	if err := r.deleteCacheGroupWorker(ctx, worker, true); err != nil {
 		return false, err

@@ -148,6 +148,18 @@ func TestCompareImageVersion(t *testing.T) {
 			target:  "5.1.10",
 			want:    1,
 		},
+		{
+			name:    "Test with registry port",
+			current: "registry.internal:5000/juicedata/mount:ee-5.4.0",
+			target:  "5.4.0",
+			want:    0,
+		},
+		{
+			name:    "Test without image tag",
+			current: "registry.internal:5000/juicedata/mount",
+			target:  "5.4.0",
+			want:    -1,
+		},
 	}
 
 	for _, tt := range tests {

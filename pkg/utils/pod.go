@@ -125,6 +125,12 @@ func GetWorkerCacheBlocksBytes(ctx context.Context, pod corev1.Pod, mountPoint s
 	return cacheBytes, nil
 }
 
+func WorkerSupportsDecommission(pod corev1.Pod) bool {
+	image := pod.Spec.Containers[0].Image
+	parts := strings.SplitN(image[strings.LastIndex(image, "/")+1:], ":", 2)
+	return len(parts) >= 2 && strings.Contains(parts[1], "ee-") && CompareEEImageVersion(image, common.MinSupportedDecommissionVersion) >= 0
+}
+
 func ParseUpdateStrategy(strategy *appsv1.DaemonSetUpdateStrategy, total int) (appsv1.DaemonSetUpdateStrategyType, int) {
 	if strategy == nil {
 		return appsv1.RollingUpdateDaemonSetStrategyType, 1

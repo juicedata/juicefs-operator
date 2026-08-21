@@ -73,7 +73,8 @@ const (
 	InitConfigVolumeKey  = "initconfig"
 	InitConfigMountPath  = "/etc/juicefs"
 
-	MinSupportedWarmupStatsVersion = "5.2.11"
+	MinSupportedWarmupStatsVersion  = "5.2.11"
+	MinSupportedDecommissionVersion = "5.4.0"
 )
 
 var (

@@ -85,7 +85,7 @@ func CompareEEImageVersion(image, target string) int {
 const ceImageRegex = `ce-(\d+)\.(\d+)\.(\d+)`
 
 func CompareImageVersion(image, target string) int {
-	parts := strings.Split(image, ":")
+	parts := strings.SplitN(image[strings.LastIndex(image, "/")+1:], ":", 2)
 	if len(parts) < 2 {
 		return -1 // invalid image format
 	}

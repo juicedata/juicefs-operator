@@ -695,3 +695,11 @@ func UpdateWorkerGroupWeight(worker *corev1.Pod, weight int) {
 	}
 	worker.Spec.Containers[0].Command[2] = cmd
 }
+
+func UpdateWorkerDecommission(worker *corev1.Pod) {
+	cmd := worker.Spec.Containers[0].Command[2]
+	if !strings.Contains(cmd, ",decommission") {
+		cmd += ",decommission"
+	}
+	worker.Spec.Containers[0].Command[2] = cmd
+}

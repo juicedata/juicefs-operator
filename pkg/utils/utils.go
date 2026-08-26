@@ -19,6 +19,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
@@ -70,6 +71,21 @@ func MustParseTime(s string) time.Time {
 		panic(err)
 	}
 	return t
+}
+
+func FormatBytes(bytes int64) string {
+	switch {
+	case bytes >= 1<<40:
+		return fmt.Sprintf("%.1f TiB", float64(bytes)/(1<<40))
+	case bytes >= 1<<30:
+		return fmt.Sprintf("%.1f GiB", float64(bytes)/(1<<30))
+	case bytes >= 1<<20:
+		return fmt.Sprintf("%.1f MiB", float64(bytes)/(1<<20))
+	case bytes >= 1<<10:
+		return fmt.Sprintf("%.1f KiB", float64(bytes)/(1<<10))
+	default:
+		return fmt.Sprintf("%d B", bytes)
+	}
 }
 
 const eeImageRegex = `ee-(\d+)\.(\d+)\.(\d+)`
@@ -137,13 +153,6 @@ func CompareImageVersion(image, target string) int {
 func GetWaitingDeletedMaxDuration(d *metav1.Duration) time.Duration {
 	if d == nil {
 		return common.DefaultWaitingMaxDuration
-	}
-	return d.Duration
-}
-
-func GetBackupWorkerDuration(d *metav1.Duration) time.Duration {
-	if d == nil {
-		return common.DefaultBackupWorkerDuration
 	}
 	return d.Duration
 }

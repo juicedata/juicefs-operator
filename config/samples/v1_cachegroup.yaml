@@ -22,8 +22,9 @@ spec:
   # replicas: 10
   secretRef:
     name: juicefs-secret
-  # Duration for new node to join cluster with group-backup option
-  backupDuration: "10m"
+  # Duration for new node to join cluster with group-backup option.
+  # "auto" starts checking receive traffic after 10 minutes and removes group-backup after it is stable for 5 minutes.
+  backupDuration: "auto"
   # Maximum time to wait for data migration when deleting
   waitingDeletedMaxDuration: "1h"
   updateStrategy:

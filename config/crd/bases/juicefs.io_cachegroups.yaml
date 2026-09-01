@@ -48,7 +48,6 @@ spec:
           spec:
             properties:
               backupDuration:
-                pattern: ^(auto|[0-9]+(\.[0-9]+)?(ms|s|m|h))$
                 type: string
               cacheGroup:
                 type: string

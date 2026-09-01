@@ -172,6 +172,11 @@ func (in *CacheGroupSpec) DeepCopyInto(out *CacheGroupSpec) {
 		**out = **in
 	}
 	in.Worker.DeepCopyInto(&out.Worker)
+	if in.BackupDuration != nil {
+		in, out := &in.BackupDuration, &out.BackupDuration
+		*out = new(metav1.Duration)
+		**out = **in
+	}
 	if in.WaitingDeletedMaxDuration != nil {
 		in, out := &in.WaitingDeletedMaxDuration, &out.WaitingDeletedMaxDuration
 		*out = new(metav1.Duration)

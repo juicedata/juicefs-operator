@@ -186,10 +186,9 @@ type CacheGroupSpec struct {
 	Replicas *int32               `json:"replicas,omitempty"`
 	Worker   CacheGroupWorkerSpec `json:"worker,omitempty"`
 	// Duration for new node to join cluster with group-backup option.
-	// Set to "auto" to remove group-backup after receive traffic stabilizes.
-	// +kubebuilder:validation:Pattern=`^(auto|[0-9]+(\.[0-9]+)?(ms|s|m|h))$`
+	// If omitted, group-backup is removed after receive traffic stabilizes.
 	// +optional
-	BackupDuration string `json:"backupDuration,omitempty"`
+	BackupDuration *metav1.Duration `json:"backupDuration,omitempty"`
 	// Maximum time to wait for data migration when deleting
 	// Default is 1 hour
 	// +optional
@@ -213,8 +212,6 @@ const (
 	CacheGroupConditionTypeWorkersReady           = "WorkersReady"
 	CacheGroupConditionTypeGroupBackupProgressing = "GroupBackupProgressing"
 )
-
-const CacheGroupBackupDurationAuto = "auto"
 
 const (
 	CacheGroupConditionReasonNoWorkersExpected        = "NoWorkersExpected"

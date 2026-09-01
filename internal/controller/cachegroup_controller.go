@@ -167,10 +167,7 @@ func (r *CacheGroupReconciler) sync(ctx context.Context, cg *juicefsiov1.CacheGr
 		if worker, ok := actualWorkerMap[workerName]; ok {
 			actualState = &worker
 		}
-		groupBackUp, err := shouldAddGroupBackupOrNot(cg, actualState, expectState, currentBackupWorkerStatuses[workerName])
-		if err != nil {
-			return fmt.Errorf("failed to determine group-backup for worker %s: %w", workerName, err)
-		}
+		groupBackUp := shouldAddGroupBackupOrNot(cg, actualState, expectState, currentBackupWorkerStatuses[workerName])
 		podBuilder := builder.NewPodBuilder(cg, secret, node, expectState, groupBackUp)
 		expectWorker := podBuilder.NewCacheGroupWorker(ctx, false)
 		if err := r.ensurePVCsForWorker(ctx, cg, expectWorker.Name, expectState); err != nil {
@@ -610,7 +607,7 @@ func (r *CacheGroupReconciler) observeAutoBackupWorkers(
 	actualWorkers map[string]corev1.Pod,
 	currentStatuses map[string]juicefsiov1.CacheGroupBackupWorkerStatus,
 ) ([]juicefsiov1.CacheGroupBackupWorkerStatus, int) {
-	if cg.Spec.BackupDuration != "" && cg.Spec.BackupDuration != juicefsiov1.CacheGroupBackupDurationAuto {
+	if cg.Spec.BackupDuration != nil {
 		return nil, 0
 	}
 
@@ -683,39 +680,35 @@ func shouldAddGroupBackupOrNot(
 	actual *corev1.Pod,
 	expectState juicefsiov1.CacheGroupWorkerTemplate,
 	backupStatus juicefsiov1.CacheGroupBackupWorkerStatus,
-) (bool, error) {
+) bool {
 	if utils.CompareEEImageVersion(expectState.Image, "5.1.0") < 0 {
-		return false, nil
+		return false
 	}
 	if lo.Contains(expectState.Opts, "group-backup") {
-		return false, nil
+		return false
 	}
-	auto := cg.Spec.BackupDuration == "" || cg.Spec.BackupDuration == juicefsiov1.CacheGroupBackupDurationAuto
+	auto := cg.Spec.BackupDuration == nil
 	var duration time.Duration
 	if !auto {
-		var err error
-		duration, err = time.ParseDuration(cg.Spec.BackupDuration)
-		if err != nil {
-			return false, fmt.Errorf("invalid backupDuration %q: %w", cg.Spec.BackupDuration, err)
-		}
+		duration = cg.Spec.BackupDuration.Duration
 		if duration <= minBackupWorkerDuration {
-			return false, nil
+			return false
 		}
 	}
 
 	// If it is a new node and there are already 1 or more worker nodes
 	// then this node should add group-backup.
 	if actual == nil {
-		return cg.Status.ReadyWorker >= 1, nil
+		return cg.Status.ReadyWorker >= 1
 	}
 	backupAtValue, ok := actual.Annotations[common.AnnoBackupWorker]
 	if !ok {
-		return false, nil
+		return false
 	}
 	if !auto {
-		return time.Since(utils.MustParseTime(backupAtValue)) < duration, nil
+		return time.Since(utils.MustParseTime(backupAtValue)) < duration
 	}
-	return backupStatus.PodUID != actual.UID || backupStatus.StableAt == nil, nil
+	return backupStatus.PodUID != actual.UID || backupStatus.StableAt == nil
 }
 
 func (r *CacheGroupReconciler) calculateStatus(
@@ -802,7 +795,7 @@ func (r *CacheGroupReconciler) calculateStatus(
 	}
 	if backupWorker == 0 {
 		apimeta.RemoveStatusCondition(&newStatus.Conditions, juicefsiov1.CacheGroupConditionTypeGroupBackupProgressing)
-	} else if cg.Spec.BackupDuration != "" && cg.Spec.BackupDuration != juicefsiov1.CacheGroupBackupDurationAuto {
+	} else if cg.Spec.BackupDuration != nil {
 		setGroupBackupProgressingCondition(
 			juicefsiov1.CacheGroupConditionReasonWaitingForBackupDuration,
 			"Waiting for the configured group-backup duration to elapse",

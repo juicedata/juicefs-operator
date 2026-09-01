@@ -4296,6 +4296,36 @@ spec:
               backUpWorker:
                 format: int32
                 type: integer
+              backupWorkers:
+                items:
+                  properties:
+                    lastChangedAt:
+                      format: date-time
+                      type: string
+                    lastSampleTime:
+                      format: date-time
+                      type: string
+                    name:
+                      type: string
+                    podUID:
+                      type: string
+                    receiveBytes:
+                      format: int64
+                      type: integer
+                    stableAt:
+                      format: date-time
+                      type: string
+                  required:
+                  - lastChangedAt
+                  - lastSampleTime
+                  - name
+                  - podUID
+                  - receiveBytes
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
               cacheGroup:
                 type: string
               conditions:
@@ -4304,16 +4334,61 @@ spec:
                     lastTransitionTime:
                       format: date-time
                       type: string
+                    message:
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
                     status:
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
                       type: string
                     type:
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
                       type: string
                   required:
                   - lastTransitionTime
+                  - message
+                  - reason
                   - status
                   - type
                   type: object
                 type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              decommissioningWorkers:
+                items:
+                  properties:
+                    cacheBytes:
+                      format: int64
+                      type: integer
+                    name:
+                      type: string
+                    nodeName:
+                      type: string
+                    startedAt:
+                      format: date-time
+                      type: string
+                  required:
+                  - name
+                  - nodeName
+                  - startedAt
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
               expectWorker:
                 format: int32
                 type: integer

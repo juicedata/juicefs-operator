@@ -25,6 +25,7 @@ import (
 	"sync"
 	"time"
 
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -144,6 +145,10 @@ func (r *CacheGroupReconciler) sync(ctx context.Context, cg *juicefsiov1.CacheGr
 		return err
 	}
 	actualWorkerMap := lo.KeyBy(actualWorkers, func(worker corev1.Pod) string { return worker.Name })
+	currentBackupWorkerStatuses := lo.KeyBy(cg.Status.BackupWorkers, func(status juicefsiov1.CacheGroupBackupWorkerStatus) string {
+		return status.Name
+	})
+	nextBackupWorkerStatuses, statsFailures := r.observeAutoBackupWorkers(ctx, cg, expectStates, actualWorkerMap, currentBackupWorkerStatuses)
 	numUnavailable := lo.CountBy(actualWorkers, func(worker corev1.Pod) bool {
 		if worker.DeletionTimestamp != nil {
 			return true
@@ -157,11 +162,12 @@ func (r *CacheGroupReconciler) sync(ctx context.Context, cg *juicefsiov1.CacheGr
 
 	log.Info("sync worker to expect states", "expect", len(expectStates), "actual", len(actualWorkers), "currentUnavailable", numUnavailable)
 	for node, expectState := range expectStates {
+		workerName := r.getPodName(cg, node)
 		var actualState *corev1.Pod
-		if v, ok := actualWorkerMap[r.getPodName(cg, node)]; ok {
-			actualState = &v
+		if worker, ok := actualWorkerMap[workerName]; ok {
+			actualState = &worker
 		}
-		groupBackUp := r.shouldAddGroupBackupOrNot(cg, actualState, expectState)
+		groupBackUp := shouldAddGroupBackupOrNot(cg, actualState, expectState, currentBackupWorkerStatuses[workerName])
 		podBuilder := builder.NewPodBuilder(cg, secret, node, expectState, groupBackUp)
 		expectWorker := podBuilder.NewCacheGroupWorker(ctx, false)
 		if err := r.ensurePVCsForWorker(ctx, cg, expectWorker.Name, expectState); err != nil {
@@ -217,13 +223,40 @@ func (r *CacheGroupReconciler) sync(ctx context.Context, cg *juicefsiov1.CacheGr
 		log.Error(err, "failed to list actual worker nodes")
 		return err
 	}
-	if err := r.removeRedundantWorkers(ctx, cg, expectStates, actualWorks); err != nil {
+	currentDecommissioningWorkerStatuses := lo.KeyBy(cg.Status.DecommissioningWorkers, func(status juicefsiov1.CacheGroupDecommissioningWorkerStatus) string {
+		return status.Name
+	})
+	decommissioningWorkerStatuses, err := r.removeRedundantWorkers(ctx, cg, expectStates, actualWorks, currentDecommissioningWorkerStatuses)
+	if err != nil {
 		log.Error(err, "failed to remove redundant")
 		return err
 	}
+	latestWorkerMap := lo.KeyBy(actualWorks, func(worker corev1.Pod) string { return worker.Name })
+	retainedBackupWorkerStatuses := nextBackupWorkerStatuses[:0]
+	for _, status := range nextBackupWorkerStatuses {
+		worker, ok := latestWorkerMap[status.Name]
+		if !ok || worker.UID != status.PodUID {
+			continue
+		}
+		if _, ok := worker.Annotations[common.AnnoBackupWorker]; !ok {
+			continue
+		}
+		retainedBackupWorkerStatuses = append(retainedBackupWorkerStatuses, status)
+	}
+	if len(retainedBackupWorkerStatuses) == 0 {
+		retainedBackupWorkerStatuses = nil
+	}
 
 	// calculate status
-	newStatus := r.calculateStatus(cg, strings.TrimSpace(string(secret.Data["name"])), expectStates, actualWorks)
+	newStatus := r.calculateStatus(
+		cg,
+		strings.TrimSpace(string(secret.Data["name"])),
+		expectStates,
+		actualWorks,
+		retainedBackupWorkerStatuses,
+		decommissioningWorkerStatuses,
+		statsFailures,
+	)
 	if !reflect.DeepEqual(cg.Status, newStatus) {
 		cg.Status = newStatus
 		return utils.IgnoreConflict(r.Status().Update(ctx, cg))
@@ -414,7 +447,10 @@ func (r *CacheGroupReconciler) deleteCacheGroupWorker(ctx context.Context, worke
 
 func (r *CacheGroupReconciler) listActualWorkers(ctx context.Context, cg *juicefsiov1.CacheGroup) ([]corev1.Pod, error) {
 	workers := corev1.PodList{}
-	if err := r.List(ctx, &workers, client.MatchingLabels(map[string]string{common.LabelCacheGroup: utils.TruncateLabelValue(cg.Name)})); err != nil {
+	if err := r.List(ctx, &workers, client.MatchingLabels(map[string]string{
+		common.LabelCacheGroup: utils.TruncateLabelValue(cg.Name),
+		common.LabelAppType:    common.LabelWorkerValue,
+	})); err != nil {
 		return nil, err
 	}
 	return workers.Items, nil
@@ -423,13 +459,16 @@ func (r *CacheGroupReconciler) listActualWorkers(ctx context.Context, cg *juicef
 // removeRedundantWorkers deletes the redundant workers
 // if the worker still has cache blocks, tweak the group weight to zero, waiting for data redistribution, then delete it
 // if the worker has no cache blocks, delete it directly
-// if the worker not ready delete it directly
+// if the worker is not ready and data migration has not started, delete it directly
 func (r *CacheGroupReconciler) removeRedundantWorkers(
 	ctx context.Context,
 	cg *juicefsiov1.CacheGroup,
 	expectStates map[string]juicefsiov1.CacheGroupWorkerTemplate,
-	actualWorks []corev1.Pod) error {
+	actualWorks []corev1.Pod,
+	currentStatuses map[string]juicefsiov1.CacheGroupDecommissioningWorkerStatus,
+) ([]juicefsiov1.CacheGroupDecommissioningWorkerStatus, error) {
 	log := log.FromContext(ctx)
+	statuses := make([]juicefsiov1.CacheGroupDecommissioningWorkerStatus, 0, len(currentStatuses))
 	for _, worker := range actualWorks {
 		var workerKey string
 		if cg.Spec.Replicas != nil {
@@ -448,13 +487,27 @@ func (r *CacheGroupReconciler) removeRedundantWorkers(
 			continue
 		}
 
-		if cg.Status.ReadyWorker > 1 {
-			delete, err := r.gracefulShutdownWorker(ctx, cg, &worker)
+		_, waitingForDeletion := worker.Annotations[common.AnnoWaitingDeleteWorker]
+		if cg.Status.ReadyWorker > 1 || waitingForDeletion {
+			delete, cacheBytes, err := r.gracefulShutdownWorker(ctx, cg, &worker)
 			if err != nil {
 				log.Error(err, "failed to graceful shutdown worker", "worker", worker)
-				return err
+				return nil, err
 			}
 			if !delete {
+				startedAt := metav1.NewTime(utils.MustParseTime(worker.Annotations[common.AnnoWaitingDeleteWorker]))
+				status, ok := currentStatuses[worker.Name]
+				if !ok || !status.StartedAt.Time.Equal(startedAt.Time) {
+					status = juicefsiov1.CacheGroupDecommissioningWorkerStatus{
+						Name:      worker.Name,
+						StartedAt: startedAt,
+					}
+				}
+				status.NodeName = worker.Spec.NodeName
+				if cacheBytes != nil {
+					status.CacheBytes = cacheBytes
+				}
+				statuses = append(statuses, status)
 				continue
 			}
 		}
@@ -462,90 +515,185 @@ func (r *CacheGroupReconciler) removeRedundantWorkers(
 		log.Info("found redundant worker, delete it", "worker", worker.Name)
 		if err := r.deleteCacheGroupWorker(ctx, &worker, false); err != nil {
 			log.Error(err, "failed to delete worker", "worker", worker.Name)
-			return err
+			return nil, err
 		}
 		if err := r.cleanWorkerCache(ctx, cg, worker); err != nil {
 			log.Error(err, "failed to clean worker cache", "worker", worker.Name)
-			return err
+			return nil, err
 		}
 	}
-	return nil
+	sort.Slice(statuses, func(i, j int) bool { return statuses[i].Name < statuses[j].Name })
+	if len(statuses) == 0 {
+		return nil, nil
+	}
+	return statuses, nil
 }
 
 // Trigger data migration before deleting a cache group worker.
 func (r *CacheGroupReconciler) gracefulShutdownWorker(
 	ctx context.Context,
 	cg *juicefsiov1.CacheGroup,
-	worker *corev1.Pod) (delete bool, err error) {
+	worker *corev1.Pod,
+) (delete bool, observedCacheBytes *int64, err error) {
 	log := log.FromContext(ctx)
 	isReady := utils.IsPodReady(*worker) && utils.IsMountPointReady(ctx, *worker, common.MountPoint)
 	if !isReady {
 		if _, ok := worker.Annotations[common.AnnoWaitingDeleteWorker]; ok {
-			return false, nil
+			return false, nil, nil
 		}
-		return true, nil
+		return true, nil, nil
 	}
 
 	cacheBytes, err := utils.GetWorkerCacheBlocksBytes(ctx, *worker, common.MountPoint)
 	if err != nil {
 		log.Error(err, "failed to get worker cache blocks bytes", "worker", worker.Name)
-		return false, err
+		return false, nil, err
 	}
+	cacheBytesValue := int64(cacheBytes)
 
 	if cacheBytes <= 0 {
 		log.V(1).Info("redundant worker has no cache blocks, delete it", "worker", worker.Name)
-		return true, nil
+		return true, &cacheBytesValue, nil
 	}
 
 	if v, ok := worker.Annotations[common.AnnoWaitingDeleteWorker]; ok {
 		waitingAt := utils.MustParseTime(v)
 		if time.Since(waitingAt) > utils.GetWaitingDeletedMaxDuration(cg.Spec.WaitingDeletedMaxDuration) {
 			log.Info("redundant worker still has cache blocks, waiting for data migration timeout, delete it", "worker", worker.Name)
-			return true, nil
+			return true, &cacheBytesValue, nil
 		}
 		// already started migration
-		return false, nil
+		return false, &cacheBytesValue, nil
 	}
 
 	if utils.WorkerSupportsDecommission(*worker) {
 		log.V(1).Info("redundant worker has cache blocks, recreate with decommission", "worker", worker.Name, "cacheBytes", cacheBytes)
 		if err := r.deleteCacheGroupWorker(ctx, worker, true); err != nil {
-			return false, err
+			return false, nil, err
 		}
 		builder.UpdateWorkerDecommission(worker)
 		worker.ResourceVersion = ""
 		worker.Annotations[common.AnnoWaitingDeleteWorker] = time.Now().Format(time.RFC3339)
 		if err := r.Create(ctx, worker); err != nil {
-			return false, err
+			return false, nil, err
 		}
-		return false, nil
+		return false, &cacheBytesValue, nil
 	}
 
 	log.V(1).Info("redundant worker has cache blocks, recreate to set group-weight to 0", "worker", worker.Name, "cacheBytes", cacheBytes)
 	if err := r.deleteCacheGroupWorker(ctx, worker, true); err != nil {
-		return false, err
+		return false, nil, err
 	}
 	builder.UpdateWorkerGroupWeight(worker, 0)
 	worker.ResourceVersion = ""
 	worker.Annotations[common.AnnoWaitingDeleteWorker] = time.Now().Format(time.RFC3339)
 	if err := r.Create(ctx, worker); err != nil {
-		return false, err
+		return false, nil, err
 	}
-	return false, err
+	return false, &cacheBytesValue, nil
 }
 
-const minBackupWorkerDuration = time.Second
+const (
+	minBackupWorkerDuration                    = time.Second
+	autoBackupWorkerRebalanceGracePeriod       = 10 * time.Minute
+	autoBackupWorkerReceiveStatsSampleInterval = time.Minute
+	autoBackupWorkerReceiveTrafficQuietPeriod  = 5 * time.Minute
+)
 
-func (r *CacheGroupReconciler) shouldAddGroupBackupOrNot(cg *juicefsiov1.CacheGroup, actual *corev1.Pod, expectState juicefsiov1.CacheGroupWorkerTemplate) bool {
-	if utils.CompareEEImageVersion(expectState.Image, "5.1.0") < 0 {
-		return false
+func (r *CacheGroupReconciler) observeAutoBackupWorkers(
+	ctx context.Context,
+	cg *juicefsiov1.CacheGroup,
+	expectStates map[string]juicefsiov1.CacheGroupWorkerTemplate,
+	actualWorkers map[string]corev1.Pod,
+	currentStatuses map[string]juicefsiov1.CacheGroupBackupWorkerStatus,
+) ([]juicefsiov1.CacheGroupBackupWorkerStatus, int) {
+	if cg.Spec.BackupDuration != nil {
+		return nil, 0
 	}
-	duration := utils.GetBackupWorkerDuration(cg.Spec.BackupDuration)
-	if duration <= minBackupWorkerDuration {
+
+	log := log.FromContext(ctx)
+	now := time.Now()
+	statuses := make([]juicefsiov1.CacheGroupBackupWorkerStatus, 0, len(currentStatuses))
+	statsFailures := 0
+	for node := range expectStates {
+		worker, ok := actualWorkers[r.getPodName(cg, node)]
+		if !ok {
+			continue
+		}
+		backupAtValue, ok := worker.Annotations[common.AnnoBackupWorker]
+		if !ok {
+			continue
+		}
+		current, hasCurrent := currentStatuses[worker.Name]
+		hasCurrent = hasCurrent && current.PodUID == worker.UID
+		if hasCurrent && current.StableAt != nil {
+			statuses = append(statuses, current)
+			continue
+		}
+		if now.Sub(utils.MustParseTime(backupAtValue)) < autoBackupWorkerRebalanceGracePeriod {
+			continue
+		}
+		if hasCurrent && now.Sub(current.LastSampleTime.Time) < autoBackupWorkerReceiveStatsSampleInterval {
+			statuses = append(statuses, current)
+			continue
+		}
+
+		receiveBytes, err := utils.GetWorkerRemoteCacheReceiveBytes(ctx, worker, common.MountPoint)
+		if err != nil {
+			log.Error(err, "failed to observe group-backup receive traffic", "worker", worker.Name)
+			statsFailures++
+			if hasCurrent {
+				statuses = append(statuses, current)
+			}
+			continue
+		}
+
+		if !hasCurrent {
+			sampledAt := metav1.NewTime(now)
+			statuses = append(statuses, juicefsiov1.CacheGroupBackupWorkerStatus{
+				Name:           worker.Name,
+				PodUID:         worker.UID,
+				ReceiveBytes:   receiveBytes,
+				LastSampleTime: sampledAt,
+				LastChangedAt:  sampledAt,
+			})
+			continue
+		}
+		sampledAt := metav1.NewTime(now)
+		if current.ReceiveBytes != receiveBytes {
+			current.ReceiveBytes = receiveBytes
+			current.LastChangedAt = sampledAt
+			current.StableAt = nil
+		} else if now.Sub(current.LastChangedAt.Time) >= autoBackupWorkerReceiveTrafficQuietPeriod {
+			stableAt := metav1.NewTime(now)
+			current.StableAt = &stableAt
+		}
+		current.LastSampleTime = sampledAt
+		statuses = append(statuses, current)
+	}
+	sort.Slice(statuses, func(i, j int) bool { return statuses[i].Name < statuses[j].Name })
+	return statuses, statsFailures
+}
+
+func shouldAddGroupBackupOrNot(
+	cg *juicefsiov1.CacheGroup,
+	actual *corev1.Pod,
+	expectState juicefsiov1.CacheGroupWorkerTemplate,
+	backupStatus juicefsiov1.CacheGroupBackupWorkerStatus,
+) bool {
+	if utils.CompareEEImageVersion(expectState.Image, "5.1.0") < 0 {
 		return false
 	}
 	if lo.Contains(expectState.Opts, "group-backup") {
 		return false
+	}
+	auto := cg.Spec.BackupDuration == nil
+	var duration time.Duration
+	if !auto {
+		duration = cg.Spec.BackupDuration.Duration
+		if duration <= minBackupWorkerDuration {
+			return false
+		}
 	}
 
 	// If it is a new node and there are already 1 or more worker nodes
@@ -553,39 +701,70 @@ func (r *CacheGroupReconciler) shouldAddGroupBackupOrNot(cg *juicefsiov1.CacheGr
 	if actual == nil {
 		return cg.Status.ReadyWorker >= 1
 	}
-	// If this node has been added group-backup for x(default 10m) minutes
-	// then this node is a normal worker.
-	if v, ok := actual.Annotations[common.AnnoBackupWorker]; ok {
-		backupAt := utils.MustParseTime(v)
-		return time.Since(backupAt) < duration
+	backupAtValue, ok := actual.Annotations[common.AnnoBackupWorker]
+	if !ok {
+		return false
 	}
-	return false
+	if !auto {
+		return time.Since(utils.MustParseTime(backupAtValue)) < duration
+	}
+	return backupStatus.PodUID != actual.UID || backupStatus.StableAt == nil
 }
 
 func (r *CacheGroupReconciler) calculateStatus(
 	cg *juicefsiov1.CacheGroup,
 	fileSystem string,
 	expectStates map[string]juicefsiov1.CacheGroupWorkerTemplate,
-	actualWorks []corev1.Pod) juicefsiov1.CacheGroupStatus {
+	actualWorks []corev1.Pod,
+	backupWorkerStatuses []juicefsiov1.CacheGroupBackupWorkerStatus,
+	decommissioningWorkerStatuses []juicefsiov1.CacheGroupDecommissioningWorkerStatus,
+	statsFailures int,
+) juicefsiov1.CacheGroupStatus {
 	newStatus := cg.Status
+	newStatus.Conditions = append([]metav1.Condition(nil), cg.Status.Conditions...)
+	newStatus.BackupWorkers = backupWorkerStatuses
+	newStatus.DecommissioningWorkers = decommissioningWorkerStatuses
+	newStatus.WaitingDeletedWorker = int32(len(decommissioningWorkerStatuses))
 	newStatus.FileSystem = fileSystem
+	setWorkersReadyCondition := func(status metav1.ConditionStatus, reason, message string) {
+		apimeta.SetStatusCondition(&newStatus.Conditions, metav1.Condition{
+			Type:               juicefsiov1.CacheGroupConditionTypeWorkersReady,
+			Status:             status,
+			ObservedGeneration: cg.Generation,
+			LastTransitionTime: metav1.Now(),
+			Reason:             reason,
+			Message:            message,
+		})
+	}
+	setGroupBackupProgressingCondition := func(reason, message string) {
+		apimeta.SetStatusCondition(&newStatus.Conditions, metav1.Condition{
+			Type:               juicefsiov1.CacheGroupConditionTypeGroupBackupProgressing,
+			Status:             metav1.ConditionTrue,
+			ObservedGeneration: cg.Generation,
+			LastTransitionTime: metav1.Now(),
+			Reason:             reason,
+			Message:            message,
+		})
+	}
 	if len(expectStates) == 0 {
 		newStatus.ReadyStr = "-"
 		newStatus.ReadyWorker = 0
 		newStatus.ExpectWorker = 0
 		newStatus.BackUpWorker = 0
 		newStatus.Phase = juicefsiov1.CacheGroupPhaseWaiting
+		apimeta.RemoveStatusCondition(&newStatus.Conditions, juicefsiov1.CacheGroupConditionTypeGroupBackupProgressing)
+		setWorkersReadyCondition(
+			metav1.ConditionFalse,
+			juicefsiov1.CacheGroupConditionReasonNoWorkersExpected,
+			"No workers are expected",
+		)
 		return newStatus
 	}
 	backupWorker := 0
-	waitingDeletedWorker := 0
 	readyWorker := 0
 	for _, worker := range actualWorks {
 		if _, ok := worker.Annotations[common.AnnoBackupWorker]; ok {
 			backupWorker++
-		}
-		if _, ok := worker.Annotations[common.AnnoWaitingDeleteWorker]; ok {
-			waitingDeletedWorker++
 		}
 		if utils.IsPodReady(worker) {
 			readyWorker++
@@ -594,7 +773,6 @@ func (r *CacheGroupReconciler) calculateStatus(
 	newStatus.ReadyWorker = int32(readyWorker)
 	newStatus.ExpectWorker = int32(len(expectStates))
 	newStatus.BackUpWorker = int32(backupWorker)
-	newStatus.WaitingDeletedWorker = int32(waitingDeletedWorker)
 	newStatus.ReadyStr = fmt.Sprintf("%d/%d", newStatus.ReadyWorker, newStatus.ExpectWorker)
 	if newStatus.ExpectWorker != newStatus.ReadyWorker {
 		newStatus.Phase = juicefsiov1.CacheGroupPhaseProgressing
@@ -602,6 +780,63 @@ func (r *CacheGroupReconciler) calculateStatus(
 		newStatus.Phase = juicefsiov1.CacheGroupPhaseReady
 	}
 	newStatus.CacheGroup = builder.GenCacheGroupName(cg)
+	if newStatus.ReadyWorker == newStatus.ExpectWorker {
+		setWorkersReadyCondition(
+			metav1.ConditionTrue,
+			juicefsiov1.CacheGroupConditionReasonAllWorkersReady,
+			"All workers are ready",
+		)
+	} else {
+		setWorkersReadyCondition(
+			metav1.ConditionFalse,
+			juicefsiov1.CacheGroupConditionReasonWorkersNotReady,
+			fmt.Sprintf("%d of %d workers are ready", newStatus.ReadyWorker, newStatus.ExpectWorker),
+		)
+	}
+	if backupWorker == 0 {
+		apimeta.RemoveStatusCondition(&newStatus.Conditions, juicefsiov1.CacheGroupConditionTypeGroupBackupProgressing)
+	} else if cg.Spec.BackupDuration != nil {
+		setGroupBackupProgressingCondition(
+			juicefsiov1.CacheGroupConditionReasonWaitingForBackupDuration,
+			"Waiting for the configured group-backup duration to elapse",
+		)
+	} else {
+		waitingForMinimumAge := 0
+		for _, worker := range actualWorks {
+			backupAtValue, ok := worker.Annotations[common.AnnoBackupWorker]
+			if ok && time.Since(utils.MustParseTime(backupAtValue)) < autoBackupWorkerRebalanceGracePeriod {
+				waitingForMinimumAge++
+			}
+		}
+		stableWorkers := lo.CountBy(backupWorkerStatuses, func(status juicefsiov1.CacheGroupBackupWorkerStatus) bool {
+			return status.StableAt != nil
+		})
+		receivedBytes := int64(0)
+		for _, status := range backupWorkerStatuses {
+			receivedBytes += status.ReceiveBytes
+		}
+		if waitingForMinimumAge > 0 {
+			setGroupBackupProgressingCondition(
+				juicefsiov1.CacheGroupConditionReasonWaitingForRebalance,
+				"Waiting for the cache group topology to stabilize before observing receive traffic",
+			)
+		} else if statsFailures > 0 {
+			setGroupBackupProgressingCondition(
+				juicefsiov1.CacheGroupConditionReasonReceiveStatsUnavailable,
+				"Receive traffic stats are unavailable; waiting to retry",
+			)
+		} else if stableWorkers < backupWorker {
+			setGroupBackupProgressingCondition(
+				juicefsiov1.CacheGroupConditionReasonRebalanceInProgress,
+				fmt.Sprintf("Rebalancing cache data (received %s)", utils.FormatBytes(receivedBytes)),
+			)
+		} else {
+			setGroupBackupProgressingCondition(
+				juicefsiov1.CacheGroupConditionReasonRebalanceSettled,
+				"Receive traffic has settled; waiting to remove group-backup",
+			)
+		}
+	}
 	return newStatus
 }
 

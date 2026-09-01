@@ -20,6 +20,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -184,8 +185,8 @@ type CacheGroupSpec struct {
 	// +kubebuilder:validation:Optional
 	Replicas *int32               `json:"replicas,omitempty"`
 	Worker   CacheGroupWorkerSpec `json:"worker,omitempty"`
-	// Duration for new node to join cluster with group-backup option
-	// Default is 10 minutes
+	// Duration for new node to join cluster with group-backup option.
+	// If omitted, group-backup is removed after receive traffic stabilizes.
 	// +optional
 	BackupDuration *metav1.Duration `json:"backupDuration,omitempty"`
 	// Maximum time to wait for data migration when deleting
@@ -207,19 +208,52 @@ const (
 	CacheGroupPhaseReady       CacheGroupPhase = "Ready"
 )
 
-// CacheGroupCondition defines the observed state of CacheGroup
-type CacheGroupCondition struct {
-	Type               string      `json:"type"`
-	Status             string      `json:"status"`
-	LastTransitionTime metav1.Time `json:"lastTransitionTime"`
+const (
+	CacheGroupConditionTypeWorkersReady           = "WorkersReady"
+	CacheGroupConditionTypeGroupBackupProgressing = "GroupBackupProgressing"
+)
+
+const (
+	CacheGroupConditionReasonNoWorkersExpected        = "NoWorkersExpected"
+	CacheGroupConditionReasonAllWorkersReady          = "AllWorkersReady"
+	CacheGroupConditionReasonWorkersNotReady          = "WorkersNotReady"
+	CacheGroupConditionReasonWaitingForBackupDuration = "WaitingForBackupDuration"
+	CacheGroupConditionReasonWaitingForRebalance      = "WaitingForRebalance"
+	CacheGroupConditionReasonReceiveStatsUnavailable  = "ReceiveStatsUnavailable"
+	CacheGroupConditionReasonRebalanceInProgress      = "RebalanceInProgress"
+	CacheGroupConditionReasonRebalanceSettled         = "RebalanceSettled"
+)
+
+type CacheGroupBackupWorkerStatus struct {
+	Name           string       `json:"name"`
+	PodUID         types.UID    `json:"podUID"`
+	ReceiveBytes   int64        `json:"receiveBytes"`
+	LastSampleTime metav1.Time  `json:"lastSampleTime"`
+	LastChangedAt  metav1.Time  `json:"lastChangedAt"`
+	StableAt       *metav1.Time `json:"stableAt,omitempty"`
+}
+
+type CacheGroupDecommissioningWorkerStatus struct {
+	Name       string      `json:"name"`
+	NodeName   string      `json:"nodeName"`
+	StartedAt  metav1.Time `json:"startedAt"`
+	CacheBytes *int64      `json:"cacheBytes,omitempty"`
 }
 
 // CacheGroupStatus defines the observed state of CacheGroup
 type CacheGroupStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
-	Phase      CacheGroupPhase       `json:"phase,omitempty"`
-	Conditions []CacheGroupCondition `json:"conditions,omitempty"`
+	Phase CacheGroupPhase `json:"phase,omitempty"`
+	// +listType=map
+	// +listMapKey=type
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
+	// +listType=map
+	// +listMapKey=name
+	BackupWorkers []CacheGroupBackupWorkerStatus `json:"backupWorkers,omitempty"`
+	// +listType=map
+	// +listMapKey=name
+	DecommissioningWorkers []CacheGroupDecommissioningWorkerStatus `json:"decommissioningWorkers,omitempty"`
 
 	FileSystem           string `json:"fileSystem,omitempty"`
 	ReadyWorker          int32  `json:"readyWorker,omitempty"`

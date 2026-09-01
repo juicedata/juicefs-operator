@@ -17,6 +17,7 @@ package utils
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -123,6 +124,36 @@ func GetWorkerCacheBlocksBytes(ctx context.Context, pod corev1.Pod, mountPoint s
 	}
 
 	return cacheBytes, nil
+}
+
+func GetWorkerRemoteCacheReceiveBytes(ctx context.Context, pod corev1.Pod, mountPoint string) (int64, error) {
+	if !IsPodReady(pod) {
+		return 0, fmt.Errorf("pod %s is not ready yet", pod.Name)
+	}
+	log := log.FromContext(ctx).WithName("getWorkerRemoteCacheReceiveBytes").WithValues("worker", pod.Name)
+
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	cmd := []string{"sh", "-c", fmt.Sprintf("cat %s/.stats", mountPoint)}
+
+	stdout, stderr, err := ExecInPod(ctx, pod.Namespace, pod.Name, common.WorkerContainerName, cmd)
+	if err != nil {
+		log.Error(err, "failed to get remote cache receive bytes", "stderr", strings.Trim(stderr, "\n"))
+		return 0, err
+	}
+
+	const prefix = "remotecache.receiveBytes:"
+	for _, line := range strings.Split(stdout, "\n") {
+		if strings.HasPrefix(line, prefix) {
+			receiveBytes, err := strconv.ParseInt(strings.TrimSpace(strings.TrimPrefix(line, prefix)), 10, 64)
+			if err != nil {
+				return 0, fmt.Errorf("failed to parse remote cache receive bytes: %w", err)
+			}
+			return receiveBytes, nil
+		}
+	}
+
+	return 0, fmt.Errorf("remote cache receive bytes not found in stats")
 }
 
 func WorkerSupportsDecommission(pod corev1.Pod) bool {

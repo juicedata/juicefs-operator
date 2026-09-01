@@ -100,8 +100,7 @@ var (
 		},
 	}
 
-	DefaultBackupWorkerDuration = 1 * time.Hour
-	DefaultWaitingMaxDuration   = 1 * time.Hour
+	DefaultWaitingMaxDuration = 1 * time.Hour
 
 	MaxSyncConcurrentReconciles   = 10
 	MaxWarmupConcurrentReconciles = 10

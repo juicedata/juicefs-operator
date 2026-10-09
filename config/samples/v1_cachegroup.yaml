@@ -22,7 +22,8 @@ spec:
   # replicas: 10
   secretRef:
     name: juicefs-secret
-  # Duration for new node to join cluster with group-backup option
+  # Duration for a new node to join with commission (EE >= 5.4.3) or group-backup; default: 1h.
+  # Commission also requires metadata service >= 5.4.3.
   backupDuration: "10m"
   # Maximum time to wait for data migration when deleting
   waitingDeletedMaxDuration: "1h"

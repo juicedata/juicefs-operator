@@ -75,6 +75,7 @@ const (
 
 	MinSupportedWarmupStatsVersion  = "5.2.11"
 	MinSupportedDecommissionVersion = "5.4.0"
+	MinSupportedCommissionVersion   = "5.4.3"
 )
 
 var (

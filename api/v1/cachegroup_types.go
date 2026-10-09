@@ -184,8 +184,9 @@ type CacheGroupSpec struct {
 	// +kubebuilder:validation:Optional
 	Replicas *int32               `json:"replicas,omitempty"`
 	Worker   CacheGroupWorkerSpec `json:"worker,omitempty"`
-	// Duration for new node to join cluster with group-backup option
-	// Default is 10 minutes
+	// Duration for a new node to join with commission (EE >= 5.4.3) or group-backup.
+	// Commission also requires metadata service >= 5.4.3.
+	// Default is 1 hour.
 	// +optional
 	BackupDuration *metav1.Duration `json:"backupDuration,omitempty"`
 	// Maximum time to wait for data migration when deleting

@@ -9,7 +9,7 @@ metadata:
 spec:
   containers:
   - name: minio
-    image: quay.io/minio/minio:latest
+    image: juicedata/minio:latest
     command:
     - /bin/bash
     - -c

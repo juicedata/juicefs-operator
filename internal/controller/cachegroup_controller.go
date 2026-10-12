@@ -161,8 +161,8 @@ func (r *CacheGroupReconciler) sync(ctx context.Context, cg *juicefsiov1.CacheGr
 		if v, ok := actualWorkerMap[r.getPodName(cg, node)]; ok {
 			actualState = &v
 		}
-		groupBackUp := r.shouldAddGroupBackupOrNot(cg, actualState, expectState)
-		podBuilder := builder.NewPodBuilder(cg, secret, node, expectState, groupBackUp)
+		joining := r.shouldAddJoinOption(cg, actualState, expectState)
+		podBuilder := builder.NewPodBuilder(cg, secret, node, expectState, joining)
 		expectWorker := podBuilder.NewCacheGroupWorker(ctx, false)
 		if err := r.ensurePVCsForWorker(ctx, cg, expectWorker.Name, expectState); err != nil {
 			return fmt.Errorf("failed to ensure PVCs for worker %s: %w", expectWorker.Name, err)
@@ -185,8 +185,8 @@ func (r *CacheGroupReconciler) sync(ctx context.Context, cg *juicefsiov1.CacheGr
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				if groupBackUp {
-					log.V(1).Info("new worker added, add group-backup option", "worker", expectWorker.Name)
+				if joining {
+					log.V(1).Info("new worker added, enable temporary join option", "worker", expectWorker.Name)
 				}
 				if err := r.createOrUpdateWorker(ctx, actualState, expectWorker); err != nil {
 					log.Error(err, "failed to create or update worker", "worker", expectWorker.Name)
@@ -536,7 +536,7 @@ func (r *CacheGroupReconciler) gracefulShutdownWorker(
 
 const minBackupWorkerDuration = time.Second
 
-func (r *CacheGroupReconciler) shouldAddGroupBackupOrNot(cg *juicefsiov1.CacheGroup, actual *corev1.Pod, expectState juicefsiov1.CacheGroupWorkerTemplate) bool {
+func (r *CacheGroupReconciler) shouldAddJoinOption(cg *juicefsiov1.CacheGroup, actual *corev1.Pod, expectState juicefsiov1.CacheGroupWorkerTemplate) bool {
 	if utils.CompareEEImageVersion(expectState.Image, "5.1.0") < 0 {
 		return false
 	}
@@ -544,17 +544,19 @@ func (r *CacheGroupReconciler) shouldAddGroupBackupOrNot(cg *juicefsiov1.CacheGr
 	if duration <= minBackupWorkerDuration {
 		return false
 	}
-	if lo.Contains(expectState.Opts, "group-backup") {
+	joinOption := "group-backup"
+	if utils.CompareEEImageVersion(expectState.Image, common.MinSupportedCommissionVersion) >= 0 {
+		joinOption = "commission"
+	}
+	if lo.Contains(expectState.Opts, joinOption) || lo.Contains(expectState.Opts, "decommission") {
 		return false
 	}
 
-	// If it is a new node and there are already 1 or more worker nodes
-	// then this node should add group-backup.
+	// Enable the temporary join option only when joining an existing cache group.
 	if actual == nil {
 		return cg.Status.ReadyWorker >= 1
 	}
-	// If this node has been added group-backup for x(default 10m) minutes
-	// then this node is a normal worker.
+	// Keep the join option until backupDuration expires.
 	if v, ok := actual.Annotations[common.AnnoBackupWorker]; ok {
 		backupAt := utils.MustParseTime(v)
 		return time.Since(backupAt) < duration

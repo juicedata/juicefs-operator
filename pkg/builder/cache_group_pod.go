@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"maps"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -94,25 +95,25 @@ type PodBuilder struct {
 	spec                 juicefsiov1.CacheGroupWorkerTemplate
 	secretData           map[string]string
 	initConfig           string
-	groupBackup          bool
+	joining              bool
 	cacheDirsInContainer []string
 	cacheDeviceMountCmds []string
 }
 
-func NewPodBuilder(cg *juicefsiov1.CacheGroup, secret *corev1.Secret, node string, spec juicefsiov1.CacheGroupWorkerTemplate, groupBackup bool) *PodBuilder {
+func NewPodBuilder(cg *juicefsiov1.CacheGroup, secret *corev1.Secret, node string, spec juicefsiov1.CacheGroupWorkerTemplate, joining bool) *PodBuilder {
 	secretData := utils.ParseSecret(secret)
 	initconfig := ""
 	if v, ok := secretData["initconfig"]; ok && v != "" {
 		initconfig = v
 	}
 	return &PodBuilder{
-		secretData:  secretData,
-		volName:     strings.TrimSpace(secretData["name"]),
-		cg:          cg,
-		node:        node,
-		spec:        spec,
-		initConfig:  initconfig,
-		groupBackup: groupBackup,
+		secretData: secretData,
+		volName:    strings.TrimSpace(secretData["name"]),
+		cg:         cg,
+		node:       node,
+		spec:       spec,
+		initConfig: initconfig,
+		joining:    joining,
 	}
 }
 
@@ -475,8 +476,12 @@ func (p *PodBuilder) genCommands(ctx context.Context) []string {
 		}
 	}
 	opts = append(opts, "cache-dir="+strings.Join(p.cacheDirsInContainer, ":"))
-	if p.groupBackup {
-		opts = append(opts, "group-backup")
+	if p.joining {
+		if utils.CompareEEImageVersion(p.spec.Image, common.MinSupportedCommissionVersion) >= 0 {
+			opts = append(opts, "commission")
+		} else {
+			opts = append(opts, "group-backup")
+		}
 	}
 	mountCmds = append(mountCmds, "-o", strings.Join(opts, ","))
 	commandLines := []string{strings.Join(authCmds, " ")}
@@ -599,7 +604,7 @@ func (p *PodBuilder) NewCacheGroupWorker(ctx context.Context, dryrun bool) *core
 	// The following fields do not participate in the hash calculation.
 	worker.Labels[common.LabelManagedBy] = common.LabelManagedByValue
 	worker.Annotations[common.LabelWorkerHash] = hash
-	if p.groupBackup {
+	if p.joining {
 		backupAt := time.Now().Format(time.RFC3339)
 		worker.Annotations[common.AnnoBackupWorker] = backupAt
 	}
@@ -697,9 +702,16 @@ func UpdateWorkerGroupWeight(worker *corev1.Pod, weight int) {
 }
 
 func UpdateWorkerDecommission(worker *corev1.Pod) {
-	cmd := worker.Spec.Containers[0].Command[2]
+	commandLines := strings.Split(worker.Spec.Containers[0].Command[2], "\n")
+	opts := strings.Split(commandLines[len(commandLines)-1], ",")
+	opts = slices.DeleteFunc(opts, func(opt string) bool {
+		name, _, _ := strings.Cut(opt, "=")
+		return name == "commission"
+	})
+	cmd := strings.Join(opts, ",")
 	if !strings.Contains(cmd, ",decommission") {
 		cmd += ",decommission"
 	}
-	worker.Spec.Containers[0].Command[2] = cmd
+	commandLines[len(commandLines)-1] = cmd
+	worker.Spec.Containers[0].Command[2] = strings.Join(commandLines, "\n")
 }

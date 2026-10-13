@@ -48,6 +48,30 @@ rules:
   verbs:
   - get
 - apiGroups:
+  - ""
+  resources:
+  - services
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
   - batch
   resources:
   - cronjobs
@@ -75,6 +99,7 @@ rules:
   - cronsyncs
   - syncs
   - warmups
+  - webdavs
   verbs:
   - create
   - delete
@@ -90,6 +115,7 @@ rules:
   - cronsyncs/finalizers
   - syncs/finalizers
   - warmups/finalizers
+  - webdavs/finalizers
   verbs:
   - update
 - apiGroups:
@@ -99,6 +125,7 @@ rules:
   - cronsyncs/status
   - syncs/status
   - warmups/status
+  - webdavs/status
   verbs:
   - get
   - patch

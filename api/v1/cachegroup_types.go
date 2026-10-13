@@ -215,12 +215,22 @@ type CacheGroupCondition struct {
 	LastTransitionTime metav1.Time `json:"lastTransitionTime"`
 }
 
+type CacheGroupWorkerStats struct {
+	Name          string `json:"name"`
+	CacheBytes    *int64 `json:"cacheBytes,omitempty"`
+	TransferBytes *int64 `json:"transferBytes,omitempty"`
+	ReceiveBytes  *int64 `json:"receiveBytes,omitempty"`
+}
+
 // CacheGroupStatus defines the observed state of CacheGroup
 type CacheGroupStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 	Phase      CacheGroupPhase       `json:"phase,omitempty"`
 	Conditions []CacheGroupCondition `json:"conditions,omitempty"`
+	// +listType=map
+	// +listMapKey=name
+	Stats []CacheGroupWorkerStats `json:"stats,omitempty"`
 
 	FileSystem           string `json:"fileSystem,omitempty"`
 	ReadyWorker          int32  `json:"readyWorker,omitempty"`

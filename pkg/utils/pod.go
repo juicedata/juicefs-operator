@@ -17,9 +17,11 @@ package utils
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
+	juicefsiov1 "github.com/juicedata/juicefs-operator/api/v1"
 	"github.com/juicedata/juicefs-operator/pkg/common"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -123,6 +125,41 @@ func GetWorkerCacheBlocksBytes(ctx context.Context, pod corev1.Pod, mountPoint s
 	}
 
 	return cacheBytes, nil
+}
+
+func GetWorkerStats(ctx context.Context, pod corev1.Pod, mountPoint string) (juicefsiov1.CacheGroupWorkerStats, error) {
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	stdout, stderr, err := ExecInPod(ctx, pod.Namespace, pod.Name, common.WorkerContainerName, []string{"cat", mountPoint + "/.stats"})
+	if err != nil {
+		return juicefsiov1.CacheGroupWorkerStats{}, fmt.Errorf("failed to read worker stats: %w (stderr: %s)", err, strings.TrimSpace(stderr))
+	}
+
+	stats := juicefsiov1.CacheGroupWorkerStats{
+		Name: pod.Name,
+	}
+	for _, line := range strings.Split(stdout, "\n") {
+		key, value, _ := strings.Cut(line, ":")
+		if key != "blockcache.bytes" && key != "blockcache.transferBytes" && key != "remotecache.receiveBytes" {
+			continue
+		}
+		bytes, err := strconv.ParseInt(strings.TrimSpace(value), 10, 64)
+		if err != nil {
+			return juicefsiov1.CacheGroupWorkerStats{}, fmt.Errorf("failed to parse %s: %w", key, err)
+		}
+		switch key {
+		case "blockcache.bytes":
+			stats.CacheBytes = &bytes
+		case "blockcache.transferBytes":
+			stats.TransferBytes = &bytes
+		case "remotecache.receiveBytes":
+			stats.ReceiveBytes = &bytes
+		}
+	}
+	if stats.CacheBytes == nil && stats.TransferBytes == nil && stats.ReceiveBytes == nil {
+		return juicefsiov1.CacheGroupWorkerStats{}, fmt.Errorf("cache metrics not found in worker stats")
+	}
+	return stats, nil
 }
 
 func WorkerSupportsDecommission(pod corev1.Pod) bool {

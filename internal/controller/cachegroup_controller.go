@@ -28,10 +28,13 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
+	ctrlbuilder "sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	juicefsiov1 "github.com/juicedata/juicefs-operator/api/v1"
 	"github.com/juicedata/juicefs-operator/pkg/builder"
@@ -225,8 +228,9 @@ func (r *CacheGroupReconciler) sync(ctx context.Context, cg *juicefsiov1.CacheGr
 	// calculate status
 	newStatus := r.calculateStatus(cg, strings.TrimSpace(string(secret.Data["name"])), expectStates, actualWorks)
 	if !reflect.DeepEqual(cg.Status, newStatus) {
+		base := cg.DeepCopy()
 		cg.Status = newStatus
-		return utils.IgnoreConflict(r.Status().Update(ctx, cg))
+		return utils.IgnoreConflict(r.Status().Patch(ctx, cg, client.MergeFrom(base)))
 	}
 	return nil
 }
@@ -789,7 +793,16 @@ func (r *CacheGroupReconciler) deletePVCForCacheGroup(ctx context.Context, cg *j
 // SetupWithManager sets up the controller with the Manager.
 func (r *CacheGroupReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&juicefsiov1.CacheGroup{}).
+		For(&juicefsiov1.CacheGroup{}, ctrlbuilder.WithPredicates(predicate.Funcs{
+			UpdateFunc: func(e event.UpdateEvent) bool {
+				oldCG := e.ObjectOld.(*juicefsiov1.CacheGroup).DeepCopy()
+				newCG := e.ObjectNew.(*juicefsiov1.CacheGroup).DeepCopy()
+				oldCG.Status.Stats, newCG.Status.Stats = nil, nil
+				oldCG.ResourceVersion, newCG.ResourceVersion = "", ""
+				oldCG.ManagedFields, newCG.ManagedFields = nil, nil
+				return !reflect.DeepEqual(oldCG, newCG)
+			},
+		})).
 		Owns(&corev1.Pod{}).
 		Owns(&corev1.PersistentVolumeClaim{}).
 		WithOptions(controller.Options{

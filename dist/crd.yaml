@@ -4326,6 +4326,27 @@ spec:
               readyWorker:
                 format: int32
                 type: integer
+              stats:
+                items:
+                  properties:
+                    cacheBytes:
+                      format: int64
+                      type: integer
+                    name:
+                      type: string
+                    receiveBytes:
+                      format: int64
+                      type: integer
+                    transferBytes:
+                      format: int64
+                      type: integer
+                  required:
+                  - name
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
               waitingDeletedWorker:
                 format: int32
                 type: integer

@@ -101,34 +101,58 @@ func TestWorkerCounterIdle(t *testing.T) {
 func TestShouldAddJoinOptionStopsWhenReceiveRateIdle(t *testing.T) {
 	now := time.Now().Truncate(time.Second)
 	receiveBytes := int64(100)
-	cg := &juicefsiov1.CacheGroup{
-		Spec: juicefsiov1.CacheGroupSpec{BackupDuration: &metav1.Duration{Duration: time.Hour}},
-	}
 	expectState := juicefsiov1.CacheGroupWorkerTemplate{Image: "juicedata/mount:ee-5.4.3"}
+	idle, busy := common.CacheGroupRebalanceIdleRate-1, common.CacheGroupRebalanceIdleRate
 
 	tests := []struct {
-		name        string
-		backupAgo   time.Duration
-		rate        int64
-		wantJoining bool
+		name          string
+		backupAgo     time.Duration
+		startAgo      time.Duration // defaults to backupAgo
+		otherStartAgo time.Duration // another worker of the group, if set
+		delayEnv      string
+		rate          int64
+		wantJoining   bool
 	}{
-		{name: "within the minimum join duration", backupAgo: 5 * time.Minute, rate: 0, wantJoining: true},
-		{name: "receive rate still high", backupAgo: 15 * time.Minute, rate: common.CacheGroupRebalanceIdleRate, wantJoining: true},
-		{name: "receive rate idle", backupAgo: 15 * time.Minute, rate: common.CacheGroupRebalanceIdleRate - 1, wantJoining: false},
-		{name: "backup duration expired", backupAgo: 2 * time.Hour, rate: common.CacheGroupRebalanceIdleRate, wantJoining: false},
+		{name: "within the rebalance delay", backupAgo: 5 * time.Minute, rate: idle, wantJoining: true},
+		{name: "within the rebalance delay margin", backupAgo: 10*time.Minute + 30*time.Second, rate: idle, wantJoining: true},
+		{name: "receive rate still high", backupAgo: 15 * time.Minute, rate: busy, wantJoining: true},
+		{name: "receive rate idle", backupAgo: 15 * time.Minute, rate: idle},
+		{name: "process started late after pulling the image", backupAgo: 15 * time.Minute, startAgo: 8 * time.Minute, rate: idle, wantJoining: true},
+		{name: "another worker joined recently", backupAgo: 15 * time.Minute, otherStartAgo: 5 * time.Minute, rate: idle, wantJoining: true},
+		{name: "custom rebalance delay", backupAgo: 5 * time.Minute, delayEnv: "1m", rate: idle},
+		{name: "invalid rebalance delay falls back to default", backupAgo: 5 * time.Minute, delayEnv: "bad", rate: idle, wantJoining: true},
+		{name: "backup duration expired", backupAgo: 2 * time.Hour, rate: busy},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			worker := newLifecycleTestWorker(now)
 			worker.Annotations[common.AnnoBackupWorker] = now.Add(-tt.backupAgo).Format(time.RFC3339)
+			container := corev1.Container{Name: common.WorkerContainerName}
+			if tt.delayEnv != "" {
+				container.Env = []corev1.EnvVar{{Name: "JFS_CACHE_REBALANCE_DELAY", Value: tt.delayEnv}}
+			}
+			worker.Spec.Containers = []corev1.Container{container}
+			startAgo := tt.startAgo
+			if startAgo == 0 {
+				startAgo = tt.backupAgo
+			}
 			rate := tt.rate
 			sampleAt := metav1.NewTime(now)
 			stats := juicefsiov1.CacheGroupWorkerStats{
 				Name:           worker.Name,
-				StartTime:      &metav1.Time{Time: now.Add(-tt.backupAgo)},
+				StartTime:      &metav1.Time{Time: now.Add(-startAgo)},
 				ReceiveBytes:   &receiveBytes,
 				ReceiveRate:    &rate,
 				LastSampleTime: &sampleAt,
+			}
+			cg := &juicefsiov1.CacheGroup{
+				Spec:   juicefsiov1.CacheGroupSpec{BackupDuration: &metav1.Duration{Duration: time.Hour}},
+				Status: juicefsiov1.CacheGroupStatus{Stats: []juicefsiov1.CacheGroupWorkerStats{stats}},
+			}
+			if tt.otherStartAgo > 0 {
+				cg.Status.Stats = append(cg.Status.Stats, juicefsiov1.CacheGroupWorkerStats{
+					Name: "other", StartTime: &metav1.Time{Time: now.Add(-tt.otherStartAgo)},
+				})
 			}
 
 			r := &CacheGroupReconciler{}

@@ -148,8 +148,9 @@ func (r *CacheGroupReconciler) gracefulShutdownWorker(
 
 const (
 	minBackupWorkerDuration = time.Second
-	minJoinWorkerDuration   = 10 * time.Minute
 	minLeaveWorkerDuration  = 10 * time.Minute
+	defaultRebalanceDelay   = 10 * time.Minute
+	rebalanceDelayMargin    = time.Minute
 )
 
 func (r *CacheGroupReconciler) shouldAddJoinOption(ctx context.Context, cg *juicefsiov1.CacheGroup, actual *corev1.Pod, expectState juicefsiov1.CacheGroupWorkerTemplate, stats juicefsiov1.CacheGroupWorkerStats) bool {
@@ -178,17 +179,44 @@ func (r *CacheGroupReconciler) shouldAddJoinOption(ctx context.Context, cg *juic
 	}
 	log := log.FromContext(ctx)
 	backupAt := utils.MustParseTime(v)
-	progress := []any{"worker", actual.Name, "backupAt", v, "receiveBytes", stats.ReceiveBytes, "receiveRate", stats.ReceiveRate}
+	// Existing workers push data to the joining worker only after the group membership has been
+	// stable for the rebalance delay, and every worker (re)start changes the membership.
+	checkAfter := backupAt
+	for _, s := range cg.Status.Stats {
+		if s.StartTime != nil && s.StartTime.After(checkAfter) {
+			checkAfter = s.StartTime.Time
+		}
+	}
+	checkAfter = checkAfter.Add(workerRebalanceDelay(actual) + rebalanceDelayMargin)
+	progress := []any{"worker", actual.Name, "backupAt", v, "checkAfter", checkAfter.Format(time.RFC3339),
+		"receiveBytes", stats.ReceiveBytes, "receiveRate", stats.ReceiveRate}
 	if time.Since(backupAt) >= duration {
 		log.Info("worker join finished, backup duration expired, recreate it without join option", append(progress, "backupDuration", duration.String())...)
 		return false
 	}
-	if workerCounterIdle(actual, stats, stats.ReceiveBytes, stats.ReceiveRate, backupAt.Add(minJoinWorkerDuration), 0) {
+	if workerCounterIdle(actual, stats, stats.ReceiveBytes, stats.ReceiveRate, checkAfter, 0) {
 		log.Info("worker join finished, recreate it without join option", progress...)
 		return false
 	}
 	log.V(1).Info("waiting for joining worker to receive data", progress...)
 	return true
+}
+
+// workerRebalanceDelay returns the cache group rebalance delay of the worker, read the same way as juicefs.
+func workerRebalanceDelay(worker *corev1.Pod) time.Duration {
+	for _, c := range worker.Spec.Containers {
+		if c.Name != common.WorkerContainerName {
+			continue
+		}
+		for _, env := range c.Env {
+			if env.Name == "JFS_CACHE_REBALANCE_DELAY" {
+				if d, err := time.ParseDuration(env.Value); err == nil {
+					return d
+				}
+			}
+		}
+	}
+	return defaultRebalanceDelay
 }
 
 // workerCounterIdle reports whether a byte counter sampled after since moves slower than

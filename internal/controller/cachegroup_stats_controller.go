@@ -91,11 +91,13 @@ func (r *CacheGroupStatsReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		mu.Unlock()
 	})
 	sort.Slice(stats, func(i, j int) bool { return stats[i].Name < stats[j].Name })
-	cacheSize := totalCacheSize(stats)
-	if !reflect.DeepEqual(cg.Status.Stats, stats) || cg.Status.CacheSize != cacheSize {
+	cacheSize := sumBytes(stats, func(s juicefsiov1.CacheGroupWorkerStats) *int64 { return s.CacheBytes })
+	cacheCapacity := sumBytes(stats, func(s juicefsiov1.CacheGroupWorkerStats) *int64 { return s.CapacityBytes })
+	if !reflect.DeepEqual(cg.Status.Stats, stats) || cg.Status.CacheSize != cacheSize || cg.Status.CacheCapacity != cacheCapacity {
 		base := cg.DeepCopy()
 		cg.Status.Stats = stats
 		cg.Status.CacheSize = cacheSize
+		cg.Status.CacheCapacity = cacheCapacity
 		if err := r.Status().Patch(ctx, cg, client.MergeFrom(base)); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -126,13 +128,13 @@ func nextWorkerStats(previous, sample juicefsiov1.CacheGroupWorkerStats, contain
 	return sample
 }
 
-// totalCacheSize returns the total cache size of all workers, or "" if no worker reports it.
-func totalCacheSize(stats []juicefsiov1.CacheGroupWorkerStats) string {
+// sumBytes formats the sum of a counter over all workers, or returns "" if no worker reports it.
+func sumBytes(stats []juicefsiov1.CacheGroupWorkerStats, counter func(juicefsiov1.CacheGroupWorkerStats) *int64) string {
 	var total int64
 	reported := false
 	for _, s := range stats {
-		if s.CacheBytes != nil {
-			total += *s.CacheBytes
+		if v := counter(s); v != nil {
+			total += *v
 			reported = true
 		}
 	}

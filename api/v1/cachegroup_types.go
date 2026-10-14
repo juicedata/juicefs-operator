@@ -219,6 +219,7 @@ type CacheGroupWorkerStats struct {
 	Name          string `json:"name"`
 	ContainerID   string `json:"containerID,omitempty"`
 	CacheBytes    *int64 `json:"cacheBytes,omitempty"`
+	CapacityBytes *int64 `json:"capacityBytes,omitempty"`
 	TransferBytes *int64 `json:"transferBytes,omitempty"`
 	ReceiveBytes  *int64 `json:"receiveBytes,omitempty"`
 	// TransferRate and ReceiveRate are in bytes per second, averaged since the previous sample.
@@ -235,8 +236,9 @@ type CacheGroupStatus struct {
 	Conditions []CacheGroupCondition `json:"conditions,omitempty"`
 	// +listType=map
 	// +listMapKey=name
-	Stats     []CacheGroupWorkerStats `json:"stats,omitempty"`
-	CacheSize string                  `json:"cacheSize,omitempty"`
+	Stats         []CacheGroupWorkerStats `json:"stats,omitempty"`
+	CacheSize     string                  `json:"cacheSize,omitempty"`
+	CacheCapacity string                  `json:"cacheCapacity,omitempty"`
 
 	FileSystem           string `json:"fileSystem,omitempty"`
 	ReadyWorker          int32  `json:"readyWorker,omitempty"`
@@ -255,6 +257,7 @@ type CacheGroupStatus struct {
 // +kubebuilder:printcolumn:name="Back up",type="string",JSONPath=".status.backUpWorker"
 // +kubebuilder:printcolumn:name="Waiting Deleted",type="string",JSONPath=".status.waitingDeletedWorker"
 // +kubebuilder:printcolumn:name="Cache Size",type="string",JSONPath=".status.cacheSize"
+// +kubebuilder:printcolumn:name="Cache Capacity",type="string",JSONPath=".status.cacheCapacity"
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.readyStr"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 // CacheGroup is the Schema for the cachegroups API

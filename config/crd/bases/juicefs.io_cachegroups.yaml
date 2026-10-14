@@ -32,6 +32,9 @@ spec:
     - jsonPath: .status.cacheSize
       name: Cache Size
       type: string
+    - jsonPath: .status.cacheCapacity
+      name: Cache Capacity
+      type: string
     - jsonPath: .status.readyStr
       name: Ready
       type: string
@@ -4300,6 +4303,8 @@ spec:
               backUpWorker:
                 format: int32
                 type: integer
+              cacheCapacity:
+                type: string
               cacheGroup:
                 type: string
               cacheSize:
@@ -4336,6 +4341,9 @@ spec:
                 items:
                   properties:
                     cacheBytes:
+                      format: int64
+                      type: integer
+                    capacityBytes:
                       format: int64
                       type: integer
                     containerID:

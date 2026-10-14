@@ -72,13 +72,14 @@ func assertRate(t *testing.T, field string, got, want *int64) {
 	}
 }
 
-func TestTotalCacheSize(t *testing.T) {
+func TestSumBytes(t *testing.T) {
 	gib := int64(1 << 30)
-	if got := totalCacheSize([]juicefsiov1.CacheGroupWorkerStats{{Name: "a"}}); got != "" {
-		t.Fatalf("totalCacheSize() = %q, want empty when no worker reports cache bytes", got)
+	cacheBytes := func(s juicefsiov1.CacheGroupWorkerStats) *int64 { return s.CacheBytes }
+	if got := sumBytes([]juicefsiov1.CacheGroupWorkerStats{{Name: "a"}}, cacheBytes); got != "" {
+		t.Fatalf("sumBytes() = %q, want empty when no worker reports the counter", got)
 	}
 	stats := []juicefsiov1.CacheGroupWorkerStats{{Name: "a", CacheBytes: &gib}, {Name: "b"}, {Name: "c", CacheBytes: &gib}}
-	if got := totalCacheSize(stats); got != "2.0GiB" {
-		t.Fatalf("totalCacheSize() = %q, want 2.0GiB", got)
+	if got := sumBytes(stats, cacheBytes); got != "2.0GiB" {
+		t.Fatalf("sumBytes() = %q, want 2.0GiB", got)
 	}
 }

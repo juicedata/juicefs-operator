@@ -249,6 +249,11 @@ func (in *CacheGroupWorkerStats) DeepCopyInto(out *CacheGroupWorkerStats) {
 		*out = new(int64)
 		**out = **in
 	}
+	if in.CapacityBytes != nil {
+		in, out := &in.CapacityBytes, &out.CapacityBytes
+		*out = new(int64)
+		**out = **in
+	}
 	if in.TransferBytes != nil {
 		in, out := &in.TransferBytes, &out.TransferBytes
 		*out = new(int64)

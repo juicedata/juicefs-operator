@@ -59,6 +59,7 @@ func init() {
 	ControllerCmd.PersistentFlags().Float32VarP(&common.K8sClientQPS, "k8s-client-qps", "", 30, "QPS indicates the maximum QPS to the master from this client. Setting this to a negative value will disable client-side ratelimiting")
 	ControllerCmd.PersistentFlags().IntVarP(&common.K8sClientBurst, "k8s-client-burst", "", 20, "Maximum burst for throttle")
 	ControllerCmd.PersistentFlags().DurationVarP(&common.UpdateWarmupStatsInterval, "update-warmup-stats-interval", "", 3*time.Second, "Interval for updating warmup stats")
+	ControllerCmd.PersistentFlags().Int64VarP(&common.CacheGroupRebalanceIdleRate, "cache-group-rebalance-idle-rate", "", common.CacheGroupRebalanceIdleRate, "Transfer rate in bytes per second below which a joining or leaving cache group worker is considered to have finished rebalancing")
 	ControllerCmd.PersistentFlags().StringArrayVarP(&common.WatchNamespaces, "watch-namespaces", "", common.WatchNamespaces, "The namespace(s) that the operator watches. If not set, the operator watches all namespaces.")
 }
 

@@ -112,16 +112,17 @@ func TestShouldAddJoinOptionStopsWhenReceiveRateIdle(t *testing.T) {
 		delayEnv      string
 		rate          int64
 		wantJoining   bool
+		wantReason    string
 	}{
 		{name: "within the rebalance delay", backupAgo: 5 * time.Minute, rate: idle, wantJoining: true},
 		{name: "within the rebalance delay margin", backupAgo: 10*time.Minute + 30*time.Second, rate: idle, wantJoining: true},
 		{name: "receive rate still high", backupAgo: 15 * time.Minute, rate: busy, wantJoining: true},
-		{name: "receive rate idle", backupAgo: 15 * time.Minute, rate: idle},
+		{name: "receive rate idle", backupAgo: 15 * time.Minute, rate: idle, wantReason: "receiveRateIdle"},
 		{name: "process started late after pulling the image", backupAgo: 15 * time.Minute, startAgo: 8 * time.Minute, rate: idle, wantJoining: true},
 		{name: "another worker joined recently", backupAgo: 15 * time.Minute, otherStartAgo: 5 * time.Minute, rate: idle, wantJoining: true},
-		{name: "custom rebalance delay", backupAgo: 5 * time.Minute, delayEnv: "1m", rate: idle},
+		{name: "custom rebalance delay", backupAgo: 5 * time.Minute, delayEnv: "1m", rate: idle, wantReason: "receiveRateIdle"},
 		{name: "invalid rebalance delay falls back to default", backupAgo: 5 * time.Minute, delayEnv: "bad", rate: idle, wantJoining: true},
-		{name: "backup duration expired", backupAgo: 2 * time.Hour, rate: busy},
+		{name: "backup duration expired", backupAgo: 2 * time.Hour, rate: busy, wantReason: "backupDurationExpired"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -156,8 +157,18 @@ func TestShouldAddJoinOptionStopsWhenReceiveRateIdle(t *testing.T) {
 			}
 
 			r := &CacheGroupReconciler{}
-			if got := r.shouldAddJoinOption(context.Background(), cg, worker, expectState, stats); got != tt.wantJoining {
-				t.Fatalf("shouldAddJoinOption() = %v, want %v", got, tt.wantJoining)
+			joining, finished := r.shouldAddJoinOption(context.Background(), cg, worker, expectState, stats)
+			if joining != tt.wantJoining {
+				t.Fatalf("shouldAddJoinOption() = %v, want %v", joining, tt.wantJoining)
+			}
+			var reason any
+			for i := 0; i+1 < len(finished); i += 2 {
+				if finished[i] == "reason" {
+					reason = finished[i+1]
+				}
+			}
+			if tt.wantReason == "" && finished != nil || tt.wantReason != "" && reason != tt.wantReason {
+				t.Fatalf("finished = %v, want reason %q", finished, tt.wantReason)
 			}
 		})
 	}
@@ -200,5 +211,29 @@ func TestRemoveRedundantWorkersKeepsMigratingWorker(t *testing.T) {
 				t.Fatalf("worker deleted = %v (err: %v), want %v", deleted, err, tt.wantDeleted)
 			}
 		})
+	}
+}
+
+func TestListActualWorkersOnlyListsWorkers(t *testing.T) {
+	ctx := context.Background()
+	pod := func(name, namespace, appType string) *corev1.Pod {
+		return &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace, Labels: map[string]string{
+			common.LabelCacheGroup: "cg",
+			common.LabelAppType:    appType,
+		}}}
+	}
+	r := &CacheGroupReconciler{Client: fake.NewClientBuilder().WithScheme(clientgoscheme.Scheme).WithObjects(
+		pod("worker", "default", common.LabelWorkerValue),
+		pod("clean-cache", "default", common.LabelCleanCacheJobValue),
+		pod("worker", "other", common.LabelWorkerValue),
+	).Build()}
+	cg := &juicefsiov1.CacheGroup{ObjectMeta: metav1.ObjectMeta{Name: "cg", Namespace: "default"}}
+
+	workers, err := r.listActualWorkers(ctx, cg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(workers) != 1 || workers[0].Name != "worker" || workers[0].Namespace != "default" {
+		t.Fatalf("listActualWorkers() = %v, want only default/worker", workers)
 	}
 }

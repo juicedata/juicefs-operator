@@ -154,18 +154,18 @@ func (r *CacheGroupReconciler) sync(ctx context.Context, cg *juicefsiov1.CacheGr
 		}
 		ready := utils.IsPodReady(worker)
 		if !ready && time.Since(worker.CreationTimestamp.Time) > time.Minute {
-			log.Info("worker is not ready for more than 1 minute", "worker", worker.Name, "since", time.Since(worker.CreationTimestamp.Time), "conditions", utils.FormatPodNotReadyConditions(worker))
+			log.Info("worker is not ready for more than 1 minute", "worker", worker.Name, "since", time.Since(worker.CreationTimestamp.Time).Round(time.Second).String(), "conditions", utils.FormatPodNotReadyConditions(worker))
 		}
 		return !ready
 	})
 
-	log.Info("sync worker to expect states", "expect", len(expectStates), "actual", len(actualWorkers), "currentUnavailable", numUnavailable)
+	log.V(1).Info("sync worker to expect states", "expect", len(expectStates), "actual", len(actualWorkers), "currentUnavailable", numUnavailable)
 	for node, expectState := range expectStates {
 		var actualState *corev1.Pod
 		if v, ok := actualWorkerMap[r.getPodName(cg, node)]; ok {
 			actualState = &v
 		}
-		joining := r.shouldAddJoinOption(ctx, cg, actualState, expectState, workerStats[r.getPodName(cg, node)])
+		joining, joinFinished := r.shouldAddJoinOption(ctx, cg, actualState, expectState, workerStats[r.getPodName(cg, node)])
 		podBuilder := builder.NewPodBuilder(cg, secret, node, expectState, joining)
 		expectWorker := podBuilder.NewCacheGroupWorker(ctx, false)
 		if err := r.ensurePVCsForWorker(ctx, cg, expectWorker.Name, expectState); err != nil {
@@ -190,7 +190,9 @@ func (r *CacheGroupReconciler) sync(ctx context.Context, cg *juicefsiov1.CacheGr
 			go func() {
 				defer wg.Done()
 				if joining {
-					log.Info("worker joins an existing cache group, enable temporary join option", "worker", expectWorker.Name)
+					log.Info("worker join started", "worker", expectWorker.Name, "option", workerJoinOption(expectState.Image))
+				} else if joinFinished != nil {
+					log.Info("worker join finished, recreate it without join option", joinFinished...)
 				}
 				if err := r.createOrUpdateWorker(ctx, actualState, expectWorker); err != nil {
 					log.Error(err, "failed to create or update worker", "worker", expectWorker.Name)
@@ -419,7 +421,10 @@ func (r *CacheGroupReconciler) deleteCacheGroupWorker(ctx context.Context, worke
 
 func (r *CacheGroupReconciler) listActualWorkers(ctx context.Context, cg *juicefsiov1.CacheGroup) ([]corev1.Pod, error) {
 	workers := corev1.PodList{}
-	if err := r.List(ctx, &workers, client.MatchingLabels(map[string]string{common.LabelCacheGroup: utils.TruncateLabelValue(cg.Name)})); err != nil {
+	if err := r.List(ctx, &workers, client.InNamespace(cg.Namespace), client.MatchingLabels{
+		common.LabelCacheGroup: utils.TruncateLabelValue(cg.Name),
+		common.LabelAppType:    common.LabelWorkerValue,
+	}); err != nil {
 		return nil, err
 	}
 	return workers.Items, nil

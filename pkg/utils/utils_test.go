@@ -256,6 +256,24 @@ func TestCalMD5(t *testing.T) {
 	}
 }
 
+func TestFormatBytes(t *testing.T) {
+	tests := []struct {
+		bytes int64
+		want  string
+	}{
+		{0, "0B"},
+		{1023, "1023B"},
+		{1024, "1.0KiB"},
+		{1536 << 20, "1.5GiB"},
+		{5 << 40, "5.0TiB"},
+	}
+	for _, tt := range tests {
+		if got := FormatBytes(tt.bytes); got != tt.want {
+			t.Errorf("FormatBytes(%d) = %q, want %q", tt.bytes, got, tt.want)
+		}
+	}
+}
+
 func equalMaps(a, b map[string]interface{}) bool {
 	if len(a) != len(b) {
 		return false

@@ -77,6 +77,13 @@ func run() {
 		os.Exit(1)
 	}
 
+	if err := (&controller.CacheGroupStatsReconciler{
+		Client: mgr.GetClient(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "CacheGroupStats")
+		os.Exit(1)
+	}
+
 	if err := (&controller.WarmUpReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),

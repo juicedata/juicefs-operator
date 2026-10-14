@@ -25,8 +25,11 @@ spec:
     - jsonPath: .status.backUpWorker
       name: Back up
       type: string
-    - jsonPath: .status.WaitingDeletedWorker
+    - jsonPath: .status.waitingDeletedWorker
       name: Waiting Deleted
+      type: string
+    - jsonPath: .status.cacheSize
+      name: Cache Size
       type: string
     - jsonPath: .status.readyStr
       name: Ready
@@ -4297,6 +4300,8 @@ spec:
                 format: int32
                 type: integer
               cacheGroup:
+                type: string
+              cacheSize:
                 type: string
               conditions:
                 items:

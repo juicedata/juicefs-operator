@@ -90,9 +90,11 @@ func (r *CacheGroupStatsReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		mu.Unlock()
 	})
 	sort.Slice(stats, func(i, j int) bool { return stats[i].Name < stats[j].Name })
-	if !reflect.DeepEqual(cg.Status.Stats, stats) {
+	cacheSize := totalCacheSize(stats)
+	if !reflect.DeepEqual(cg.Status.Stats, stats) || cg.Status.CacheSize != cacheSize {
 		base := cg.DeepCopy()
 		cg.Status.Stats = stats
+		cg.Status.CacheSize = cacheSize
 		if err := r.Status().Patch(ctx, cg, client.MergeFrom(base)); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -121,6 +123,22 @@ func nextWorkerStats(previous, sample juicefsiov1.CacheGroupWorkerStats, contain
 	sample.TransferRate = rate(previous.TransferBytes, sample.TransferBytes)
 	sample.ReceiveRate = rate(previous.ReceiveBytes, sample.ReceiveBytes)
 	return sample
+}
+
+// totalCacheSize returns the total cache size of all workers, or "" if no worker reports it.
+func totalCacheSize(stats []juicefsiov1.CacheGroupWorkerStats) string {
+	var total int64
+	reported := false
+	for _, s := range stats {
+		if s.CacheBytes != nil {
+			total += *s.CacheBytes
+			reported = true
+		}
+	}
+	if !reported {
+		return ""
+	}
+	return utils.FormatBytes(total)
 }
 
 func (r *CacheGroupStatsReconciler) SetupWithManager(mgr ctrl.Manager) error {

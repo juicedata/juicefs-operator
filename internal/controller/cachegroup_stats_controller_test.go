@@ -69,3 +69,14 @@ func assertRate(t *testing.T, field string, got, want *int64) {
 		t.Fatalf("%s = %v, want %v", field, got, want)
 	}
 }
+
+func TestTotalCacheSize(t *testing.T) {
+	gib := int64(1 << 30)
+	if got := totalCacheSize([]juicefsiov1.CacheGroupWorkerStats{{Name: "a"}}); got != "" {
+		t.Fatalf("totalCacheSize() = %q, want empty when no worker reports cache bytes", got)
+	}
+	stats := []juicefsiov1.CacheGroupWorkerStats{{Name: "a", CacheBytes: &gib}, {Name: "b"}, {Name: "c", CacheBytes: &gib}}
+	if got := totalCacheSize(stats); got != "2.0GiB" {
+		t.Fatalf("totalCacheSize() = %q, want 2.0GiB", got)
+	}
+}

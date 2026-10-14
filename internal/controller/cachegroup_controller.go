@@ -655,6 +655,7 @@ func (r *CacheGroupReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				oldCG := e.ObjectOld.(*juicefsiov1.CacheGroup).DeepCopy()
 				newCG := e.ObjectNew.(*juicefsiov1.CacheGroup).DeepCopy()
 				oldCG.Status.Stats, newCG.Status.Stats = nil, nil
+				oldCG.Status.CacheSize, newCG.Status.CacheSize = "", ""
 				oldCG.ResourceVersion, newCG.ResourceVersion = "", ""
 				oldCG.ManagedFields, newCG.ManagedFields = nil, nil
 				return !reflect.DeepEqual(oldCG, newCG)

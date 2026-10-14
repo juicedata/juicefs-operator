@@ -191,19 +191,15 @@ func (r *CacheGroupReconciler) shouldAddJoinOption(ctx context.Context, cg *juic
 	return true
 }
 
-// workerCounterIdle reports whether a byte counter sampled after since from the current worker
-// container moves slower than common.CacheGroupRebalanceIdleRate. A zero counter may mean the
-// transfer has not started yet, so it also requires the container to have run for minIdle after since.
+// workerCounterIdle reports whether a byte counter sampled after since moves slower than
+// common.CacheGroupRebalanceIdleRate. A zero counter may mean the transfer has not started yet,
+// so it also requires the worker process to have run for minIdle after since.
 func workerCounterIdle(worker *corev1.Pod, stats juicefsiov1.CacheGroupWorkerStats, bytes, rate *int64, since time.Time, minIdle time.Duration) bool {
-	if !utils.IsPodReady(*worker) || bytes == nil || rate == nil || stats.LastSampleTime == nil {
+	if !utils.IsPodReady(*worker) || bytes == nil || rate == nil || stats.LastSampleTime == nil || stats.StartTime == nil {
 		return false
 	}
 	sampleAt := stats.LastSampleTime.Time
 	if time.Since(sampleAt) > workerStatsMaxAge || sampleAt.Before(since) {
-		return false
-	}
-	container := workerContainerStatus(*worker)
-	if container.ContainerID == "" || container.ContainerID != stats.ContainerID || container.State.Running == nil {
 		return false
 	}
 	if *rate >= common.CacheGroupRebalanceIdleRate {
@@ -213,8 +209,8 @@ func workerCounterIdle(worker *corev1.Pod, stats juicefsiov1.CacheGroupWorkerSta
 		return true
 	}
 	idleSince := since
-	if startedAt := container.State.Running.StartedAt.Time; startedAt.After(idleSince) {
-		idleSince = startedAt
+	if stats.StartTime.Time.After(idleSince) {
+		idleSince = stats.StartTime.Time
 	}
 	return sampleAt.Sub(idleSince) >= minIdle
 }

@@ -86,14 +86,11 @@ func IsMountPointReady(ctx context.Context, pod corev1.Pod, mountPoint string) b
 		log.V(1).Info("mount point is not ready")
 		return false
 	}
-	log.Info("mount point is ready")
+	log.V(1).Info("mount point is ready")
 	return true
 }
 
 func GetWorkerCacheBlocksBytes(ctx context.Context, pod corev1.Pod, mountPoint string) (int, error) {
-	if !IsPodReady(pod) || !IsMountPointReady(ctx, pod, mountPoint) {
-		return 0, fmt.Errorf("pod %s is not ready yet", pod.Name)
-	}
 	stats, err := GetWorkerStats(ctx, pod, mountPoint)
 	if err != nil {
 		return 0, err

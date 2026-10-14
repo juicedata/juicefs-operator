@@ -60,20 +60,23 @@ func (r *CacheGroupReconciler) removeRedundantWorkers(
 
 		// A recreated leaving worker lowers ReadyWorker until it is ready, so keep waiting for its migration.
 		_, migrating := worker.Annotations[common.AnnoWaitingDeleteWorker]
+		reason := "notEnoughReadyWorkers"
 		if cg.Status.ReadyWorker > 1 || migrating {
-			delete, err := r.gracefulShutdownWorker(ctx, cg, &worker, workerStats[worker.Name])
+			var err error
+			reason, err = r.gracefulShutdownWorker(ctx, cg, &worker, workerStats[worker.Name])
 			if err != nil {
-				log.Error(err, "failed to graceful shutdown worker", "worker", worker)
+				log.Error(err, "failed to graceful shutdown worker", "worker", worker.Name)
 				return err
 			}
-			if !delete {
+			if reason == "" {
 				continue
 			}
-		} else {
-			log.Info("not enough ready workers to migrate data, delete redundant worker directly", "worker", worker.Name, "readyWorker", cg.Status.ReadyWorker)
 		}
 
-		log.Info("found redundant worker, delete it", "worker", worker.Name)
+		stats := workerStats[worker.Name]
+		log.Info("worker leave finished, delete it", "worker", worker.Name, "reason", reason,
+			"waitingAt", worker.Annotations[common.AnnoWaitingDeleteWorker],
+			"transferBytes", formatCounter(stats.TransferBytes, ""), "transferRate", formatCounter(stats.TransferRate, "/s"))
 		if err := r.deleteCacheGroupWorker(ctx, &worker, false); err != nil {
 			log.Error(err, "failed to delete worker", "worker", worker.Name)
 			return err
@@ -86,55 +89,56 @@ func (r *CacheGroupReconciler) removeRedundantWorkers(
 	return nil
 }
 
-// gracefulShutdownWorker migrates the cache of a redundant worker and reports whether it can be deleted now.
+// gracefulShutdownWorker migrates the cache of a redundant worker. It returns the reason to delete
+// the worker now, or "" to keep it.
 func (r *CacheGroupReconciler) gracefulShutdownWorker(
 	ctx context.Context,
 	cg *juicefsiov1.CacheGroup,
 	worker *corev1.Pod,
-	stats juicefsiov1.CacheGroupWorkerStats) (bool, error) {
+	stats juicefsiov1.CacheGroupWorkerStats) (string, error) {
 	log := log.FromContext(ctx)
 	v, migrating := worker.Annotations[common.AnnoWaitingDeleteWorker]
 	decommission := utils.WorkerSupportsDecommission(*worker)
 	if migrating {
 		waitingAt := utils.MustParseTime(v)
-		progress := []any{"worker", worker.Name, "waitingAt", v, "transferBytes", stats.TransferBytes, "transferRate", stats.TransferRate}
-		if maxWaiting := utils.GetWaitingDeletedMaxDuration(cg.Spec.WaitingDeletedMaxDuration); time.Since(waitingAt) > maxWaiting {
-			log.Info("data migration timed out, delete worker", append(progress, "maxWaiting", maxWaiting.String())...)
-			return true, nil
+		if time.Since(waitingAt) > utils.GetWaitingDeletedMaxDuration(cg.Spec.WaitingDeletedMaxDuration) {
+			return "waitingDeletedMaxDurationExpired", nil
 		}
 		if workerCounterIdle(worker, stats, stats.TransferBytes, stats.TransferRate, waitingAt, minLeaveWorkerDuration) {
-			log.Info("data migration finished, delete worker", progress...)
-			return true, nil
+			return "transferRateIdle", nil
 		}
-		log.V(1).Info("waiting for worker to migrate data", progress...)
+		log.V(1).Info("waiting for worker to leave", "worker", worker.Name, "waitingAt", v,
+			"transferBytes", formatCounter(stats.TransferBytes, ""), "transferRate", formatCounter(stats.TransferRate, "/s"))
 		if decommission {
-			return false, nil
+			return "", nil
 		}
 	}
 
 	if !utils.IsPodReady(*worker) || !utils.IsMountPointReady(ctx, *worker, common.MountPoint) {
 		if migrating {
-			return false, nil
+			return "", nil
 		}
-		log.Info("redundant worker is not ready, delete it without data migration", "worker", worker.Name)
-		return true, nil
+		return "notReady", nil
 	}
 	cacheBytes, err := utils.GetWorkerCacheBlocksBytes(ctx, *worker, common.MountPoint)
 	if err != nil {
 		log.Error(err, "failed to get worker cache blocks bytes", "worker", worker.Name)
-		return false, err
+		return "", err
 	}
 	if cacheBytes <= 0 {
-		log.Info("redundant worker has no cache blocks, delete it", "worker", worker.Name, "migrating", migrating)
-		return true, nil
+		return "noCacheBlocks", nil
 	}
 	if migrating {
-		return false, nil
+		return "", nil
 	}
 
-	log.Info("start data migration, recreate worker with decommission", "worker", worker.Name, "cacheBytes", cacheBytes, "decommission", decommission)
+	option := "group-weight=0"
+	if decommission {
+		option = "decommission"
+	}
+	log.Info("worker leave started", "worker", worker.Name, "option", option, "cacheBytes", utils.FormatBytes(int64(cacheBytes)))
 	if err := r.deleteCacheGroupWorker(ctx, worker, true); err != nil {
-		return false, err
+		return "", err
 	}
 	if decommission {
 		builder.UpdateWorkerDecommission(worker)
@@ -143,7 +147,7 @@ func (r *CacheGroupReconciler) gracefulShutdownWorker(
 	}
 	worker.ResourceVersion = ""
 	worker.Annotations[common.AnnoWaitingDeleteWorker] = time.Now().Format(time.RFC3339)
-	return false, r.Create(ctx, worker)
+	return "", r.Create(ctx, worker)
 }
 
 const (
@@ -153,31 +157,28 @@ const (
 	rebalanceDelayMargin    = time.Minute
 )
 
-func (r *CacheGroupReconciler) shouldAddJoinOption(ctx context.Context, cg *juicefsiov1.CacheGroup, actual *corev1.Pod, expectState juicefsiov1.CacheGroupWorkerTemplate, stats juicefsiov1.CacheGroupWorkerStats) bool {
+// shouldAddJoinOption reports whether the worker needs the temporary join option. When the join of
+// an existing worker finishes, it also returns the log key/values describing why.
+func (r *CacheGroupReconciler) shouldAddJoinOption(ctx context.Context, cg *juicefsiov1.CacheGroup, actual *corev1.Pod, expectState juicefsiov1.CacheGroupWorkerTemplate, stats juicefsiov1.CacheGroupWorkerStats) (bool, []any) {
 	if utils.CompareEEImageVersion(expectState.Image, "5.1.0") < 0 {
-		return false
+		return false, nil
 	}
 	duration := utils.GetBackupWorkerDuration(cg.Spec.BackupDuration)
 	if duration <= minBackupWorkerDuration {
-		return false
+		return false, nil
 	}
-	joinOption := "group-backup"
-	if utils.CompareEEImageVersion(expectState.Image, common.MinSupportedCommissionVersion) >= 0 {
-		joinOption = "commission"
-	}
-	if lo.Contains(expectState.Opts, joinOption) || lo.Contains(expectState.Opts, "decommission") {
-		return false
+	if lo.Contains(expectState.Opts, workerJoinOption(expectState.Image)) || lo.Contains(expectState.Opts, "decommission") {
+		return false, nil
 	}
 
 	// Enable the temporary join option only when joining an existing cache group.
 	if actual == nil {
-		return cg.Status.ReadyWorker >= 1
+		return cg.Status.ReadyWorker >= 1, nil
 	}
 	v, ok := actual.Annotations[common.AnnoBackupWorker]
 	if !ok {
-		return false
+		return false, nil
 	}
-	log := log.FromContext(ctx)
 	backupAt := utils.MustParseTime(v)
 	// Existing workers push data to the joining worker only after the group membership has been
 	// stable for the rebalance delay, and every worker (re)start changes the membership.
@@ -188,18 +189,33 @@ func (r *CacheGroupReconciler) shouldAddJoinOption(ctx context.Context, cg *juic
 		}
 	}
 	checkAfter = checkAfter.Add(workerRebalanceDelay(actual) + rebalanceDelayMargin)
-	progress := []any{"worker", actual.Name, "backupAt", v, "checkAfter", checkAfter.Format(time.RFC3339),
-		"receiveBytes", stats.ReceiveBytes, "receiveRate", stats.ReceiveRate}
+	progress := []any{"backupAt", v, "checkAfter", checkAfter.Format(time.RFC3339),
+		"receiveBytes", formatCounter(stats.ReceiveBytes, ""), "receiveRate", formatCounter(stats.ReceiveRate, "/s")}
+	finished := func(reason string) []any {
+		return append([]any{"worker", actual.Name, "reason", reason}, progress...)
+	}
 	if time.Since(backupAt) >= duration {
-		log.Info("worker join finished, backup duration expired, recreate it without join option", append(progress, "backupDuration", duration.String())...)
-		return false
+		return false, finished("backupDurationExpired")
 	}
 	if workerCounterIdle(actual, stats, stats.ReceiveBytes, stats.ReceiveRate, checkAfter, 0) {
-		log.Info("worker join finished, recreate it without join option", progress...)
-		return false
+		return false, finished("receiveRateIdle")
 	}
-	log.V(1).Info("waiting for joining worker to receive data", progress...)
-	return true
+	log.FromContext(ctx).V(1).Info("waiting for worker to join", append([]any{"worker", actual.Name}, progress...)...)
+	return true, nil
+}
+
+func workerJoinOption(image string) string {
+	if utils.CompareEEImageVersion(image, common.MinSupportedCommissionVersion) >= 0 {
+		return "commission"
+	}
+	return "group-backup"
+}
+
+func formatCounter(v *int64, unit string) string {
+	if v == nil {
+		return ""
+	}
+	return utils.FormatBytes(*v) + unit
 }
 
 // workerRebalanceDelay returns the cache group rebalance delay of the worker, read the same way as juicefs.

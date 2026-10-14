@@ -274,6 +274,10 @@ func (in *CacheGroupWorkerStats) DeepCopyInto(out *CacheGroupWorkerStats) {
 		*out = new(int64)
 		**out = **in
 	}
+	if in.StartTime != nil {
+		in, out := &in.StartTime, &out.StartTime
+		*out = (*in).DeepCopy()
+	}
 	if in.LastSampleTime != nil {
 		in, out := &in.LastSampleTime, &out.LastSampleTime
 		*out = (*in).DeepCopy()

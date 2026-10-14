@@ -40,6 +40,8 @@ const (
 	workerStatsConcurrency = 10
 	workerStatsMinInterval = 30 * time.Second
 	workerStatsMaxAge      = 2 * time.Minute
+	// Tolerates uptime refresh lag and second precision of timestamps.
+	workerStartTimeTolerance = 5 * time.Second
 )
 
 type CacheGroupStatsReconciler struct {
@@ -71,16 +73,14 @@ func (r *CacheGroupStatsReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		if !worker.DeletionTimestamp.IsZero() {
 			return
 		}
-		containerID := workerContainerStatus(worker).ContainerID
 		// On failure the previous sample is kept and ages out.
 		next, ok := previousStats[worker.Name]
-		recent := ok && next.ContainerID == containerID && next.LastSampleTime != nil &&
-			time.Since(next.LastSampleTime.Time) < workerStatsMinInterval
+		recent := ok && next.LastSampleTime != nil && time.Since(next.LastSampleTime.Time) < workerStatsMinInterval
 		if !recent && utils.IsPodReady(worker) {
 			if sample, err := utils.GetWorkerStats(ctx, worker, common.MountPoint); err != nil {
 				log.FromContext(ctx).Error(err, "failed to collect worker stats", "worker", worker.Name)
 			} else {
-				next, ok = nextWorkerStats(next, sample, containerID, metav1.Now()), true
+				next, ok = nextWorkerStats(next, sample, metav1.Now()), true
 			}
 		}
 		if !ok {
@@ -105,11 +105,10 @@ func (r *CacheGroupStatsReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	return ctrl.Result{RequeueAfter: time.Minute}, nil
 }
 
-// nextWorkerStats derives each counter's rate from the previous sample of the same container.
-func nextWorkerStats(previous, sample juicefsiov1.CacheGroupWorkerStats, containerID string, now metav1.Time) juicefsiov1.CacheGroupWorkerStats {
-	sample.ContainerID = containerID
+// nextWorkerStats derives each counter's rate from the previous sample of the same worker process.
+func nextWorkerStats(previous, sample juicefsiov1.CacheGroupWorkerStats, now metav1.Time) juicefsiov1.CacheGroupWorkerStats {
 	sample.LastSampleTime = &now
-	if previous.LastSampleTime == nil || containerID == "" || previous.ContainerID != containerID {
+	if previous.LastSampleTime == nil || !sameWorkerProcess(previous.StartTime, sample.StartTime) {
 		return sample
 	}
 	interval := now.Sub(previous.LastSampleTime.Time)
@@ -144,13 +143,12 @@ func sumBytes(stats []juicefsiov1.CacheGroupWorkerStats, counter func(juicefsiov
 	return utils.FormatBytes(total)
 }
 
-func workerContainerStatus(worker corev1.Pod) corev1.ContainerStatus {
-	for _, c := range worker.Status.ContainerStatuses {
-		if c.Name == common.WorkerContainerName {
-			return c
-		}
+func sameWorkerProcess(a, b *metav1.Time) bool {
+	if a == nil || b == nil {
+		return false
 	}
-	return corev1.ContainerStatus{}
+	d := a.Sub(b.Time)
+	return d >= -workerStartTimeTolerance && d <= workerStartTimeTolerance
 }
 
 func (r *CacheGroupStatsReconciler) SetupWithManager(mgr ctrl.Manager) error {

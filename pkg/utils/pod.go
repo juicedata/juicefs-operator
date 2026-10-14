@@ -135,9 +135,12 @@ func GetWorkerStats(ctx context.Context, pod corev1.Pod, mountPoint string) (jui
 		return juicefsiov1.CacheGroupWorkerStats{}, fmt.Errorf("failed to read worker stats: %w (stderr: %s)", err, strings.TrimSpace(stderr))
 	}
 
-	stats := juicefsiov1.CacheGroupWorkerStats{
-		Name: pod.Name,
-	}
+	return parseWorkerStats(pod.Name, stdout, time.Now())
+}
+
+func parseWorkerStats(name, stdout string, now time.Time) (juicefsiov1.CacheGroupWorkerStats, error) {
+	stats := juicefsiov1.CacheGroupWorkerStats{Name: name}
+	var uptime *int64
 	for _, line := range strings.Split(stdout, "\n") {
 		key, value, _ := strings.Cut(line, ":")
 		var field **int64
@@ -150,14 +153,20 @@ func GetWorkerStats(ctx context.Context, pod corev1.Pod, mountPoint string) (jui
 			field = &stats.TransferBytes
 		case "remotecache.receiveBytes":
 			field = &stats.ReceiveBytes
+		case "uptime":
+			field = &uptime
 		default:
 			continue
 		}
-		bytes, err := strconv.ParseInt(strings.TrimSpace(value), 10, 64)
+		v, err := strconv.ParseInt(strings.TrimSpace(value), 10, 64)
 		if err != nil {
 			return juicefsiov1.CacheGroupWorkerStats{}, fmt.Errorf("failed to parse %s: %w", key, err)
 		}
-		*field = &bytes
+		*field = &v
+	}
+	if uptime != nil {
+		startTime := metav1.NewTime(now.Add(-time.Duration(*uptime) * time.Second))
+		stats.StartTime = &startTime
 	}
 	if stats.CacheBytes == nil && stats.CapacityBytes == nil && stats.TransferBytes == nil && stats.ReceiveBytes == nil {
 		return juicefsiov1.CacheGroupWorkerStats{}, fmt.Errorf("cache metrics not found in worker stats")

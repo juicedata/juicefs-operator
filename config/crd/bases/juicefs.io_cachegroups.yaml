@@ -4346,8 +4346,6 @@ spec:
                     capacityBytes:
                       format: int64
                       type: integer
-                    containerID:
-                      type: string
                     lastSampleTime:
                       format: date-time
                       type: string
@@ -4359,6 +4357,9 @@ spec:
                     receiveRate:
                       format: int64
                       type: integer
+                    startTime:
+                      format: date-time
+                      type: string
                     transferBytes:
                       format: int64
                       type: integer

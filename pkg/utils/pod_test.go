@@ -17,7 +17,32 @@ package utils
 import (
 	"reflect"
 	"testing"
+	"time"
 )
+
+func TestParseWorkerStats(t *testing.T) {
+	now := time.Now().Truncate(time.Second)
+	stdout := "blockcache.blocks: 334\nblockcache.bytes: 167689067\nblockcache.capacity: 10737418240\n" +
+		"blockcache.transferBytes: 78189036\nremotecache.receiveBytes: 0\nuptime: 81434\n"
+	stats, err := parseWorkerStats("worker", stdout, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.Name != "worker" || *stats.CacheBytes != 167689067 || *stats.CapacityBytes != 10737418240 ||
+		*stats.TransferBytes != 78189036 || *stats.ReceiveBytes != 0 {
+		t.Fatalf("unexpected stats: %+v", stats)
+	}
+	if want := now.Add(-81434 * time.Second); stats.StartTime == nil || !stats.StartTime.Time.Equal(want) {
+		t.Fatalf("StartTime = %v, want %v", stats.StartTime, want)
+	}
+
+	if _, err := parseWorkerStats("worker", "uptime: 10\n", now); err == nil {
+		t.Fatal("expected an error when no cache metric is reported")
+	}
+	if _, err := parseWorkerStats("worker", "blockcache.bytes: x\n", now); err == nil {
+		t.Fatal("expected an error for an invalid value")
+	}
+}
 
 func TestParseWorkerMountCmds(t *testing.T) {
 	tests := []struct {

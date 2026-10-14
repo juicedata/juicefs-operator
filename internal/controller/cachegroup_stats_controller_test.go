@@ -23,41 +23,40 @@ import (
 	juicefsiov1 "github.com/juicedata/juicefs-operator/api/v1"
 )
 
-const testContainerID = "containerd://worker-1"
-
 func TestNextWorkerStats(t *testing.T) {
 	now := metav1.NewTime(time.Now().Truncate(time.Second))
 	ptr := func(v int64) *int64 { return &v }
+	at := func(d time.Duration) *metav1.Time { t := metav1.NewTime(now.Add(d)); return &t }
+	startTime := at(-time.Hour)
 	previousAgo := func(d time.Duration) juicefsiov1.CacheGroupWorkerStats {
-		sampleAt := metav1.NewTime(now.Add(-d))
 		return juicefsiov1.CacheGroupWorkerStats{
-			ContainerID:    testContainerID,
 			TransferBytes:  ptr(60 << 20),
 			ReceiveBytes:   ptr(1000),
-			LastSampleTime: &sampleAt,
+			StartTime:      startTime,
+			LastSampleTime: at(-d),
 		}
 	}
-	sample := juicefsiov1.CacheGroupWorkerStats{TransferBytes: ptr(120 << 20), ReceiveBytes: ptr(1000)}
+	sample := juicefsiov1.CacheGroupWorkerStats{TransferBytes: ptr(120 << 20), ReceiveBytes: ptr(1000), StartTime: at(-time.Hour + 2*time.Second)}
 
 	tests := []struct {
 		name             string
 		previous         juicefsiov1.CacheGroupWorkerStats
-		containerID      string
 		sample           juicefsiov1.CacheGroupWorkerStats
 		wantTransferRate *int64
 		wantReceiveRate  *int64
 	}{
-		{name: "first sample", containerID: testContainerID, sample: sample},
-		{name: "rates over the sample interval", previous: previousAgo(time.Minute), containerID: testContainerID, sample: sample, wantTransferRate: ptr(1 << 20), wantReceiveRate: ptr(0)},
-		{name: "restarted container", previous: previousAgo(time.Minute), containerID: "containerd://new", sample: sample},
-		{name: "stale previous sample", previous: previousAgo(workerStatsMaxAge + time.Second), containerID: testContainerID, sample: sample},
-		{name: "counter reset", previous: previousAgo(time.Minute), containerID: testContainerID, sample: juicefsiov1.CacheGroupWorkerStats{TransferBytes: ptr(0), ReceiveBytes: ptr(1060)}, wantReceiveRate: ptr(1)},
+		{name: "first sample", sample: sample},
+		{name: "rates over the sample interval", previous: previousAgo(time.Minute), sample: sample, wantTransferRate: ptr(1 << 20), wantReceiveRate: ptr(0)},
+		{name: "restarted process", previous: previousAgo(time.Minute), sample: juicefsiov1.CacheGroupWorkerStats{TransferBytes: ptr(120 << 20), StartTime: at(-30 * time.Second)}},
+		{name: "missing start time", previous: previousAgo(time.Minute), sample: juicefsiov1.CacheGroupWorkerStats{TransferBytes: ptr(120 << 20)}},
+		{name: "stale previous sample", previous: previousAgo(workerStatsMaxAge + time.Second), sample: sample},
+		{name: "counter reset", previous: previousAgo(time.Minute), sample: juicefsiov1.CacheGroupWorkerStats{TransferBytes: ptr(0), ReceiveBytes: ptr(1060), StartTime: startTime}, wantReceiveRate: ptr(1)},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := nextWorkerStats(tt.previous, tt.sample, tt.containerID, now)
-			if got.ContainerID != tt.containerID || got.LastSampleTime == nil || !got.LastSampleTime.Equal(&now) {
-				t.Fatalf("got containerID %q at %v, want %q at %v", got.ContainerID, got.LastSampleTime, tt.containerID, now)
+			got := nextWorkerStats(tt.previous, tt.sample, now)
+			if got.LastSampleTime == nil || !got.LastSampleTime.Equal(&now) {
+				t.Fatalf("LastSampleTime = %v, want %v", got.LastSampleTime, now)
 			}
 			assertRate(t, "TransferRate", got.TransferRate, tt.wantTransferRate)
 			assertRate(t, "ReceiveRate", got.ReceiveRate, tt.wantReceiveRate)

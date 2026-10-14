@@ -24,7 +24,9 @@ import (
 	juicefsiov1 "github.com/juicedata/juicefs-operator/api/v1"
 	"github.com/juicedata/juicefs-operator/pkg/common"
 	"github.com/juicedata/juicefs-operator/pkg/utils"
+	"github.com/samber/lo"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -34,7 +36,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
-const workerStatsConcurrency = 10
+const (
+	workerStatsConcurrency = 10
+	workerStatsMinInterval = 30 * time.Second
+)
 
 type CacheGroupStatsReconciler struct {
 	client.Client
@@ -57,20 +62,31 @@ func (r *CacheGroupStatsReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, err
 	}
 
+	previousStats := lo.KeyBy(cg.Status.Stats, func(s juicefsiov1.CacheGroupWorkerStats) string { return s.Name })
 	var stats []juicefsiov1.CacheGroupWorkerStats
 	var mu sync.Mutex
 	workqueue.ParallelizeUntil(ctx, workerStatsConcurrency, len(workers.Items), func(i int) {
 		worker := workers.Items[i]
-		if !worker.DeletionTimestamp.IsZero() || !utils.IsPodReady(worker) {
+		if !worker.DeletionTimestamp.IsZero() {
 			return
 		}
-		workerStats, err := utils.GetWorkerStats(ctx, worker, common.MountPoint)
-		if err != nil {
-			log.FromContext(ctx).Error(err, "failed to collect worker stats", "worker", worker.Name)
+		containerID := workerContainerStatus(worker).ContainerID
+		// On failure the previous sample is kept and ages out.
+		next, ok := previousStats[worker.Name]
+		recent := ok && next.ContainerID == containerID && next.LastSampleTime != nil &&
+			time.Since(next.LastSampleTime.Time) < workerStatsMinInterval
+		if !recent && utils.IsPodReady(worker) {
+			if sample, err := utils.GetWorkerStats(ctx, worker, common.MountPoint); err != nil {
+				log.FromContext(ctx).Error(err, "failed to collect worker stats", "worker", worker.Name)
+			} else {
+				next, ok = nextWorkerStats(next, sample, containerID, metav1.Now()), true
+			}
+		}
+		if !ok {
 			return
 		}
 		mu.Lock()
-		stats = append(stats, workerStats)
+		stats = append(stats, next)
 		mu.Unlock()
 	})
 	sort.Slice(stats, func(i, j int) bool { return stats[i].Name < stats[j].Name })
@@ -82,6 +98,29 @@ func (r *CacheGroupStatsReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		}
 	}
 	return ctrl.Result{RequeueAfter: time.Minute}, nil
+}
+
+// nextWorkerStats derives each counter's rate from the previous sample of the same container.
+func nextWorkerStats(previous, sample juicefsiov1.CacheGroupWorkerStats, containerID string, now metav1.Time) juicefsiov1.CacheGroupWorkerStats {
+	sample.ContainerID = containerID
+	sample.LastSampleTime = &now
+	if previous.LastSampleTime == nil || containerID == "" || previous.ContainerID != containerID {
+		return sample
+	}
+	interval := now.Sub(previous.LastSampleTime.Time)
+	if interval <= 0 || interval > workerStatsMaxAge {
+		return sample
+	}
+	rate := func(prevBytes, bytes *int64) *int64 {
+		if prevBytes == nil || bytes == nil || *bytes < *prevBytes {
+			return nil
+		}
+		r := int64(float64(*bytes-*prevBytes) / interval.Seconds())
+		return &r
+	}
+	sample.TransferRate = rate(previous.TransferBytes, sample.TransferBytes)
+	sample.ReceiveRate = rate(previous.ReceiveBytes, sample.ReceiveBytes)
+	return sample
 }
 
 func (r *CacheGroupStatsReconciler) SetupWithManager(mgr ctrl.Manager) error {

@@ -217,9 +217,14 @@ type CacheGroupCondition struct {
 
 type CacheGroupWorkerStats struct {
 	Name          string `json:"name"`
+	ContainerID   string `json:"containerID,omitempty"`
 	CacheBytes    *int64 `json:"cacheBytes,omitempty"`
 	TransferBytes *int64 `json:"transferBytes,omitempty"`
 	ReceiveBytes  *int64 `json:"receiveBytes,omitempty"`
+	// TransferRate and ReceiveRate are in bytes per second, averaged since the previous sample.
+	TransferRate   *int64       `json:"transferRate,omitempty"`
+	ReceiveRate    *int64       `json:"receiveRate,omitempty"`
+	LastSampleTime *metav1.Time `json:"lastSampleTime,omitempty"`
 }
 
 // CacheGroupStatus defines the observed state of CacheGroup

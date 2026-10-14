@@ -140,21 +140,22 @@ func GetWorkerStats(ctx context.Context, pod corev1.Pod, mountPoint string) (jui
 	}
 	for _, line := range strings.Split(stdout, "\n") {
 		key, value, _ := strings.Cut(line, ":")
-		if key != "blockcache.bytes" && key != "blockcache.transferBytes" && key != "remotecache.receiveBytes" {
+		var field **int64
+		switch key {
+		case "blockcache.bytes":
+			field = &stats.CacheBytes
+		case "blockcache.transferBytes":
+			field = &stats.TransferBytes
+		case "remotecache.receiveBytes":
+			field = &stats.ReceiveBytes
+		default:
 			continue
 		}
 		bytes, err := strconv.ParseInt(strings.TrimSpace(value), 10, 64)
 		if err != nil {
 			return juicefsiov1.CacheGroupWorkerStats{}, fmt.Errorf("failed to parse %s: %w", key, err)
 		}
-		switch key {
-		case "blockcache.bytes":
-			stats.CacheBytes = &bytes
-		case "blockcache.transferBytes":
-			stats.TransferBytes = &bytes
-		case "remotecache.receiveBytes":
-			stats.ReceiveBytes = &bytes
-		}
+		*field = &bytes
 	}
 	if stats.CacheBytes == nil && stats.TransferBytes == nil && stats.ReceiveBytes == nil {
 		return juicefsiov1.CacheGroupWorkerStats{}, fmt.Errorf("cache metrics not found in worker stats")

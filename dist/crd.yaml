@@ -4332,12 +4332,23 @@ spec:
                     cacheBytes:
                       format: int64
                       type: integer
+                    containerID:
+                      type: string
+                    lastSampleTime:
+                      format: date-time
+                      type: string
                     name:
                       type: string
                     receiveBytes:
                       format: int64
                       type: integer
+                    receiveRate:
+                      format: int64
+                      type: integer
                     transferBytes:
+                      format: int64
+                      type: integer
+                    transferRate:
                       format: int64
                       type: integer
                   required:

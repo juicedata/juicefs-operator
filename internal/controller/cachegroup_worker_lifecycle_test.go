@@ -30,12 +30,12 @@ import (
 	"github.com/juicedata/juicefs-operator/pkg/common"
 )
 
-func newLifecycleTestWorker(now time.Time, startedAgo time.Duration) *corev1.Pod {
+func newLifecycleTestWorker(now time.Time) *corev1.Pod {
 	return &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:              "worker",
 			Namespace:         "default",
-			CreationTimestamp: metav1.NewTime(now.Add(-startedAgo)),
+			CreationTimestamp: metav1.NewTime(now.Add(-time.Hour)),
 			Annotations:       map[string]string{},
 		},
 		Status: corev1.PodStatus{
@@ -43,13 +43,6 @@ func newLifecycleTestWorker(now time.Time, startedAgo time.Duration) *corev1.Pod
 				{Type: corev1.PodReady, Status: corev1.ConditionTrue},
 				{Type: corev1.ContainersReady, Status: corev1.ConditionTrue},
 			},
-			ContainerStatuses: []corev1.ContainerStatus{{
-				Name:        common.WorkerContainerName,
-				ContainerID: testContainerID,
-				State: corev1.ContainerState{
-					Running: &corev1.ContainerStateRunning{StartedAt: metav1.NewTime(now.Add(-startedAgo))},
-				},
-			}},
 		},
 	}
 }
@@ -61,12 +54,12 @@ func TestWorkerCounterIdle(t *testing.T) {
 
 	tests := []struct {
 		name        string
-		startedAgo  time.Duration
+		startAgo    time.Duration
+		noStartTime bool
 		since       time.Duration
 		bytes       *int64
 		rate        *int64
 		sampleAgo   time.Duration
-		containerID string
 		notReady    bool
 		want        bool
 	}{
@@ -75,28 +68,28 @@ func TestWorkerCounterIdle(t *testing.T) {
 		{name: "missing rate", since: -5 * time.Minute, bytes: ptr(100)},
 		{name: "zero bytes before minIdle", since: -5 * time.Minute, bytes: ptr(0), rate: ptr(0)},
 		{name: "zero bytes after minIdle", since: -11 * time.Minute, bytes: ptr(0), rate: ptr(0), want: true},
-		{name: "zero bytes after a container restart", startedAgo: 3 * time.Minute, since: -30 * time.Minute, bytes: ptr(0), rate: ptr(0)},
+		{name: "zero bytes after a process restart", startAgo: 3 * time.Minute, since: -30 * time.Minute, bytes: ptr(0), rate: ptr(0)},
+		{name: "missing start time", noStartTime: true, since: -5 * time.Minute, bytes: ptr(100), rate: slow},
 		{name: "stale sample", since: -10 * time.Minute, bytes: ptr(100), rate: slow, sampleAgo: workerStatsMaxAge + time.Second},
 		{name: "sample before since", since: time.Minute, bytes: ptr(100), rate: slow},
-		{name: "sample from another container", since: -5 * time.Minute, bytes: ptr(100), rate: slow, containerID: "containerd://old"},
 		{name: "worker not ready", since: -5 * time.Minute, bytes: ptr(100), rate: slow, notReady: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			startedAgo := tt.startedAgo
-			if startedAgo == 0 {
-				startedAgo = time.Hour
-			}
-			worker := newLifecycleTestWorker(now, startedAgo)
+			worker := newLifecycleTestWorker(now)
 			if tt.notReady {
 				worker.Status.Conditions = nil
 			}
-			containerID := tt.containerID
-			if containerID == "" {
-				containerID = testContainerID
-			}
 			sampleAt := metav1.NewTime(now.Add(-tt.sampleAgo))
-			stats := juicefsiov1.CacheGroupWorkerStats{Name: worker.Name, ContainerID: containerID, LastSampleTime: &sampleAt}
+			stats := juicefsiov1.CacheGroupWorkerStats{Name: worker.Name, LastSampleTime: &sampleAt}
+			if !tt.noStartTime {
+				startAgo := tt.startAgo
+				if startAgo == 0 {
+					startAgo = time.Hour
+				}
+				startTime := metav1.NewTime(now.Add(-startAgo))
+				stats.StartTime = &startTime
+			}
 
 			if got := workerCounterIdle(worker, stats, tt.bytes, tt.rate, now.Add(tt.since), minLeaveWorkerDuration); got != tt.want {
 				t.Fatalf("workerCounterIdle() = %v, want %v", got, tt.want)
@@ -126,13 +119,13 @@ func TestShouldAddJoinOptionStopsWhenReceiveRateIdle(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			worker := newLifecycleTestWorker(now, tt.backupAgo)
+			worker := newLifecycleTestWorker(now)
 			worker.Annotations[common.AnnoBackupWorker] = now.Add(-tt.backupAgo).Format(time.RFC3339)
 			rate := tt.rate
 			sampleAt := metav1.NewTime(now)
 			stats := juicefsiov1.CacheGroupWorkerStats{
 				Name:           worker.Name,
-				ContainerID:    testContainerID,
+				StartTime:      &metav1.Time{Time: now.Add(-tt.backupAgo)},
 				ReceiveBytes:   &receiveBytes,
 				ReceiveRate:    &rate,
 				LastSampleTime: &sampleAt,
@@ -162,7 +155,7 @@ func TestRemoveRedundantWorkersKeepsMigratingWorker(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := context.Background()
-			worker := newLifecycleTestWorker(now, time.Hour)
+			worker := newLifecycleTestWorker(now)
 			worker.Spec.Containers = []corev1.Container{{Name: common.WorkerContainerName, Image: "juicedata/mount:ee-5.4.3"}}
 			if tt.waitingAgo > 0 {
 				worker.Annotations[common.AnnoWaitingDeleteWorker] = now.Add(-tt.waitingAgo).Format(time.RFC3339)

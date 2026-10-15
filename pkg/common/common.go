@@ -110,6 +110,8 @@ var (
 
 	UpdateWarmupStatsInterval = 3 * time.Second
 
+	CacheGroupRebalanceIdleRate int64 = 1 << 20
+
 	WatchNamespaces = []string{}
 
 	K8sClientQPS   float32 = 30

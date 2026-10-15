@@ -27,6 +27,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	ctrlbuilder "sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -54,7 +55,8 @@ import (
 // CacheGroupReconciler reconciles a CacheGroup object
 type CacheGroupReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme   *runtime.Scheme
+	Recorder record.EventRecorder
 }
 
 // +kubebuilder:rbac:groups=juicefs.io,resources=cachegroups,verbs=get;list;watch;create;update;patch;delete
@@ -65,6 +67,7 @@ type CacheGroupReconciler struct {
 // +kubebuilder:rbac:groups="",resources=pods/exec,verbs=create
 // +kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=create;delete;get;list;update;watch
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -189,13 +192,22 @@ func (r *CacheGroupReconciler) sync(ctx context.Context, cg *juicefsiov1.CacheGr
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
+				joinOption := workerJoinOption(expectState.Image)
 				if joining {
-					log.Info("worker join started", "worker", expectWorker.Name, "option", workerJoinOption(expectState.Image))
+					action := "create"
+					if actualState != nil {
+						action = "recreate"
+					}
+					log.Info("worker join started, "+action+" it with "+joinOption, "worker", expectWorker.Name, "option", joinOption)
+					r.eventf(cg, corev1.EventTypeNormal, "WorkerJoinStarted", "Worker %s joins with %s", expectWorker.Name, joinOption)
 				} else if joinFinished != nil {
-					log.Info("worker join finished, recreate it without join option", joinFinished...)
+					log.Info("worker join finished, recreate it without "+joinOption, joinFinished...)
+					r.eventf(cg, corev1.EventTypeNormal, "WorkerJoinFinished", "Worker %s finished joining (%v), received %v, recreating it without %s",
+						expectWorker.Name, logValue(joinFinished, "reason"), logValue(joinFinished, "receiveBytes"), joinOption)
 				}
 				if err := r.createOrUpdateWorker(ctx, actualState, expectWorker); err != nil {
 					log.Error(err, "failed to create or update worker", "worker", expectWorker.Name)
+					r.eventf(cg, corev1.EventTypeWarning, "FailedCreateWorker", "Failed to create worker %s: %v", expectWorker.Name, err)
 					errCh <- err
 					return
 				}
@@ -667,11 +679,44 @@ func (r *CacheGroupReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				return !reflect.DeepEqual(oldCG, newCG)
 			},
 		})).
-		Owns(&corev1.Pod{}).
+		Owns(&corev1.Pod{}, ctrlbuilder.WithPredicates(predicate.Funcs{
+			UpdateFunc: func(e event.UpdateEvent) bool {
+				r.recordWorkerReadiness(e.ObjectOld, e.ObjectNew)
+				return true
+			},
+		})).
 		Owns(&corev1.PersistentVolumeClaim{}).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: common.MaxCGConcurrentReconciles,
 		}).
 		Watches(&corev1.Node{}, r.enqueueRequestForNode()).
 		Complete(r)
+}
+
+func (r *CacheGroupReconciler) eventf(cg *juicefsiov1.CacheGroup, eventType, reason, messageFmt string, args ...any) {
+	if r.Recorder != nil {
+		r.Recorder.Eventf(cg, eventType, reason, messageFmt, args...)
+	}
+}
+
+// recordWorkerReadiness records an event on the cache group when its worker becomes ready or not ready.
+func (r *CacheGroupReconciler) recordWorkerReadiness(oldObj, newObj client.Object) {
+	oldPod, ok1 := oldObj.(*corev1.Pod)
+	newPod, ok2 := newObj.(*corev1.Pod)
+	if !ok1 || !ok2 || newPod.Labels[common.LabelAppType] != common.LabelWorkerValue || !newPod.DeletionTimestamp.IsZero() {
+		return
+	}
+	owner := metav1.GetControllerOf(newPod)
+	if owner == nil || owner.Kind != "CacheGroup" {
+		return
+	}
+	cg := &juicefsiov1.CacheGroup{ObjectMeta: metav1.ObjectMeta{Name: owner.Name, Namespace: newPod.Namespace, UID: owner.UID}}
+	wasReady, ready := utils.IsPodReady(*oldPod), utils.IsPodReady(*newPod)
+	switch {
+	case !wasReady && ready:
+		r.eventf(cg, corev1.EventTypeNormal, "WorkerReady", "Worker %s is ready", newPod.Name)
+	case wasReady && !ready:
+		r.eventf(cg, corev1.EventTypeWarning, "WorkerNotReady", "Worker %s is not ready: %s",
+			newPod.Name, strings.Join(utils.FormatPodNotReadyConditions(*newPod), "; "))
+	}
 }

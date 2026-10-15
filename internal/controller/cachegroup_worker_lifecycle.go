@@ -77,6 +77,12 @@ func (r *CacheGroupReconciler) removeRedundantWorkers(
 		log.Info("worker leave finished, delete it", "worker", worker.Name, "reason", reason,
 			"waitingAt", worker.Annotations[common.AnnoWaitingDeleteWorker],
 			"transferBytes", formatCounter(stats.TransferBytes, ""), "transferRate", formatCounter(stats.TransferRate, "/s"))
+		if reason == "transferRateIdle" || reason == "noCacheBlocks" {
+			r.eventf(cg, corev1.EventTypeNormal, "WorkerLeaveFinished", "Worker %s is deleted (%s), transferred %s",
+				worker.Name, reason, formatCounter(stats.TransferBytes, ""))
+		} else {
+			r.eventf(cg, corev1.EventTypeWarning, "WorkerLeaveFinished", "Worker %s is deleted without finishing data migration (%s)", worker.Name, reason)
+		}
 		if err := r.deleteCacheGroupWorker(ctx, &worker, false); err != nil {
 			log.Error(err, "failed to delete worker", "worker", worker.Name)
 			return err
@@ -136,7 +142,8 @@ func (r *CacheGroupReconciler) gracefulShutdownWorker(
 	if decommission {
 		option = "decommission"
 	}
-	log.Info("worker leave started", "worker", worker.Name, "option", option, "cacheBytes", utils.FormatBytes(int64(cacheBytes)))
+	log.Info("worker leave started, recreate it with "+option, "worker", worker.Name, "option", option, "cacheBytes", utils.FormatBytes(int64(cacheBytes)))
+	r.eventf(cg, corev1.EventTypeNormal, "WorkerLeaveStarted", "Worker %s leaves with %s, %s cached", worker.Name, option, utils.FormatBytes(int64(cacheBytes)))
 	if err := r.deleteCacheGroupWorker(ctx, worker, true); err != nil {
 		return "", err
 	}
@@ -147,7 +154,11 @@ func (r *CacheGroupReconciler) gracefulShutdownWorker(
 	}
 	worker.ResourceVersion = ""
 	worker.Annotations[common.AnnoWaitingDeleteWorker] = time.Now().Format(time.RFC3339)
-	return "", r.Create(ctx, worker)
+	if err := r.Create(ctx, worker); err != nil {
+		r.eventf(cg, corev1.EventTypeWarning, "FailedCreateWorker", "Failed to recreate worker %s with %s: %v", worker.Name, option, err)
+		return "", err
+	}
+	return "", nil
 }
 
 const (
@@ -209,6 +220,15 @@ func workerJoinOption(image string) string {
 		return "commission"
 	}
 	return "group-backup"
+}
+
+func logValue(kv []any, key string) any {
+	for i := 0; i+1 < len(kv); i += 2 {
+		if kv[i] == key {
+			return kv[i+1]
+		}
+	}
+	return nil
 }
 
 func formatCounter(v *int64, unit string) string {

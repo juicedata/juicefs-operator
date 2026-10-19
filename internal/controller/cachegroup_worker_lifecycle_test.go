@@ -112,17 +112,16 @@ func TestShouldAddJoinOptionStopsWhenReceiveRateIdle(t *testing.T) {
 		delayEnv      string
 		rate          int64
 		wantJoining   bool
-		wantReason    string
 	}{
 		{name: "within the rebalance delay", backupAgo: 5 * time.Minute, rate: idle, wantJoining: true},
 		{name: "within the rebalance delay margin", backupAgo: 10*time.Minute + 30*time.Second, rate: idle, wantJoining: true},
 		{name: "receive rate still high", backupAgo: 15 * time.Minute, rate: busy, wantJoining: true},
-		{name: "receive rate idle", backupAgo: 15 * time.Minute, rate: idle, wantReason: "receiveRateIdle"},
+		{name: "receive rate idle", backupAgo: 15 * time.Minute, rate: idle},
 		{name: "process started late after pulling the image", backupAgo: 15 * time.Minute, startAgo: 8 * time.Minute, rate: idle, wantJoining: true},
 		{name: "another worker joined recently", backupAgo: 15 * time.Minute, otherStartAgo: 5 * time.Minute, rate: idle, wantJoining: true},
-		{name: "custom rebalance delay", backupAgo: 5 * time.Minute, delayEnv: "1m", rate: idle, wantReason: "receiveRateIdle"},
+		{name: "custom rebalance delay", backupAgo: 5 * time.Minute, delayEnv: "1m", rate: idle},
 		{name: "invalid rebalance delay falls back to default", backupAgo: 5 * time.Minute, delayEnv: "bad", rate: idle, wantJoining: true},
-		{name: "backup duration expired", backupAgo: 2 * time.Hour, rate: busy, wantReason: "backupDurationExpired"},
+		{name: "backup duration expired", backupAgo: 2 * time.Hour, rate: busy},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -157,18 +156,8 @@ func TestShouldAddJoinOptionStopsWhenReceiveRateIdle(t *testing.T) {
 			}
 
 			r := &CacheGroupReconciler{}
-			joining, finished := r.shouldAddJoinOption(context.Background(), cg, worker, expectState, stats)
-			if joining != tt.wantJoining {
+			if joining := r.shouldAddJoinOption(context.Background(), cg, worker, expectState, stats); joining != tt.wantJoining {
 				t.Fatalf("shouldAddJoinOption() = %v, want %v", joining, tt.wantJoining)
-			}
-			var reason any
-			for i := 0; i+1 < len(finished); i += 2 {
-				if finished[i] == "reason" {
-					reason = finished[i+1]
-				}
-			}
-			if tt.wantReason == "" && finished != nil || tt.wantReason != "" && reason != tt.wantReason {
-				t.Fatalf("finished = %v, want reason %q", finished, tt.wantReason)
 			}
 		})
 	}

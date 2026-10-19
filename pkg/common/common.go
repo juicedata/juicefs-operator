@@ -65,6 +65,16 @@ const (
 
 	AnnoBackupWorker        = "juicefs.io/backup-worker"
 	AnnoWaitingDeleteWorker = "juicefs.io/waiting-delete-worker"
+	AnnotationPrefix        = "juicefs.io/"
+	// AnnoWorkerTemplate marks workers whose mount options are read from AnnoWorkerMountOpts via downward API,
+	// so that they can be changed by smooth restart. Workers without it inline the options in the command.
+	AnnoWorkerTemplate  = "juicefs.io/worker-template"
+	AnnoWorkerMountOpts = "juicefs.io/worker-mount-opts"
+	WorkerTemplateV2    = "v2"
+
+	WorkerOptsVolumeName = "jfs-worker-opts"
+	WorkerOptsMountPath  = "/etc/juicefs-worker"
+	WorkerOptsFileName   = "mount-opts"
 
 	LabelMaxLength       = 63
 	CronJobNameMaxLength = 52
@@ -76,6 +86,8 @@ const (
 	MinSupportedWarmupStatsVersion  = "5.2.11"
 	MinSupportedDecommissionVersion = "5.4.0"
 	MinSupportedCommissionVersion   = "5.4.3"
+	// MinSupportedSmoothRestartVersion is the first version that restarts the worker with new mount args.
+	MinSupportedSmoothRestartVersion = "5.4.3"
 )
 
 var (

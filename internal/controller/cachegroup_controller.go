@@ -44,7 +44,6 @@ import (
 	"github.com/juicedata/juicefs-operator/pkg/utils"
 	"github.com/samber/lo"
 
-	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -63,7 +62,7 @@ type CacheGroupReconciler struct {
 // +kubebuilder:rbac:groups=juicefs.io,resources=cachegroups/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=juicefs.io,resources=cachegroups/finalizers,verbs=update
 // +kubebuilder:rbac:groups="",resources=nodes,verbs=get;list;watch
-// +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;delete;create;watch
+// +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;delete;create;watch;patch
 // +kubebuilder:rbac:groups="",resources=pods/exec,verbs=create
 // +kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=create;delete;get;list;update;watch
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
@@ -168,7 +167,8 @@ func (r *CacheGroupReconciler) sync(ctx context.Context, cg *juicefsiov1.CacheGr
 		if v, ok := actualWorkerMap[r.getPodName(cg, node)]; ok {
 			actualState = &v
 		}
-		joining, joinFinished := r.shouldAddJoinOption(ctx, cg, actualState, expectState, workerStats[r.getPodName(cg, node)])
+		stats := workerStats[r.getPodName(cg, node)]
+		joining := r.shouldAddJoinOption(ctx, cg, actualState, expectState, stats)
 		podBuilder := builder.NewPodBuilder(cg, secret, node, expectState, joining)
 		expectWorker := podBuilder.NewCacheGroupWorker(ctx, false)
 		if err := r.ensurePVCsForWorker(ctx, cg, expectWorker.Name, expectState); err != nil {
@@ -180,42 +180,38 @@ func (r *CacheGroupReconciler) sync(ctx context.Context, cg *juicefsiov1.CacheGr
 			continue
 		}
 
-		if r.actualShouldbeUpdate(updateStrategyType, expectWorker, actualState) {
-			// only update respecting maxUnavailable strategy
-			if actualState != nil && utils.IsPodReady(*actualState) {
-				if numUnavailable >= maxUnavailable {
-					log.V(1).Info("maxUnavailable reached, skip updating worker, waiting for next reconciler", "worker", expectWorker.Name)
-					continue
-				}
-				numUnavailable++
+		update := r.workerUpdateAction(ctx, updateStrategyType, podBuilder, expectWorker, actualState)
+		if update == workerUpToDate {
+			log.V(1).Info("worker is up to date", "worker", expectWorker.Name)
+			continue
+		}
+		// only update respecting maxUnavailable strategy
+		if actualState != nil && utils.IsPodReady(*actualState) {
+			if numUnavailable >= maxUnavailable {
+				log.V(1).Info("maxUnavailable reached, skip updating worker, waiting for next reconciler", "worker", expectWorker.Name)
+				continue
 			}
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				joinOption := workerJoinOption(expectState.Image)
-				if joining {
-					action := "create"
-					if actualState != nil {
-						action = "recreate"
-					}
-					log.Info("worker join started, "+action+" it with "+joinOption, "worker", expectWorker.Name, "option", joinOption)
-					r.eventf(cg, corev1.EventTypeNormal, "WorkerJoinStarted", "Worker %s joins with %s", expectWorker.Name, joinOption)
-				} else if joinFinished != nil {
-					log.Info("worker join finished, recreate it without "+joinOption, joinFinished...)
-					r.eventf(cg, corev1.EventTypeNormal, "WorkerJoinFinished", "Worker %s finished joining (%v), received %v, recreating it without %s",
-						expectWorker.Name, logValue(joinFinished, "reason"), logValue(joinFinished, "receiveBytes"), joinOption)
-				}
-				if err := r.createOrUpdateWorker(ctx, actualState, expectWorker); err != nil {
-					log.Error(err, "failed to create or update worker", "worker", expectWorker.Name)
-					r.eventf(cg, corev1.EventTypeWarning, "FailedCreateWorker", "Failed to create worker %s: %v", expectWorker.Name, err)
-					errCh <- err
+			numUnavailable++
+		}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			r.recordWorkerJoin(ctx, cg, actualState, expectWorker, stats, joining)
+			if update == workerSmoothRestart {
+				err := r.smoothRestartWorker(ctx, actualState, expectWorker)
+				if err == nil {
 					return
 				}
-				// we can skip waiting for the worker to be ready here
-			}()
-		} else {
-			log.V(1).Info("worker is up to date", "worker", expectWorker.Name)
-		}
+				log.Error(err, "failed to restart worker smoothly, recreate it", "worker", expectWorker.Name)
+			}
+			if err := r.createOrUpdateWorker(ctx, cg, actualState, expectWorker); err != nil {
+				log.Error(err, "failed to create or update worker", "worker", expectWorker.Name)
+				r.eventf(cg, corev1.EventTypeWarning, "FailedCreateWorker", "Failed to create worker %s: %v", expectWorker.Name, err)
+				errCh <- err
+				return
+			}
+			// we can skip waiting for the worker to be ready here
+		}()
 	}
 	wg.Wait()
 
@@ -248,26 +244,6 @@ func (r *CacheGroupReconciler) sync(ctx context.Context, cg *juicefsiov1.CacheGr
 		return utils.IgnoreConflict(r.Status().Patch(ctx, cg, client.MergeFrom(base)))
 	}
 	return nil
-}
-
-func (r *CacheGroupReconciler) actualShouldbeUpdate(updateStrategyType appsv1.DaemonSetUpdateStrategyType, expect, actual *corev1.Pod) bool {
-	if actual == nil {
-		return true
-	}
-	if updateStrategyType == appsv1.OnDeleteDaemonSetStrategyType {
-		return false
-	}
-	// pod may be evicted or some exit without restarting., so we need to recreate it
-	if actual.Status.Phase == corev1.PodFailed || actual.Status.Phase == corev1.PodUnknown || actual.Status.Phase == corev1.PodSucceeded {
-		return true
-	}
-	if expect.Annotations[common.LabelWorkerHash] != actual.Annotations[common.LabelWorkerHash] {
-		return true
-	}
-	if !actual.DeletionTimestamp.IsZero() {
-		return true
-	}
-	return false
 }
 
 func (r *CacheGroupReconciler) parseExpectState(ctx context.Context, cg *juicefsiov1.CacheGroup) (map[string]juicefsiov1.CacheGroupWorkerTemplate, error) {
@@ -362,13 +338,14 @@ func (r *CacheGroupReconciler) getPodName(cg *juicefsiov1.CacheGroup, node strin
 	}
 }
 
-func (r *CacheGroupReconciler) createOrUpdateWorker(ctx context.Context, actual, expect *corev1.Pod) error {
+func (r *CacheGroupReconciler) createOrUpdateWorker(ctx context.Context, cg *juicefsiov1.CacheGroup, actual, expect *corev1.Pod) error {
 	log := log.FromContext(ctx).WithValues("worker", expect.Name)
 	if actual == nil {
 		log.Info("create worker")
+		r.eventf(cg, corev1.EventTypeNormal, "WorkerCreated", "Worker %s is created", expect.Name)
 		return r.createCacheGroupWorker(ctx, expect)
 	}
-	return r.updateCacheGroupWorker(ctx, actual, expect)
+	return r.updateCacheGroupWorker(ctx, cg, actual, expect)
 }
 
 // ensurePVCsForWorker ensures all PVCs for a worker are created and expanded when requested.
@@ -394,9 +371,10 @@ func (r *CacheGroupReconciler) createCacheGroupWorker(ctx context.Context, expec
 	return nil
 }
 
-func (r *CacheGroupReconciler) updateCacheGroupWorker(ctx context.Context, oldWorker, expectWorker *corev1.Pod) error {
+func (r *CacheGroupReconciler) updateCacheGroupWorker(ctx context.Context, cg *juicefsiov1.CacheGroup, oldWorker, expectWorker *corev1.Pod) error {
 	log := log.FromContext(ctx).WithValues("worker", expectWorker.Name)
 	log.Info("worker spec changed, delete old and create new one")
+	r.eventf(cg, corev1.EventTypeNormal, "WorkerUpdated", "Worker %s is recreated", expectWorker.Name)
 	if err := r.deleteCacheGroupWorker(ctx, oldWorker, true); err != nil {
 		log.Error(err, "failed to delete old worker")
 		return err

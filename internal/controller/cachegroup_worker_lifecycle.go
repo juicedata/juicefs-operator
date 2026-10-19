@@ -16,23 +16,27 @@ package controller
 
 import (
 	"context"
+	"maps"
+	"strings"
 	"time"
 
 	"github.com/samber/lo"
 	corev1 "k8s.io/api/core/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	juicefsiov1 "github.com/juicedata/juicefs-operator/api/v1"
 	"github.com/juicedata/juicefs-operator/pkg/builder"
 	"github.com/juicedata/juicefs-operator/pkg/common"
 	"github.com/juicedata/juicefs-operator/pkg/utils"
+	appsv1 "k8s.io/api/apps/v1"
 )
 
 // removeRedundantWorkers deletes workers that are no longer expected.
-// With more than one ready worker, a ready worker that still has cache blocks is recreated with
-// decommission (or group-weight=0 before EE 5.4.0) to migrate its cache, and deleted once its
-// transfer rate drops below the idle rate or WaitingDeletedMaxDuration expires.
-// Otherwise the worker is deleted directly.
+// With more than one ready worker, a ready worker that still has cache blocks is restarted with
+// decommission (or group-weight=0 before EE 5.4.0) to migrate its cache, smoothly for v2 workers or
+// by recreating otherwise, and deleted once its transfer rate drops below the idle rate or
+// WaitingDeletedMaxDuration expires. Otherwise the worker is deleted directly.
 func (r *CacheGroupReconciler) removeRedundantWorkers(
 	ctx context.Context,
 	cg *juicefsiov1.CacheGroup,
@@ -142,23 +146,48 @@ func (r *CacheGroupReconciler) gracefulShutdownWorker(
 	if decommission {
 		option = "decommission"
 	}
-	log.Info("worker leave started, recreate it with "+option, "worker", worker.Name, "option", option, "cacheBytes", utils.FormatBytes(int64(cacheBytes)))
+	log.Info("worker leave started with "+option, "worker", worker.Name, "option", option, "cacheBytes", utils.FormatBytes(int64(cacheBytes)))
 	r.eventf(cg, corev1.EventTypeNormal, "WorkerLeaveStarted", "Worker %s leaves with %s, %s cached", worker.Name, option, utils.FormatBytes(int64(cacheBytes)))
+	leaving := worker.DeepCopy()
+	if decommission {
+		builder.UpdateWorkerDecommission(leaving)
+	} else {
+		builder.UpdateWorkerGroupWeight(leaving, 0)
+	}
+	leaving.Annotations[common.AnnoWaitingDeleteWorker] = time.Now().Format(time.RFC3339)
+	if utils.IsWorkerV2(*worker) {
+		err := r.smoothRestartWorker(ctx, worker, leaving)
+		if err == nil {
+			return "", nil
+		}
+		log.Error(err, "failed to restart worker smoothly, recreate it", "worker", worker.Name)
+	}
 	if err := r.deleteCacheGroupWorker(ctx, worker, true); err != nil {
 		return "", err
 	}
-	if decommission {
-		builder.UpdateWorkerDecommission(worker)
-	} else {
-		builder.UpdateWorkerGroupWeight(worker, 0)
-	}
-	worker.ResourceVersion = ""
-	worker.Annotations[common.AnnoWaitingDeleteWorker] = time.Now().Format(time.RFC3339)
-	if err := r.Create(ctx, worker); err != nil {
+	leaving.ResourceVersion = ""
+	if err := r.Create(ctx, leaving); err != nil {
 		r.eventf(cg, corev1.EventTypeWarning, "FailedCreateWorker", "Failed to recreate worker %s with %s: %v", worker.Name, option, err)
 		return "", err
 	}
 	return "", nil
+}
+
+// smoothRestartWorker restarts the juicefs process of a v2 worker with the mount options of target, and then
+// updates the juicefs.io annotations of the worker to those of target, leaving others untouched.
+func (r *CacheGroupReconciler) smoothRestartWorker(ctx context.Context, worker, target *corev1.Pod) error {
+	if err := utils.SmoothRestartWorker(ctx, *worker, target.Annotations[common.AnnoWorkerMountOpts]); err != nil {
+		return err
+	}
+	updated := worker.DeepCopy()
+	isJuiceFSKey := func(k string) bool { return strings.HasPrefix(k, common.AnnotationPrefix) }
+	maps.DeleteFunc(updated.Annotations, func(k, _ string) bool { return isJuiceFSKey(k) })
+	for k, v := range target.Annotations {
+		if isJuiceFSKey(k) {
+			updated.Annotations[k] = v
+		}
+	}
+	return r.Patch(ctx, updated, client.MergeFrom(worker))
 }
 
 const (
@@ -168,29 +197,34 @@ const (
 	rebalanceDelayMargin    = time.Minute
 )
 
-// shouldAddJoinOption reports whether the worker needs the temporary join option. When the join of
-// an existing worker finishes, it also returns the log key/values describing why.
-func (r *CacheGroupReconciler) shouldAddJoinOption(ctx context.Context, cg *juicefsiov1.CacheGroup, actual *corev1.Pod, expectState juicefsiov1.CacheGroupWorkerTemplate, stats juicefsiov1.CacheGroupWorkerStats) (bool, []any) {
+// shouldAddJoinOption reports whether the worker needs the temporary join option.
+func (r *CacheGroupReconciler) shouldAddJoinOption(ctx context.Context, cg *juicefsiov1.CacheGroup, actual *corev1.Pod, expectState juicefsiov1.CacheGroupWorkerTemplate, stats juicefsiov1.CacheGroupWorkerStats) bool {
+	log := log.FromContext(ctx)
 	if utils.CompareEEImageVersion(expectState.Image, "5.1.0") < 0 {
-		return false, nil
+		return false
 	}
 	duration := utils.GetBackupWorkerDuration(cg.Spec.BackupDuration)
 	if duration <= minBackupWorkerDuration {
-		return false, nil
+		return false
 	}
-	if lo.Contains(expectState.Opts, workerJoinOption(expectState.Image)) || lo.Contains(expectState.Opts, "decommission") {
-		return false, nil
+	joinOption := workerJoinOption(expectState.Image)
+	if lo.Contains(expectState.Opts, joinOption) || lo.Contains(expectState.Opts, "decommission") {
+		return false
 	}
 
-	// Enable the temporary join option only when joining an existing cache group.
 	if actual == nil {
-		return cg.Status.ReadyWorker >= 1, nil
+		return cg.Status.ReadyWorker >= 1
 	}
 	v, ok := actual.Annotations[common.AnnoBackupWorker]
 	if !ok {
-		return false, nil
+		return false
 	}
 	backupAt := utils.MustParseTime(v)
+	if time.Since(backupAt) >= duration {
+		log.Info("worker join finished as backupDuration expired, remove "+joinOption, "worker", actual.Name,
+			"backupAt", v, "backupDuration", duration.String())
+		return false
+	}
 	// Existing workers push data to the joining worker only after the group membership has been
 	// stable for the rebalance delay, and every worker (re)start changes the membership.
 	checkAfter := backupAt
@@ -200,19 +234,20 @@ func (r *CacheGroupReconciler) shouldAddJoinOption(ctx context.Context, cg *juic
 		}
 	}
 	checkAfter = checkAfter.Add(workerRebalanceDelay(actual) + rebalanceDelayMargin)
-	progress := []any{"backupAt", v, "checkAfter", checkAfter.Format(time.RFC3339),
-		"receiveBytes", formatCounter(stats.ReceiveBytes, ""), "receiveRate", formatCounter(stats.ReceiveRate, "/s")}
-	finished := func(reason string) []any {
-		return append([]any{"worker", actual.Name, "reason", reason}, progress...)
-	}
-	if time.Since(backupAt) >= duration {
-		return false, finished("backupDurationExpired")
-	}
+	idleRate := formatCounter(&common.CacheGroupRebalanceIdleRate, "/s")
 	if workerCounterIdle(actual, stats, stats.ReceiveBytes, stats.ReceiveRate, checkAfter, 0) {
-		return false, finished("receiveRateIdle")
+		log.Info("worker join finished, receive rate dropped below idle rate, remove "+joinOption, "worker", actual.Name,
+			"receiveBytes", formatCounter(stats.ReceiveBytes, ""), "receiveRate", formatCounter(stats.ReceiveRate, "/s"), "idleRate", idleRate)
+		return false
 	}
-	log.FromContext(ctx).V(1).Info("waiting for worker to join", append([]any{"worker", actual.Name}, progress...)...)
-	return true, nil
+	if time.Now().Before(checkAfter) {
+		log.V(1).Info("worker joining, waiting for the cache group to start rebalancing", "worker", actual.Name,
+			"checkAfter", checkAfter.Format(time.RFC3339))
+	} else {
+		log.V(1).Info("worker joining, waiting for receive rate to drop below idle rate", "worker", actual.Name,
+			"receiveBytes", formatCounter(stats.ReceiveBytes, ""), "receiveRate", formatCounter(stats.ReceiveRate, "/s"), "idleRate", idleRate)
+	}
+	return true
 }
 
 func workerJoinOption(image string) string {
@@ -222,13 +257,26 @@ func workerJoinOption(image string) string {
 	return "group-backup"
 }
 
-func logValue(kv []any, key string) any {
-	for i := 0; i+1 < len(kv); i += 2 {
-		if kv[i] == key {
-			return kv[i+1]
+// recordWorkerJoin logs and records events for the join progress of a worker to be created or updated.
+func (r *CacheGroupReconciler) recordWorkerJoin(ctx context.Context, cg *juicefsiov1.CacheGroup, actual, expect *corev1.Pod, stats juicefsiov1.CacheGroupWorkerStats, joining bool) {
+	log := log.FromContext(ctx)
+	joinOption := workerJoinOption(expect.Spec.Containers[0].Image)
+	if joining {
+		action := "create"
+		if actual != nil {
+			action = "recreate"
 		}
+		log.Info("worker join started, "+action+" it with "+joinOption, "worker", expect.Name, "option", joinOption)
+		r.eventf(cg, corev1.EventTypeNormal, "WorkerJoinStarted", "Worker %s joins with %s", expect.Name, joinOption)
+		return
 	}
-	return nil
+	if actual == nil {
+		return
+	}
+	if _, ok := actual.Annotations[common.AnnoBackupWorker]; ok {
+		r.eventf(cg, corev1.EventTypeNormal, "WorkerJoinFinished", "Worker %s finished joining, received %s, removing %s",
+			expect.Name, formatCounter(stats.ReceiveBytes, ""), joinOption)
+	}
 }
 
 func formatCounter(v *int64, unit string) string {
@@ -277,4 +325,41 @@ func workerCounterIdle(worker *corev1.Pod, stats juicefsiov1.CacheGroupWorkerSta
 		idleSince = stats.StartTime.Time
 	}
 	return sampleAt.Sub(idleSince) >= minIdle
+}
+
+type workerUpdate int
+
+const (
+	workerUpToDate workerUpdate = iota
+	workerRecreate
+	workerSmoothRestart
+)
+
+func (r *CacheGroupReconciler) workerUpdateAction(ctx context.Context, updateStrategyType appsv1.DaemonSetUpdateStrategyType, podBuilder *builder.PodBuilder, expect, actual *corev1.Pod) workerUpdate {
+	if actual == nil {
+		return workerRecreate
+	}
+	if updateStrategyType == appsv1.OnDeleteDaemonSetStrategyType {
+		return workerUpToDate
+	}
+	// pod may be evicted or some exit without restarting., so we need to recreate it
+	if actual.Status.Phase == corev1.PodFailed || actual.Status.Phase == corev1.PodUnknown || actual.Status.Phase == corev1.PodSucceeded {
+		return workerRecreate
+	}
+	expectHash := expect.Annotations[common.LabelWorkerHash]
+	if !utils.IsWorkerV2(*actual) && utils.IsWorkerV2(*expect) {
+		// existing v1 workers are compared with the v1 rendering, so that they are not recreated only for the template
+		expectHash = podBuilder.V1WorkerHash(ctx)
+	}
+	if expectHash != actual.Annotations[common.LabelWorkerHash] {
+		return workerRecreate
+	}
+	if !actual.DeletionTimestamp.IsZero() {
+		return workerRecreate
+	}
+	// Mount options of a v2 worker that are not in its hash, i.e. the join option, are changed by smooth restart.
+	if utils.IsWorkerV2(*actual) && actual.Annotations[common.AnnoWorkerMountOpts] != expect.Annotations[common.AnnoWorkerMountOpts] {
+		return workerSmoothRestart
+	}
+	return workerUpToDate
 }

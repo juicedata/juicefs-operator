@@ -148,9 +148,12 @@ func parseWorkerStats(name, stdout string, now time.Time) (juicefsiov1.CacheGrou
 }
 
 func WorkerSupportsDecommission(pod corev1.Pod) bool {
-	image := pod.Spec.Containers[0].Image
+	return isEEImageAtLeast(pod.Spec.Containers[0].Image, common.MinSupportedDecommissionVersion)
+}
+
+func isEEImageAtLeast(image, version string) bool {
 	parts := strings.SplitN(image[strings.LastIndex(image, "/")+1:], ":", 2)
-	return len(parts) >= 2 && strings.Contains(parts[1], "ee-") && CompareEEImageVersion(image, common.MinSupportedDecommissionVersion) >= 0
+	return len(parts) >= 2 && strings.Contains(parts[1], "ee-") && CompareEEImageVersion(image, version) >= 0
 }
 
 func ParseUpdateStrategy(strategy *appsv1.DaemonSetUpdateStrategy, total int) (appsv1.DaemonSetUpdateStrategyType, int) {

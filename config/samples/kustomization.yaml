@@ -5,4 +5,5 @@ resources:
 - juicefs.io_v1_warmup.yaml
 - v1_sync.yaml
 - v1_cronsync.yaml
+- v1_webdav.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples

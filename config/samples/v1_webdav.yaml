@@ -1,0 +1,31 @@
+apiVersion: juicefs.io/v1
+kind: WebDAV
+metadata:
+  name: webdav-example
+  namespace: default
+spec:
+  image: juicedata/mount:ee-5.3.6-c8ec652
+  replicas: 1
+  secretRef:
+    name: juicefs-secret
+  port: 9007
+  serviceType: ClusterIP
+  # Additional options for juicefs webdav command.
+  # See: https://juicefs.com/docs/zh/cloud/reference/command_reference/#webdav
+  options:
+    - gzip
+    # - threads=8
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+  # nodeSelector:
+  #   kubernetes.io/hostname: node1
+  # tolerations:
+  #   - key: "key1"
+  #     operator: "Equal"
+  #     value: "value1"
+  #     effect: "NoSchedule"

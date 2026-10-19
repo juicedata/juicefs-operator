@@ -94,37 +94,14 @@ func GetWorkerCacheBlocksBytes(ctx context.Context, pod corev1.Pod, mountPoint s
 	if !IsPodReady(pod) || !IsMountPointReady(ctx, pod, mountPoint) {
 		return 0, fmt.Errorf("pod %s is not ready yet", pod.Name)
 	}
-	log := log.FromContext(ctx).WithName("getWorkerCacheBlocksBytes").WithValues("worker", pod.Name)
-
-	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
-	defer cancel()
-	cmd := []string{"sh", "-c", fmt.Sprintf("cat %s/.stats", mountPoint)}
-
-	stdout, stderr, err := ExecInPod(ctx, pod.Namespace, pod.Name, common.WorkerContainerName, cmd)
-
-	if err != nil && len(stderr) == 0 {
+	stats, err := GetWorkerStats(ctx, pod, mountPoint)
+	if err != nil {
 		return 0, err
 	}
-	if len(stderr) > 0 {
-		log.Error(err, "failed to get cache blocks bytes", "stderr", strings.Trim(stderr, "\n"))
-		return 0, err
+	if stats.CacheBytes == nil {
+		return 0, nil
 	}
-	// parse stdout
-	// style like: "blockcache.bytes: 0\nblockcache.blocks: 0"
-	lines := strings.Split(stdout, "\n")
-	cacheBytes := 0
-
-	for _, line := range lines {
-		if strings.HasPrefix(line, "blockcache.bytes:") {
-			if _, err := fmt.Sscanf(line, "blockcache.bytes: %d", &cacheBytes); err != nil {
-				log.Error(err, "failed to parse cache bytes in stats file")
-				return 0, err
-			}
-			break
-		}
-	}
-
-	return cacheBytes, nil
+	return int(*stats.CacheBytes), nil
 }
 
 func GetWorkerStats(ctx context.Context, pod corev1.Pod, mountPoint string) (juicefsiov1.CacheGroupWorkerStats, error) {
@@ -134,7 +111,6 @@ func GetWorkerStats(ctx context.Context, pod corev1.Pod, mountPoint string) (jui
 	if err != nil {
 		return juicefsiov1.CacheGroupWorkerStats{}, fmt.Errorf("failed to read worker stats: %w (stderr: %s)", err, strings.TrimSpace(stderr))
 	}
-
 	return parseWorkerStats(pod.Name, stdout, time.Now())
 }
 

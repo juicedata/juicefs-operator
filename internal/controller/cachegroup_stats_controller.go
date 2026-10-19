@@ -73,7 +73,6 @@ func (r *CacheGroupStatsReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		if !worker.DeletionTimestamp.IsZero() {
 			return
 		}
-		// On failure the previous sample is kept and ages out.
 		next, ok := previousStats[worker.Name]
 		recent := ok && next.LastSampleTime != nil && time.Since(next.LastSampleTime.Time) < workerStatsMinInterval
 		if !recent && utils.IsPodReady(worker) {

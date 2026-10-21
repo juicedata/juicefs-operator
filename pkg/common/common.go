@@ -84,7 +84,7 @@ const (
 	InitConfigMountPath  = "/etc/juicefs"
 
 	MinSupportedWarmupStatsVersion  = "5.2.11"
-	MinSupportedDecommissionVersion = "5.4.0"
+	MinSupportedDecommissionVersion = "5.4.3"
 	MinSupportedCommissionVersion   = "5.4.3"
 	// MinSupportedSmoothRestartVersion is the first version that restarts the worker with new mount args.
 	MinSupportedSmoothRestartVersion = "5.4.3"

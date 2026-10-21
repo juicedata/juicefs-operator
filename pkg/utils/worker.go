@@ -43,28 +43,28 @@ func ParseWorkerMountInfo(worker corev1.Pod) (string, []string) {
 	return volName, opts
 }
 
-// workerRestartArgsPath is read by the juicefs supervisor to restart the juicefs process with new args on
-// SIGHUP.
-// The supervisor is always PID 1, since the worker container execs mount.juicefs without hostPID.
+// We have not opened HostPid, so the supervisor is always PID 1
 const workerRestartArgsPath = "/tmp/jfs_restart_args.1"
 
-// SmoothRestartWorker restarts the juicefs process of the worker with new mount options, keeping the FUSE
-// session and the local cache, and waits until the process is restarted.
-func SmoothRestartWorker(ctx context.Context, worker corev1.Pod, mountOpts string) error {
+// TriggerWorkerSmoothRestart sends SIGHUP with new mount options and returns the old process ID.
+func TriggerWorkerSmoothRestart(ctx context.Context, worker corev1.Pod, mountOpts string) (int, error) {
 	oldPid, err := getWorkerPid(ctx, worker)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	volName, _ := ParseWorkerMountInfo(worker)
 	args, err := json.Marshal([]string{common.JuiceFsMountBinary, volName, common.MountPoint, "-o", mountOpts})
 	if err != nil {
-		return err
+		return 0, err
 	}
 	script := `umask 077 && printf '%s' "$1" > "$2.tmp" && mv -f "$2.tmp" "$2" && kill -HUP "$3"`
 	if _, err := execInWorker(ctx, worker, []string{"sh", "-c", script, "sh", string(args), workerRestartArgsPath, strconv.Itoa(oldPid)}); err != nil {
-		return fmt.Errorf("failed to trigger smooth restart: %w", err)
+		return 0, fmt.Errorf("failed to trigger smooth restart: %w", err)
 	}
+	return oldPid, nil
+}
 
+func WaitForWorkerRestart(ctx context.Context, worker corev1.Pod, oldPid int) error {
 	deadline := time.Now().Add(time.Minute)
 	for time.Now().Before(deadline) {
 		select {

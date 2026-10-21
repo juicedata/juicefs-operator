@@ -81,18 +81,20 @@ func (r *CacheGroupReconciler) removeRedundantWorkers(
 		log.Info("worker leave finished, delete it", "worker", worker.Name, "reason", reason,
 			"waitingAt", worker.Annotations[common.AnnoWaitingDeleteWorker],
 			"transferBytes", formatCounter(stats.TransferBytes, ""), "transferRate", formatCounter(stats.TransferRate, "/s"))
-		if reason == "transferRateIdle" || reason == "noCacheBlocks" {
-			r.eventf(cg, corev1.EventTypeNormal, "WorkerLeaveFinished", "Worker %s is deleted (%s), transferred %s",
-				worker.Name, reason, formatCounter(stats.TransferBytes, ""))
-		} else {
-			r.eventf(cg, corev1.EventTypeWarning, "WorkerLeaveFinished", "Worker %s is deleted without finishing data migration (%s)", worker.Name, reason)
-		}
 		if err := r.deleteCacheGroupWorker(ctx, &worker, false); err != nil {
 			log.Error(err, "failed to delete worker", "worker", worker.Name)
+			r.eventf(cg, corev1.EventTypeWarning, "WorkerOperationFailed", "Failed to delete worker %s: %v", worker.Name, err)
 			return err
+		}
+		if reason == "transferRateIdle" || reason == "noCacheBlocks" {
+			r.eventf(cg, corev1.EventTypeNormal, "WorkerDeleting", "Deletion requested for worker %s (%s), transferred %s",
+				worker.Name, reason, formatCounter(stats.TransferBytes, ""))
+		} else {
+			r.eventf(cg, corev1.EventTypeWarning, "WorkerDeleting", "Deletion requested for worker %s without confirming migration completion (%s)", worker.Name, reason)
 		}
 		if err := r.cleanWorkerCache(ctx, cg, worker); err != nil {
 			log.Error(err, "failed to clean worker cache", "worker", worker.Name)
+			r.eventf(cg, corev1.EventTypeWarning, "WorkerOperationFailed", "Failed to clean cache for worker %s: %v", worker.Name, err)
 			return err
 		}
 	}
@@ -146,8 +148,7 @@ func (r *CacheGroupReconciler) gracefulShutdownWorker(
 	if decommission {
 		option = "decommission"
 	}
-	log.Info("worker leave started with "+option, "worker", worker.Name, "option", option, "cacheBytes", utils.FormatBytes(int64(cacheBytes)))
-	r.eventf(cg, corev1.EventTypeNormal, "WorkerLeaveStarted", "Worker %s leaves with %s, %s cached", worker.Name, option, utils.FormatBytes(int64(cacheBytes)))
+	log.Info("start worker leave with "+option, "worker", worker.Name, "option", option, "cacheBytes", utils.FormatBytes(int64(cacheBytes)))
 	leaving := worker.DeepCopy()
 	if decommission {
 		builder.UpdateWorkerDecommission(leaving)
@@ -156,27 +157,35 @@ func (r *CacheGroupReconciler) gracefulShutdownWorker(
 	}
 	leaving.Annotations[common.AnnoWaitingDeleteWorker] = time.Now().Format(time.RFC3339)
 	if utils.IsWorkerV2(*worker) {
-		err := r.smoothRestartWorker(ctx, worker, leaving)
+		err := r.smoothRestartWorker(ctx, cg, worker, leaving)
 		if err == nil {
+			r.eventf(cg, corev1.EventTypeNormal, "WorkerLeaveStarted", "Worker %s leaves with %s, %s cached", worker.Name, option, utils.FormatBytes(int64(cacheBytes)))
 			return "", nil
 		}
 		log.Error(err, "failed to restart worker smoothly, recreate it", "worker", worker.Name)
 	}
 	if err := r.deleteCacheGroupWorker(ctx, worker, true); err != nil {
+		r.eventf(cg, corev1.EventTypeWarning, "WorkerOperationFailed", "Failed to delete worker %s for recreation with %s: %v", worker.Name, option, err)
 		return "", err
 	}
 	leaving.ResourceVersion = ""
 	if err := r.Create(ctx, leaving); err != nil {
-		r.eventf(cg, corev1.EventTypeWarning, "FailedCreateWorker", "Failed to recreate worker %s with %s: %v", worker.Name, option, err)
+		r.eventf(cg, corev1.EventTypeWarning, "WorkerOperationFailed", "Failed to recreate worker %s with %s: %v", worker.Name, option, err)
 		return "", err
 	}
+	r.eventf(cg, corev1.EventTypeNormal, "WorkerLeaveStarted", "Worker %s leaves with %s, %s cached", worker.Name, option, utils.FormatBytes(int64(cacheBytes)))
 	return "", nil
 }
 
 // smoothRestartWorker restarts the juicefs process of a v2 worker with the mount options of target, and then
 // updates the juicefs.io annotations of the worker to those of target, leaving others untouched.
-func (r *CacheGroupReconciler) smoothRestartWorker(ctx context.Context, worker, target *corev1.Pod) error {
-	if err := utils.SmoothRestartWorker(ctx, *worker, target.Annotations[common.AnnoWorkerMountOpts]); err != nil {
+func (r *CacheGroupReconciler) smoothRestartWorker(ctx context.Context, cg *juicefsiov1.CacheGroup, worker, target *corev1.Pod) (err error) {
+	oldPid, err := utils.TriggerWorkerSmoothRestart(ctx, *worker, target.Annotations[common.AnnoWorkerMountOpts])
+	if err != nil {
+		return err
+	}
+	r.eventf(cg, corev1.EventTypeNormal, "WorkerRestartTriggered", "Smooth restart triggered for worker %s", worker.Name)
+	if err := utils.WaitForWorkerRestart(ctx, *worker, oldPid); err != nil {
 		return err
 	}
 	updated := worker.DeepCopy()
@@ -257,26 +266,24 @@ func workerJoinOption(image string) string {
 	return "group-backup"
 }
 
-// recordWorkerJoin logs and records events for the join progress of a worker to be created or updated.
+// recordWorkerJoin records join state changes after a worker is successfully created or updated.
 func (r *CacheGroupReconciler) recordWorkerJoin(ctx context.Context, cg *juicefsiov1.CacheGroup, actual, expect *corev1.Pod, stats juicefsiov1.CacheGroupWorkerStats, joining bool) {
 	log := log.FromContext(ctx)
+	var wasJoining bool
+	if actual != nil {
+		_, wasJoining = actual.Annotations[common.AnnoBackupWorker]
+	}
+	if joining == wasJoining {
+		return
+	}
 	joinOption := workerJoinOption(expect.Spec.Containers[0].Image)
 	if joining {
-		action := "create"
-		if actual != nil {
-			action = "recreate"
-		}
-		log.Info("worker join started, "+action+" it with "+joinOption, "worker", expect.Name, "option", joinOption)
+		log.Info("worker join started with "+joinOption, "worker", expect.Name, "option", joinOption)
 		r.eventf(cg, corev1.EventTypeNormal, "WorkerJoinStarted", "Worker %s joins with %s", expect.Name, joinOption)
 		return
 	}
-	if actual == nil {
-		return
-	}
-	if _, ok := actual.Annotations[common.AnnoBackupWorker]; ok {
-		r.eventf(cg, corev1.EventTypeNormal, "WorkerJoinFinished", "Worker %s finished joining, received %s, removing %s",
-			expect.Name, formatCounter(stats.ReceiveBytes, ""), joinOption)
-	}
+	r.eventf(cg, corev1.EventTypeNormal, "WorkerJoinFinished", "Worker %s exited the temporary join phase, received %s",
+		expect.Name, formatCounter(stats.ReceiveBytes, ""))
 }
 
 func formatCounter(v *int64, unit string) string {
@@ -333,6 +340,7 @@ const (
 	workerUpToDate workerUpdate = iota
 	workerRecreate
 	workerSmoothRestart
+	workerInplaceUpdate // TODO
 )
 
 func (r *CacheGroupReconciler) workerUpdateAction(ctx context.Context, updateStrategyType appsv1.DaemonSetUpdateStrategyType, podBuilder *builder.PodBuilder, expect, actual *corev1.Pod) workerUpdate {
@@ -357,7 +365,11 @@ func (r *CacheGroupReconciler) workerUpdateAction(ctx context.Context, updateStr
 	if !actual.DeletionTimestamp.IsZero() {
 		return workerRecreate
 	}
-	// Mount options of a v2 worker that are not in its hash, i.e. the join option, are changed by smooth restart.
+
+	// TODO: only resource changes should trigger inplace updates
+	// TODO: only annotations/labels changes should trigger inplace updates
+	// TODO: only mount options changes should trigger smooth restart
+
 	if utils.IsWorkerV2(*actual) && actual.Annotations[common.AnnoWorkerMountOpts] != expect.Annotations[common.AnnoWorkerMountOpts] {
 		return workerSmoothRestart
 	}

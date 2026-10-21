@@ -652,7 +652,6 @@ func (p *PodBuilder) newWorker(ctx context.Context, dryrun bool, v2 bool) *corev
 	worker.Spec.Containers[0].Env = p.genEnvs(ctx)
 	var mountOpts string
 	if v2 {
-		// TODO: apply mount option changes by smooth restart instead of recreating the worker.
 		mountOpts = p.genMountOpts(ctx)
 		worker.Annotations[common.AnnoWorkerTemplate] = common.WorkerTemplateV2
 		worker.Annotations[common.AnnoWorkerMountOpts] = mountOpts

@@ -157,6 +157,8 @@ func (r *CacheGroupReconciler) sync(ctx context.Context, cg *juicefsiov1.CacheGr
 		ready := utils.IsPodReady(worker)
 		if !ready && time.Since(worker.CreationTimestamp.Time) > time.Minute {
 			log.Info("worker is not ready for more than 1 minute", "worker", worker.Name, "since", time.Since(worker.CreationTimestamp.Time).Round(time.Second).String(), "conditions", utils.FormatPodNotReadyConditions(worker))
+			r.eventf(cg, corev1.EventTypeWarning, "WorkerNotReady", "Worker %s is not ready: %s",
+				worker.Name, strings.Join(utils.FormatPodNotReadyConditions(worker), "; "))
 		}
 		return !ready
 	})
@@ -196,20 +198,20 @@ func (r *CacheGroupReconciler) sync(ctx context.Context, cg *juicefsiov1.CacheGr
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			r.recordWorkerJoin(ctx, cg, actualState, expectWorker, stats, joining)
 			if update == workerSmoothRestart {
-				err := r.smoothRestartWorker(ctx, actualState, expectWorker)
+				err := r.smoothRestartWorker(ctx, cg, actualState, expectWorker)
 				if err == nil {
+					r.recordWorkerJoin(ctx, cg, actualState, expectWorker, stats, joining)
 					return
 				}
 				log.Error(err, "failed to restart worker smoothly, recreate it", "worker", expectWorker.Name)
 			}
 			if err := r.createOrUpdateWorker(ctx, cg, actualState, expectWorker); err != nil {
 				log.Error(err, "failed to create or update worker", "worker", expectWorker.Name)
-				r.eventf(cg, corev1.EventTypeWarning, "FailedCreateWorker", "Failed to create worker %s: %v", expectWorker.Name, err)
 				errCh <- err
 				return
 			}
+			r.recordWorkerJoin(ctx, cg, actualState, expectWorker, stats, joining)
 			// we can skip waiting for the worker to be ready here
 		}()
 	}
@@ -342,8 +344,7 @@ func (r *CacheGroupReconciler) createOrUpdateWorker(ctx context.Context, cg *jui
 	log := log.FromContext(ctx).WithValues("worker", expect.Name)
 	if actual == nil {
 		log.Info("create worker")
-		r.eventf(cg, corev1.EventTypeNormal, "WorkerCreated", "Worker %s is created", expect.Name)
-		return r.createCacheGroupWorker(ctx, expect)
+		return r.createCacheGroupWorker(ctx, cg, expect)
 	}
 	return r.updateCacheGroupWorker(ctx, cg, actual, expect)
 }
@@ -360,26 +361,33 @@ func (r *CacheGroupReconciler) ensurePVCsForWorker(ctx context.Context, cg *juic
 	return nil
 }
 
-func (r *CacheGroupReconciler) createCacheGroupWorker(ctx context.Context, expectWorker *corev1.Pod) error {
+func (r *CacheGroupReconciler) createCacheGroupWorker(ctx context.Context, cg *juicefsiov1.CacheGroup, expectWorker *corev1.Pod) error {
 	err := r.Create(ctx, expectWorker)
 	if err != nil {
 		if apierrors.IsAlreadyExists(err) {
 			return nil
 		}
+		r.eventf(cg, corev1.EventTypeWarning, "WorkerOperationFailed", "Failed to create worker %s: %v", expectWorker.Name, err)
 		return err
 	}
+	r.eventf(cg, corev1.EventTypeNormal, "WorkerCreated", "Worker %s is created", expectWorker.Name)
 	return nil
 }
 
 func (r *CacheGroupReconciler) updateCacheGroupWorker(ctx context.Context, cg *juicefsiov1.CacheGroup, oldWorker, expectWorker *corev1.Pod) error {
 	log := log.FromContext(ctx).WithValues("worker", expectWorker.Name)
 	log.Info("worker spec changed, delete old and create new one")
-	r.eventf(cg, corev1.EventTypeNormal, "WorkerUpdated", "Worker %s is recreated", expectWorker.Name)
 	if err := r.deleteCacheGroupWorker(ctx, oldWorker, true); err != nil {
 		log.Error(err, "failed to delete old worker")
+		r.eventf(cg, corev1.EventTypeWarning, "WorkerOperationFailed", "Failed to delete worker %s for recreation: %v", oldWorker.Name, err)
 		return err
 	}
-	return r.Create(ctx, expectWorker)
+	if err := r.Create(ctx, expectWorker); err != nil {
+		r.eventf(cg, corev1.EventTypeWarning, "WorkerOperationFailed", "Failed to recreate worker %s: %v", expectWorker.Name, err)
+		return err
+	}
+	r.eventf(cg, corev1.EventTypeNormal, "WorkerUpdated", "Worker %s spec changed, recreated", expectWorker.Name)
+	return nil
 }
 
 // deleteCacheGroupWorker deletes a cache group worker pod. If the `waiting` is true,

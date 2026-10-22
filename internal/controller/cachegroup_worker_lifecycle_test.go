@@ -28,6 +28,7 @@ import (
 
 	juicefsiov1 "github.com/juicedata/juicefs-operator/api/v1"
 	"github.com/juicedata/juicefs-operator/pkg/common"
+	"github.com/juicedata/juicefs-operator/pkg/utils"
 )
 
 func newLifecycleTestWorker(now time.Time) *corev1.Pod {
@@ -66,11 +67,11 @@ func TestWorkerCounterIdle(t *testing.T) {
 		{name: "rate below idle rate", since: -5 * time.Minute, bytes: ptr(100), rate: slow, want: true},
 		{name: "rate at idle rate", since: -5 * time.Minute, bytes: ptr(100), rate: fast},
 		{name: "missing rate", since: -5 * time.Minute, bytes: ptr(100)},
-		{name: "zero bytes before minIdle", since: -5 * time.Minute, bytes: ptr(0), rate: ptr(0)},
-		{name: "zero bytes after minIdle", since: -11 * time.Minute, bytes: ptr(0), rate: ptr(0), want: true},
-		{name: "zero bytes after a process restart", startAgo: 3 * time.Minute, since: -30 * time.Minute, bytes: ptr(0), rate: ptr(0)},
+		{name: "zero bytes before minIdle", startAgo: 59 * time.Second, since: -5 * time.Minute, bytes: ptr(0), rate: ptr(0)},
+		{name: "zero bytes at minIdle", startAgo: time.Minute, since: -30 * time.Second, bytes: ptr(0), rate: ptr(0), want: true},
+		{name: "zero bytes after a process restart", startAgo: 30 * time.Second, since: -30 * time.Minute, bytes: ptr(0), rate: ptr(0)},
 		{name: "missing start time", noStartTime: true, since: -5 * time.Minute, bytes: ptr(100), rate: slow},
-		{name: "stale sample", since: -10 * time.Minute, bytes: ptr(100), rate: slow, sampleAgo: workerStatsMaxAge + time.Second},
+		{name: "stale sample", since: -10 * time.Minute, bytes: ptr(100), rate: slow, sampleAgo: common.WorkerStatsMaxAge + time.Second},
 		{name: "sample before since", since: time.Minute, bytes: ptr(100), rate: slow},
 		{name: "worker not ready", since: -5 * time.Minute, bytes: ptr(100), rate: slow, notReady: true},
 	}
@@ -91,7 +92,7 @@ func TestWorkerCounterIdle(t *testing.T) {
 				stats.StartTime = &startTime
 			}
 
-			if got := workerCounterIdle(worker, stats, tt.bytes, tt.rate, now.Add(tt.since), minLeaveWorkerDuration); got != tt.want {
+			if got := utils.WorkerCounterIdle(worker, stats, tt.bytes, tt.rate, now.Add(tt.since), common.MinLeaveWorkerDuration); got != tt.want {
 				t.Fatalf("workerCounterIdle() = %v, want %v", got, tt.want)
 			}
 		})
@@ -155,9 +156,8 @@ func TestShouldAddJoinOptionStopsWhenReceiveRateIdle(t *testing.T) {
 				})
 			}
 
-			r := &CacheGroupReconciler{}
-			if joining := r.shouldAddJoinOption(context.Background(), cg, worker, expectState, stats); joining != tt.wantJoining {
-				t.Fatalf("shouldAddJoinOption() = %v, want %v", joining, tt.wantJoining)
+			if joining := utils.ShouldAddJoinOption(cg, worker, expectState); joining != tt.wantJoining {
+				t.Fatalf("ShouldAddJoinOption() = %v, want %v", joining, tt.wantJoining)
 			}
 		})
 	}

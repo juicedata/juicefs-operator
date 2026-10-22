@@ -18,10 +18,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
 
+	juicefsiov1 "github.com/juicedata/juicefs-operator/api/v1"
 	"github.com/juicedata/juicefs-operator/pkg/common"
 	corev1 "k8s.io/api/core/v1"
 )
@@ -32,6 +34,102 @@ func IsWorkerV2(worker corev1.Pod) bool {
 
 func SupportsSmoothRestart(image string) bool {
 	return isEEImageAtLeast(image, common.MinSupportedSmoothRestartVersion)
+}
+
+// CanAddWorker reports whether the cache size and rebalance window allow a new worker.
+func CanAddWorker(cg *juicefsiov1.CacheGroup) bool {
+	if cg.Status.CacheSize == "0B" {
+		return true
+	}
+	batch := cg.Status.Rebalance
+	return batch == nil || len(batch.Members) == 0 ||
+		time.Now().Before(batch.StartAt.Add(-common.RebalanceDelayMargin))
+}
+
+// ShouldAddJoinOption reports whether to automatically add commission or group-backup.
+func ShouldAddJoinOption(cg *juicefsiov1.CacheGroup, actual *corev1.Pod, template juicefsiov1.CacheGroupWorkerTemplate) bool {
+	if CompareEEImageVersion(template.Image, "5.1.0") < 0 {
+		return false
+	}
+	duration := GetBackupWorkerDuration(cg.Spec.BackupDuration)
+	if duration <= time.Second {
+		return false
+	}
+	if slices.Contains(template.Opts, "commission") || slices.Contains(template.Opts, "group-backup") || slices.Contains(template.Opts, "decommission") {
+		return false
+	}
+	if actual == nil {
+		return cg.Status.CacheSize != "" && cg.Status.CacheSize != "0B"
+	}
+	joinedAt, joining := actual.Annotations[common.AnnoBackupWorker]
+	if !joining {
+		return false
+	}
+	backupAt := MustParseTime(joinedAt)
+	if time.Since(backupAt) >= duration {
+		return false
+	}
+	// Every worker (re)start can postpone the group's rebalance.
+	checkAfter := backupAt
+	var stats juicefsiov1.CacheGroupWorkerStats
+	for _, s := range cg.Status.Stats {
+		if s.Name == actual.Name {
+			stats = s
+		}
+		if s.StartTime != nil && s.StartTime.After(checkAfter) {
+			checkAfter = s.StartTime.Time
+		}
+	}
+	checkAfter = checkAfter.Add(WorkerRebalanceDelay(actual) + common.RebalanceDelayMargin)
+	return !WorkerCounterIdle(actual, stats, stats.ReceiveBytes, stats.ReceiveRate, checkAfter, 0)
+}
+
+// WorkerCounterIdle reports whether a byte counter sampled after since moves slower than
+// common.CacheGroupRebalanceIdleRate. A zero counter may mean the transfer has not started yet,
+// so it also requires the worker process to have run for minIdle at the sample time.
+func WorkerCounterIdle(worker *corev1.Pod, stats juicefsiov1.CacheGroupWorkerStats, bytes, rate *int64, since time.Time, minIdle time.Duration) bool {
+	if !IsPodReady(*worker) || bytes == nil || rate == nil || stats.LastSampleTime == nil || stats.StartTime == nil {
+		return false
+	}
+	sampleAt := stats.LastSampleTime.Time
+	if time.Since(sampleAt) > common.WorkerStatsMaxAge || sampleAt.Before(since) {
+		return false
+	}
+	if *rate >= common.CacheGroupRebalanceIdleRate {
+		return false
+	}
+	if *bytes != 0 {
+		return true
+	}
+	return sampleAt.Sub(stats.StartTime.Time) >= minIdle
+}
+
+// WorkerRebalanceDelay reads the rebalance delay from the worker's JuiceFS environment.
+func WorkerRebalanceDelay(worker *corev1.Pod) time.Duration {
+	for _, c := range worker.Spec.Containers {
+		if c.Name != common.WorkerContainerName {
+			continue
+		}
+		for _, env := range c.Env {
+			if env.Name == "JFS_CACHE_REBALANCE_DELAY" {
+				if d, err := time.ParseDuration(env.Value); err == nil {
+					return d
+				}
+			}
+		}
+	}
+	return common.DefaultRebalanceDelay
+}
+
+func CacheGroupRebalanceDelay(workers []corev1.Pod) time.Duration {
+	delay := common.DefaultRebalanceDelay
+	for i := range workers {
+		d := WorkerRebalanceDelay(&workers[i])
+		if i == 0 || d < delay {
+			delay = d
+		}
+	}
+	return delay
 }
 
 // ParseWorkerMountInfo returns the volume name and mount options of the worker.

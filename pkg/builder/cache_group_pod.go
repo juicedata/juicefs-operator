@@ -95,25 +95,25 @@ type PodBuilder struct {
 	spec                 juicefsiov1.CacheGroupWorkerTemplate
 	secretData           map[string]string
 	initConfig           string
-	joining              bool
+	addJoinOption        bool
 	cacheDirsInContainer []string
 	cacheDeviceMountCmds []string
 }
 
-func NewPodBuilder(cg *juicefsiov1.CacheGroup, secret *corev1.Secret, node string, spec juicefsiov1.CacheGroupWorkerTemplate, joining bool) *PodBuilder {
+func NewPodBuilder(cg *juicefsiov1.CacheGroup, secret *corev1.Secret, node string, spec juicefsiov1.CacheGroupWorkerTemplate, addJoinOption bool) *PodBuilder {
 	secretData := utils.ParseSecret(secret)
 	initconfig := ""
 	if v, ok := secretData["initconfig"]; ok && v != "" {
 		initconfig = v
 	}
 	return &PodBuilder{
-		secretData: secretData,
-		volName:    strings.TrimSpace(secretData["name"]),
-		cg:         cg,
-		node:       node,
-		spec:       spec,
-		initConfig: initconfig,
-		joining:    joining,
+		secretData:    secretData,
+		volName:       strings.TrimSpace(secretData["name"]),
+		cg:            cg,
+		node:          node,
+		spec:          spec,
+		initConfig:    initconfig,
+		addJoinOption: addJoinOption,
 	}
 }
 
@@ -472,7 +472,7 @@ func (p *PodBuilder) genMountOpts(ctx context.Context) string {
 }
 
 func (p *PodBuilder) withJoinOption(opts string) string {
-	if !p.joining {
+	if !p.addJoinOption {
 		return opts
 	}
 	if utils.CompareEEImageVersion(p.spec.Image, common.MinSupportedCommissionVersion) >= 0 {
@@ -558,7 +558,9 @@ func (p *PodBuilder) genInitConfigVolumes() {
 // NewCacheGroupWorker builds the worker. Workers of images supporting smooth restart read mount options
 // from the downward API, others inline them in the command.
 func (p *PodBuilder) NewCacheGroupWorker(ctx context.Context, dryrun bool) *corev1.Pod {
-	return p.clone().newWorker(ctx, dryrun, utils.SupportsSmoothRestart(p.spec.Image))
+	p = p.clone()
+	p.addJoinOption = !dryrun && p.addJoinOption
+	return p.newWorker(ctx, dryrun, utils.SupportsSmoothRestart(p.spec.Image))
 }
 
 // V1WorkerHash returns the hash of the worker built with the v1 template, to compare with existing v1 workers.
@@ -670,7 +672,7 @@ func (p *PodBuilder) newWorker(ctx context.Context, dryrun bool, v2 bool) *corev
 		// The join option is excluded from the hash, so that it can be removed by smooth restart.
 		worker.Annotations[common.AnnoWorkerMountOpts] = p.withJoinOption(mountOpts)
 	}
-	if p.joining {
+	if p.addJoinOption {
 		backupAt := time.Now().Format(time.RFC3339)
 		worker.Annotations[common.AnnoBackupWorker] = backupAt
 	}

@@ -21,6 +21,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	juicefsiov1 "github.com/juicedata/juicefs-operator/api/v1"
+	"github.com/juicedata/juicefs-operator/pkg/common"
 )
 
 func TestNextWorkerStats(t *testing.T) {
@@ -49,7 +50,7 @@ func TestNextWorkerStats(t *testing.T) {
 		{name: "rates over the sample interval", previous: previousAgo(time.Minute), sample: sample, wantTransferRate: ptr(1 << 20), wantReceiveRate: ptr(0)},
 		{name: "restarted process", previous: previousAgo(time.Minute), sample: juicefsiov1.CacheGroupWorkerStats{TransferBytes: ptr(120 << 20), StartTime: at(-30 * time.Second)}},
 		{name: "missing start time", previous: previousAgo(time.Minute), sample: juicefsiov1.CacheGroupWorkerStats{TransferBytes: ptr(120 << 20)}},
-		{name: "stale previous sample", previous: previousAgo(workerStatsMaxAge + time.Second), sample: sample},
+		{name: "stale previous sample", previous: previousAgo(common.WorkerStatsMaxAge + time.Second), sample: sample},
 		{name: "counter reset", previous: previousAgo(time.Minute), sample: juicefsiov1.CacheGroupWorkerStats{TransferBytes: ptr(0), ReceiveBytes: ptr(1060), StartTime: startTime}, wantReceiveRate: ptr(1)},
 	}
 	for _, tt := range tests {

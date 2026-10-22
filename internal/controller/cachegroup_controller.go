@@ -147,7 +147,7 @@ func (r *CacheGroupReconciler) sync(ctx context.Context, cg *juicefsiov1.CacheGr
 	}
 	base := cg.DeepCopy()
 	fileSystem := strings.TrimSpace(string(secret.Data["name"]))
-	cg.Status = r.calculateStatus(cg, fileSystem, expectStates, actualWorkers)
+	cg.Status = r.calculateStatus(ctx, cg, fileSystem, expectStates, actualWorkers)
 	workerStats := lo.KeyBy(cg.Status.Stats, func(stats juicefsiov1.CacheGroupWorkerStats) string { return stats.Name })
 
 	syncErr := r.syncWorkers(ctx, cg, secret, expectStates, actualWorkers, workerStats)
@@ -162,7 +162,7 @@ func (r *CacheGroupReconciler) sync(ctx context.Context, cg *juicefsiov1.CacheGr
 		return utilerrors.NewAggregate(append(errors, err))
 	}
 
-	cg.Status = r.calculateStatus(cg, fileSystem, expectStates, actualWorkers)
+	cg.Status = r.calculateStatus(ctx, cg, fileSystem, expectStates, actualWorkers)
 	if !reflect.DeepEqual(base.Status, cg.Status) {
 		errors = append(errors, utils.IgnoreConflict(r.Status().Patch(ctx, cg, client.MergeFrom(base))))
 	}
@@ -356,6 +356,7 @@ func (r *CacheGroupReconciler) listActualWorkers(ctx context.Context, cg *juicef
 }
 
 func (r *CacheGroupReconciler) calculateStatus(
+	ctx context.Context,
 	cg *juicefsiov1.CacheGroup,
 	fileSystem string,
 	expectStates map[string]juicefsiov1.CacheGroupWorkerTemplate,
@@ -417,7 +418,13 @@ func (r *CacheGroupReconciler) calculateStatus(
 				break
 			}
 		}
+		// Join options are removed after backupDuration, so the batch is not rebuilt from annotations
+		// after this deadline. Without it, a member that never becomes ready blocks new workers forever.
+		deadline := batch.StartAt.Add(utils.GetBackupWorkerDuration(cg.Spec.BackupDuration))
 		if len(batch.Members) == 0 || finished {
+			batch = nil
+		} else if !time.Now().Before(deadline) {
+			log.FromContext(ctx).Info("rebalance batch timed out, stop waiting", "members", batch.Members, "deadline", deadline.Format(time.RFC3339))
 			batch = nil
 		}
 	}

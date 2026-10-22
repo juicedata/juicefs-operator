@@ -203,6 +203,72 @@ func TestRemoveRedundantWorkersKeepsMigratingWorker(t *testing.T) {
 	}
 }
 
+func TestCalculateStatusRebalanceDeadline(t *testing.T) {
+	now := time.Now().Truncate(time.Second)
+	replicas := int32(1)
+
+	tests := []struct {
+		name        string
+		startAgo    time.Duration
+		ready       bool
+		joinedAgo   time.Duration // the worker still has the join annotation, if set
+		wantCleared bool          // the existing batch is cleared in the first round
+		wantBatch   bool          // a batch exists after the second round
+		wantCanAdd  bool
+	}{
+		{name: "stuck member blocks new workers before the deadline", startAgo: 30 * time.Minute, wantBatch: true},
+		{name: "stuck member times out after the deadline", startAgo: time.Hour, wantCleared: true, wantCanAdd: true},
+		{name: "ready member finishes the batch", startAgo: time.Minute, ready: true, wantCleared: true, wantCanAdd: true},
+		{name: "member joining again starts a new batch after the deadline", startAgo: time.Hour, joinedAgo: time.Minute, wantCleared: true, wantBatch: true, wantCanAdd: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			worker := newLifecycleTestWorker(now)
+			if !tt.ready {
+				worker.Status.Conditions = nil
+			}
+			if tt.joinedAgo > 0 {
+				worker.Annotations[common.AnnoBackupWorker] = now.Add(-tt.joinedAgo).Format(time.RFC3339)
+			}
+			cg := &juicefsiov1.CacheGroup{
+				ObjectMeta: metav1.ObjectMeta{Name: "cg", Namespace: "default"},
+				Spec: juicefsiov1.CacheGroupSpec{
+					Replicas:       &replicas,
+					BackupDuration: &metav1.Duration{Duration: time.Hour},
+				},
+				Status: juicefsiov1.CacheGroupStatus{
+					CacheSize: "1.0GiB",
+					Rebalance: &juicefsiov1.CacheGroupRebalanceStatus{
+						Members: []string{worker.Name},
+						StartAt: metav1.NewTime(now.Add(-tt.startAgo)),
+					},
+				},
+			}
+			r := &CacheGroupReconciler{}
+			expectStates := map[string]juicefsiov1.CacheGroupWorkerTemplate{worker.Name: {}}
+
+			cg.Status = r.calculateStatus(context.Background(), cg, "vol", expectStates, []corev1.Pod{*worker})
+			if cleared := cg.Status.Rebalance == nil; cleared != tt.wantCleared {
+				t.Fatalf("batch cleared = %v (rebalance: %+v), want %v", cleared, cg.Status.Rebalance, tt.wantCleared)
+			}
+			// The batch of a member still joining is rebuilt from its annotation in the next round.
+			cg.Status = r.calculateStatus(context.Background(), cg, "vol", expectStates, []corev1.Pod{*worker})
+			if (cg.Status.Rebalance != nil) != tt.wantBatch {
+				t.Fatalf("rebalance = %+v, want batch %v", cg.Status.Rebalance, tt.wantBatch)
+			}
+			if tt.joinedAgo > 0 {
+				wantStart := now.Add(-tt.joinedAgo + common.DefaultRebalanceDelay)
+				if !cg.Status.Rebalance.StartAt.Time.Equal(wantStart) {
+					t.Fatalf("rebuilt batch starts at %v, want %v", cg.Status.Rebalance.StartAt.Time, wantStart)
+				}
+			}
+			if got := utils.CanAddWorker(cg); got != tt.wantCanAdd {
+				t.Fatalf("CanAddWorker() = %v, want %v", got, tt.wantCanAdd)
+			}
+		})
+	}
+}
+
 func TestListActualWorkersOnlyListsWorkers(t *testing.T) {
 	ctx := context.Background()
 	pod := func(name, namespace, appType string) *corev1.Pod {

@@ -184,7 +184,7 @@ func (r *CacheGroupReconciler) gracefulShutdownWorker(
 		if time.Since(waitingAt) > utils.GetWaitingDeletedMaxDuration(cg.Spec.WaitingDeletedMaxDuration) {
 			return true, nil
 		}
-		if utils.WorkerCounterIdle(worker, stats, stats.TransferBytes, stats.TransferRate, waitingAt, minLeaveWorkerDuration) {
+		if utils.WorkerCounterIdle(worker, stats, stats.TransferBytes, stats.TransferRate, waitingAt, common.MinLeaveWorkerDuration) {
 			return true, nil
 		}
 		if !utils.IsPodReady(*worker) || !utils.IsMountPointReady(ctx, *worker, common.MountPoint) {
@@ -220,6 +220,8 @@ func (r *CacheGroupReconciler) gracefulShutdownWorker(
 	if utils.IsWorkerV2(*worker) {
 		if err := r.smoothRestartWorker(ctx, cg, worker, leaving); err == nil {
 			return false, nil
+		} else {
+			log.FromContext(ctx).Error(err, "failed to restart worker smoothly during graceful shutdown, recreate it", "worker", worker.Name)
 		}
 	}
 	//recreate worker
@@ -254,8 +256,6 @@ func (r *CacheGroupReconciler) smoothRestartWorker(ctx context.Context, cg *juic
 	}
 	return r.Patch(ctx, updated, client.MergeFrom(worker))
 }
-
-const minLeaveWorkerDuration = 10 * time.Minute
 
 // recordWorkerJoin records join state changes after a worker is successfully created or updated.
 func (r *CacheGroupReconciler) recordWorkerJoin(ctx context.Context, cg *juicefsiov1.CacheGroup, actual, expect *corev1.Pod, stats juicefsiov1.CacheGroupWorkerStats, joining bool) {

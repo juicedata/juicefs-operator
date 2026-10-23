@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 
@@ -30,6 +31,7 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 
+	juicefsiov1 "github.com/juicedata/juicefs-operator/api/v1"
 	"github.com/juicedata/juicefs-operator/pkg/common"
 	pkgutils "github.com/juicedata/juicefs-operator/pkg/utils"
 	"github.com/juicedata/juicefs-operator/test/utils"
@@ -744,6 +746,50 @@ test -f %s/e2e
 			}
 			Eventually(verifyCgStatusUpToDate, 5*time.Minute, 3*time.Second).Should(Succeed())
 
+			By("preparing cache before adding a worker")
+			verifyWarmupFile := func() error {
+				cmd = exec.Command("kubectl", "exec", "-i", "-n",
+					namespace, "-c", common.WorkerContainerName, common.GenWorkerName("e2e-test-cachegroup", worker), "--",
+					"sh", "-c", "echo 1 > /mnt/jfs/cache-group-test.txt")
+				_, err = utils.Run(cmd)
+				if err != nil {
+					return err
+				}
+
+				// check block bytes
+				cmd = exec.Command("kubectl", "exec", "-i", "-n",
+					namespace, "-c", common.WorkerContainerName, common.GenWorkerName("e2e-test-cachegroup", worker), "--",
+					"sh", "-c", "cat /mnt/jfs/.stats | grep blockcache.bytes")
+				result, err := utils.Run(cmd)
+				if err != nil {
+					return fmt.Errorf("get block bytes failed, %+v", err)
+				}
+				var blockBytes int
+				_, err = fmt.Sscanf(strings.Trim(string(result), "\n"), "blockcache.bytes: %d", &blockBytes)
+				if err != nil {
+					return fmt.Errorf("failed to scan block bytes: %v", err)
+				}
+				if blockBytes == 0 {
+					return fmt.Errorf("block bytes is ")
+				}
+				return nil
+			}
+			Eventually(verifyWarmupFile, time.Minute, time.Second).Should(Succeed())
+
+			By("waiting for cache size to be reported")
+			Eventually(func() error {
+				cmd := exec.Command("kubectl", "get", "cachegroups.juicefs.io", cgName,
+					"-n", namespace, "-o", "jsonpath={.status.cacheSize}")
+				cacheSize, err := utils.Run(cmd)
+				if err != nil {
+					return err
+				}
+				if string(cacheSize) == "" || string(cacheSize) == "0B" {
+					return fmt.Errorf("cache group has no reported cache yet: %q", cacheSize)
+				}
+				return nil
+			}, 2*time.Minute, 3*time.Second).Should(Succeed())
+
 			cmd = exec.Command("kubectl", "label", "nodes", worker2, "juicefs.io/cg-worker=true", "--overwrite")
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
@@ -781,30 +827,6 @@ test -f %s/e2e
 			}
 			Eventually(verifyBackupWorkerSpec, time.Minute, time.Second).Should(Succeed())
 
-			verifyWarmupFile := func() error {
-				cmd = exec.Command("kubectl", "exec", "-i", "-n",
-					namespace, "-c", common.WorkerContainerName, common.GenWorkerName("e2e-test-cachegroup", worker), "--",
-					"sh", "-c", "echo 1 > /mnt/jfs/cache-group-test.txt")
-				_, err = utils.Run(cmd)
-
-				// check block bytes
-				cmd = exec.Command("kubectl", "exec", "-i", "-n",
-					namespace, "-c", common.WorkerContainerName, common.GenWorkerName("e2e-test-cachegroup", worker), "--",
-					"sh", "-c", "cat /mnt/jfs/.stats | grep blockcache.bytes")
-				result, err := utils.Run(cmd)
-				if err != nil {
-					return fmt.Errorf("get block bytes failed, %+v", err)
-				}
-				var blockBytes int
-				_, err = fmt.Sscanf(strings.Trim(string(result), "\n"), "blockcache.bytes: %d", &blockBytes)
-				if err != nil {
-					return fmt.Errorf("failed to scan block bytes: %v", err)
-				}
-				if blockBytes == 0 {
-					return fmt.Errorf("block bytes is ")
-				}
-				return nil
-			}
 			Eventually(verifyWarmupFile, time.Minute, time.Second).Should(Succeed())
 
 			cmd = exec.Command("kubectl", "label", "nodes", worker, "juicefs.io/cg-worker-")
@@ -826,6 +848,175 @@ test -f %s/e2e
 				return nil
 			}
 			Eventually(verifyWorkerWeightToZero, time.Minute, time.Second).Should(Succeed())
+		})
+
+		It("should complete worker joining and leaving by stats with smooth restarts", func() {
+			// Both migration deadlines are shorter than the manifest's 10-minute fallback limits.
+			const migrationTimeout = 6 * time.Minute
+			controlPlane := utils.GetKindNodeName("control-plane")
+			worker := utils.GetKindNodeName("worker")
+			worker2 := utils.GetKindNodeName("worker2")
+			leavingName := common.GenWorkerName(cgName, controlPlane)
+			survivingName := common.GenWorkerName(cgName, worker)
+			joiningName := common.GenWorkerName(cgName, worker2)
+
+			readWorker := func(g Gomega, name string) corev1.Pod {
+				result, err := utils.Run(exec.Command("kubectl", "get", "pod", name, "-n", namespace, "-o", "json"))
+				g.Expect(err).NotTo(HaveOccurred())
+				var pod corev1.Pod
+				g.Expect(json.Unmarshal(result, &pod)).To(Succeed())
+				g.Expect(pod.Status.ContainerStatuses).To(HaveLen(1))
+				return pod
+			}
+			readGroup := func(g Gomega) juicefsiov1.CacheGroup {
+				result, err := utils.Run(exec.Command("kubectl", "get", "cachegroup", cgName, "-n", namespace, "-o", "json"))
+				g.Expect(err).NotTo(HaveOccurred())
+				var cg juicefsiov1.CacheGroup
+				g.Expect(json.Unmarshal(result, &cg)).To(Succeed())
+				return cg
+			}
+			readPID := func(g Gomega, name string) int {
+				result, err := utils.Run(exec.Command("kubectl", "exec", "-n", namespace, name,
+					"-c", common.WorkerContainerName, "--", "cat", common.MountPoint+"/.config"))
+				g.Expect(err).NotTo(HaveOccurred())
+				var config struct{ Pid int }
+				g.Expect(json.Unmarshal(result, &config)).To(Succeed())
+				g.Expect(config.Pid).To(BeNumerically(">", 0))
+				return config.Pid
+			}
+			readCounter := func(g Gomega, name, metric string) int64 {
+				result, err := utils.Run(exec.Command("kubectl", "exec", "-n", namespace, name,
+					"-c", common.WorkerContainerName, "--", "awk", "-F:", "-v", "metric="+metric,
+					"$1 == metric {print $2}", common.MountPoint+"/.stats"))
+				g.Expect(err).NotTo(HaveOccurred())
+				value, err := strconv.ParseInt(strings.TrimSpace(string(result)), 10, 64)
+				g.Expect(err).NotTo(HaveOccurred())
+				return value
+			}
+
+			By("creating two workers with a two-minute rebalance delay")
+			_, err := utils.Run(exec.Command("kubectl", "apply", "-f", "test/e2e/config/e2e-test-cachegroup.rebalance.yaml", "-n", namespace))
+			Expect(err).NotTo(HaveOccurred())
+			_, err = utils.Run(exec.Command("kubectl", "label", "nodes", controlPlane, worker, "juicefs.io/cg-worker=true", "--overwrite"))
+			Expect(err).NotTo(HaveOccurred())
+			Eventually(func(g Gomega) {
+				cg := readGroup(g)
+				g.Expect(cg.Status.ReadyWorker).To(Equal(int32(2)))
+				for _, name := range []string{leavingName, survivingName} {
+					pod := readWorker(g, name)
+					g.Expect(pkgutils.IsPodReady(pod)).To(BeTrue())
+					g.Expect(pod.Annotations[common.AnnoWorkerTemplate]).To(Equal(common.WorkerTemplateV2))
+				}
+			}, 3*time.Minute, 3*time.Second).Should(Succeed())
+
+			By("preparing cache blocks and checksums before expanding the group")
+			dataDir := fmt.Sprintf("%s/e2e-rebalance-%d", common.MountPoint, time.Now().UnixNano())
+			_, err = utils.Run(exec.Command("kubectl", "exec", "-n", namespace, leavingName,
+				"-c", common.WorkerContainerName, "--", "sh", "-ec", `
+mkdir -p "$1"
+i=0
+while [ "$i" -lt 64 ]; do
+    dd if=/dev/urandom of="$1/block-$i" bs=1M count=1 status=none
+    i=$((i + 1))
+done
+sha256sum "$1"/block-* > "$1/SHA256SUMS"
+/usr/bin/juicefs warmup "$1"
+`, "sh", dataDir))
+			Expect(err).NotTo(HaveOccurred())
+			Eventually(func(g Gomega) {
+				cg := readGroup(g)
+				g.Expect(cg.Status.CacheSize).NotTo(BeElementOf("", "0B"))
+				g.Expect(cg.Status.Stats).To(ContainElement(And(
+					HaveField("Name", leavingName),
+					HaveField("CacheBytes", HaveValue(BeNumerically(">", 0))),
+				)))
+			}, 2*time.Minute, 3*time.Second).Should(Succeed())
+
+			By("adding a worker with commission")
+			_, err = utils.Run(exec.Command("kubectl", "label", "nodes", worker2, "juicefs.io/cg-worker=true", "--overwrite"))
+			Expect(err).NotTo(HaveOccurred())
+			var joining corev1.Pod
+			var joiningPID int
+			Eventually(func(g Gomega) {
+				joining = readWorker(g, joiningName)
+				g.Expect(pkgutils.IsPodReady(joining)).To(BeTrue())
+				g.Expect(joining.Annotations).To(HaveKey(common.AnnoBackupWorker))
+				g.Expect(strings.Split(joining.Annotations[common.AnnoWorkerMountOpts], ",")).To(ContainElement("commission"))
+				joiningPID = readPID(g, joiningName)
+			}, 3*time.Minute, 3*time.Second).Should(Succeed())
+			joinedAt, err := time.Parse(time.RFC3339, joining.Annotations[common.AnnoBackupWorker])
+			Expect(err).NotTo(HaveOccurred())
+			joinDeadline := joinedAt.Add(migrationTimeout)
+
+			By("observing real cache reception in the collected worker stats")
+			Eventually(func(g Gomega) {
+				cg := readGroup(g)
+				g.Expect(cg.Status.Stats).To(ContainElement(And(
+					HaveField("Name", joiningName),
+					HaveField("ReceiveBytes", HaveValue(BeNumerically(">", 0))),
+					HaveField("CacheBytes", HaveValue(BeNumerically(">", 0))),
+				)))
+			}, time.Until(joinDeadline), 3*time.Second).Should(Succeed())
+
+			By("finishing commission before its timeout without recreating the pod or container")
+			Eventually(func(g Gomega) {
+				pod := readWorker(g, joiningName)
+				g.Expect(pod.UID).To(Equal(joining.UID))
+				g.Expect(pod.Status.ContainerStatuses[0].ContainerID).To(Equal(joining.Status.ContainerStatuses[0].ContainerID))
+				g.Expect(pod.Status.ContainerStatuses[0].RestartCount).To(Equal(joining.Status.ContainerStatuses[0].RestartCount))
+				g.Expect(pod.Annotations).NotTo(HaveKey(common.AnnoBackupWorker))
+				g.Expect(strings.Split(pod.Annotations[common.AnnoWorkerMountOpts], ",")).NotTo(ContainElement("commission"))
+				g.Expect(pkgutils.IsPodReady(pod)).To(BeTrue())
+				g.Expect(readPID(g, joiningName)).NotTo(Equal(joiningPID))
+				cg := readGroup(g)
+				g.Expect(cg.Status.ReadyWorker).To(Equal(int32(3)))
+				g.Expect(cg.Status.Rebalance).To(BeNil())
+			}, time.Until(joinDeadline), 3*time.Second).Should(Succeed())
+
+			By("starting decommission on a worker that still has cached data")
+			leaving := readWorker(Default, leavingName)
+			leavingPID := readPID(Default, leavingName)
+			Expect(readCounter(Default, leavingName, "blockcache.bytes")).To(BeNumerically(">", 0))
+			receivedBeforeLeave := readCounter(Default, survivingName, "remotecache.receiveBytes") +
+				readCounter(Default, joiningName, "remotecache.receiveBytes")
+			leaveDeadline := time.Now().Add(migrationTimeout)
+			_, err = utils.Run(exec.Command("kubectl", "label", "nodes", controlPlane, "juicefs.io/cg-worker-"))
+			Expect(err).NotTo(HaveOccurred())
+			Eventually(func(g Gomega) {
+				pod := readWorker(g, leavingName)
+				g.Expect(pod.UID).To(Equal(leaving.UID))
+				g.Expect(pod.Status.ContainerStatuses[0].ContainerID).To(Equal(leaving.Status.ContainerStatuses[0].ContainerID))
+				g.Expect(pod.Status.ContainerStatuses[0].RestartCount).To(Equal(leaving.Status.ContainerStatuses[0].RestartCount))
+				g.Expect(pod.DeletionTimestamp).To(BeNil())
+				g.Expect(pod.Annotations).To(HaveKey(common.AnnoWaitingDeleteWorker))
+				g.Expect(strings.Split(pod.Annotations[common.AnnoWorkerMountOpts], ",")).To(ContainElement("decommission"))
+				g.Expect(readPID(g, leavingName)).NotTo(Equal(leavingPID))
+			}, 2*time.Minute, 3*time.Second).Should(Succeed())
+
+			By("finishing cache transfer and deleting the worker before the fallback timeout")
+			Eventually(func(g Gomega) {
+				received := readCounter(g, survivingName, "remotecache.receiveBytes") +
+					readCounter(g, joiningName, "remotecache.receiveBytes")
+				g.Expect(received).To(BeNumerically(">", receivedBeforeLeave))
+				result, err := utils.Run(exec.Command("kubectl", "get", "pod", leavingName,
+					"-n", namespace, "--ignore-not-found", "-o", "name"))
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(strings.TrimSpace(string(result))).To(BeEmpty())
+				cg := readGroup(g)
+				g.Expect(cg.Status.ReadyWorker).To(Equal(int32(2)))
+				g.Expect(cg.Status.ExpectWorker).To(Equal(int32(2)))
+				g.Expect(cg.Status.WaitingDeletedWorker).To(BeZero())
+			}, time.Until(leaveDeadline), 3*time.Second).Should(Succeed())
+
+			By("verifying data checksums from both remaining workers")
+			for _, name := range []string{survivingName, joiningName} {
+				_, err = utils.Run(exec.Command("kubectl", "exec", "-n", namespace, name,
+					"-c", common.WorkerContainerName, "--", "sha256sum", "-c", dataDir+"/SHA256SUMS"))
+				Expect(err).NotTo(HaveOccurred())
+			}
+			_, err = utils.Run(exec.Command("kubectl", "exec", "-n", namespace, survivingName,
+				"-c", common.WorkerContainerName, "--", "rm", "-rf", dataDir))
+			Expect(err).NotTo(HaveOccurred())
 		})
 
 		It("should reconcile the CacheGroup with replicas", func() {

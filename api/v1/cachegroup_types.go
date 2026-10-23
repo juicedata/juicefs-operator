@@ -229,12 +229,21 @@ type CacheGroupWorkerStats struct {
 	LastSampleTime *metav1.Time `json:"lastSampleTime,omitempty"`
 }
 
+type CacheGroupRebalanceStatus struct {
+	// Workers created in the current join batch.
+	// +listType=set
+	Members []string `json:"members"`
+	// Expected rebalance start after the latest membership change in the join window.
+	StartAt metav1.Time `json:"startAt"`
+}
+
 // CacheGroupStatus defines the observed state of CacheGroup
 type CacheGroupStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
-	Phase      CacheGroupPhase       `json:"phase,omitempty"`
-	Conditions []CacheGroupCondition `json:"conditions,omitempty"`
+	Phase      CacheGroupPhase            `json:"phase,omitempty"`
+	Conditions []CacheGroupCondition      `json:"conditions,omitempty"`
+	Rebalance  *CacheGroupRebalanceStatus `json:"rebalance,omitempty"`
 	// +listType=map
 	// +listMapKey=name
 	Stats         []CacheGroupWorkerStats `json:"stats,omitempty"`

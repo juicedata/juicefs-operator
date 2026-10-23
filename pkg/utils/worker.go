@@ -81,13 +81,17 @@ func ShouldAddJoinOption(cg *juicefsiov1.CacheGroup, actual *corev1.Pod, templat
 		}
 	}
 	checkAfter = checkAfter.Add(WorkerRebalanceDelay(actual) + common.RebalanceDelayMargin)
-	return !WorkerCounterIdle(actual, stats, stats.ReceiveBytes, stats.ReceiveRate, checkAfter, 0)
+	return !WorkerCounterIdle(actual, stats, true, checkAfter, 0)
 }
 
 // WorkerCounterIdle reports whether a byte counter sampled after since moves slower than
 // common.CacheGroupRebalanceIdleRate. A zero counter may mean the transfer has not started yet,
 // so it also requires the worker process to have run for minIdle at the sample time.
-func WorkerCounterIdle(worker *corev1.Pod, stats juicefsiov1.CacheGroupWorkerStats, bytes, rate *int64, since time.Time, minIdle time.Duration) bool {
+func WorkerCounterIdle(worker *corev1.Pod, stats juicefsiov1.CacheGroupWorkerStats, isJoin bool, since time.Time, minIdle time.Duration) bool {
+	bytes, rate := stats.TransferBytes, stats.TransferRate
+	if isJoin {
+		bytes, rate = stats.ReceiveBytes, stats.ReceiveRate
+	}
 	if !IsPodReady(*worker) || bytes == nil || rate == nil || stats.LastSampleTime == nil || stats.StartTime == nil {
 		return false
 	}

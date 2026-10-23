@@ -112,6 +112,9 @@ func (r *CacheGroupReconciler) syncWorker(ctx context.Context, cg *juicefsiov1.C
 	}
 	if update == workerSmoothRestart {
 		if err := r.smoothRestartWorker(ctx, cg, actual, expect); err != nil {
+			if cg.Spec.UpdateStrategy != nil && cg.Spec.UpdateStrategy.Type == appsv1.OnDeleteDaemonSetStrategyType {
+				return err
+			}
 			log.FromContext(ctx).Error(err, "failed to restart worker smoothly, recreate it", "worker", expect.Name)
 			update = workerRecreate
 		}
@@ -175,40 +178,30 @@ func (r *CacheGroupReconciler) gracefulShutdownWorker(
 	cg *juicefsiov1.CacheGroup,
 	worker *corev1.Pod,
 	stats juicefsiov1.CacheGroupWorkerStats) (canDelete bool, err error) {
-	if cg.Status.CacheSize == "0B" {
-		return true, nil
-	}
 	v, migrating := worker.Annotations[common.AnnoWaitingDeleteWorker]
+	var waitingAt time.Time
 	if migrating {
-		waitingAt := utils.MustParseTime(v)
+		waitingAt = utils.MustParseTime(v)
 		if time.Since(waitingAt) > utils.GetWaitingDeletedMaxDuration(cg.Spec.WaitingDeletedMaxDuration) {
 			return true, nil
 		}
-		if utils.WorkerCounterIdle(worker, stats, stats.TransferBytes, stats.TransferRate, waitingAt, common.MinLeaveWorkerDuration) {
-			return true, nil
-		}
-		if !utils.IsPodReady(*worker) || !utils.IsMountPointReady(ctx, *worker, common.MountPoint) {
-			return false, nil
-		}
-		cacheBytes, err := utils.GetWorkerCacheBlocksBytes(ctx, *worker, common.MountPoint)
-		if err != nil {
-			return false, err
-		}
-		return cacheBytes <= 0, nil
-	}
-
-	if cg.Status.ReadyWorker <= 1 {
+	} else if cg.Status.ReadyWorker <= 1 {
 		return true, nil
 	}
 	if !utils.IsPodReady(*worker) || !utils.IsMountPointReady(ctx, *worker, common.MountPoint) {
-		return true, nil
+		return !migrating, nil
 	}
-	cacheBytes, err := utils.GetWorkerCacheBlocksBytes(ctx, *worker, common.MountPoint)
+	currentStats, err := utils.GetWorkerStats(ctx, *worker, common.MountPoint)
 	if err != nil {
 		return false, err
 	}
-	if cacheBytes <= 0 {
+	if currentStats.CacheBytes == nil || *currentStats.CacheBytes <= 0 {
 		return true, nil
+	}
+
+	if migrating {
+		return sameWorkerProcess(stats.StartTime, currentStats.StartTime) &&
+			utils.WorkerCounterIdle(worker, stats, false, waitingAt, common.MinLeaveWorkerDuration), nil
 	}
 	leaving := worker.DeepCopy()
 	if utils.WorkerSupportsDecommission(*worker) {
@@ -299,6 +292,12 @@ func (r *CacheGroupReconciler) workerUpdateAction(ctx context.Context, updateStr
 		return workerUpToDate
 	}
 	if updateStrategyType == appsv1.OnDeleteDaemonSetStrategyType {
+		_, joining := actual.Annotations[common.AnnoBackupWorker]
+		_, willJoin := expect.Annotations[common.AnnoBackupWorker]
+		if utils.IsWorkerV2(*actual) && joining && !willJoin &&
+			actual.Annotations[common.LabelWorkerHash] == expect.Annotations[common.LabelWorkerHash] {
+			return workerSmoothRestart
+		}
 		return workerUpToDate
 	}
 	// pod may be evicted or some exit without restarting., so we need to recreate it

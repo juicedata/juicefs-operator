@@ -82,7 +82,12 @@ func TestWorkerCounterIdle(t *testing.T) {
 				worker.Status.Conditions = nil
 			}
 			sampleAt := metav1.NewTime(now.Add(-tt.sampleAgo))
-			stats := juicefsiov1.CacheGroupWorkerStats{Name: worker.Name, LastSampleTime: &sampleAt}
+			stats := juicefsiov1.CacheGroupWorkerStats{
+				Name:           worker.Name,
+				LastSampleTime: &sampleAt,
+				TransferBytes:  tt.bytes,
+				TransferRate:   tt.rate,
+			}
 			if !tt.noStartTime {
 				startAgo := tt.startAgo
 				if startAgo == 0 {
@@ -92,7 +97,7 @@ func TestWorkerCounterIdle(t *testing.T) {
 				stats.StartTime = &startTime
 			}
 
-			if got := utils.WorkerCounterIdle(worker, stats, tt.bytes, tt.rate, now.Add(tt.since), common.MinLeaveWorkerDuration); got != tt.want {
+			if got := utils.WorkerCounterIdle(worker, stats, false, now.Add(tt.since), common.MinLeaveWorkerDuration); got != tt.want {
 				t.Fatalf("workerCounterIdle() = %v, want %v", got, tt.want)
 			}
 		})

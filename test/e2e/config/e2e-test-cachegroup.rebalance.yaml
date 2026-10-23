@@ -1,0 +1,37 @@
+apiVersion: juicefs.io/v1
+kind: CacheGroup
+metadata:
+  name: e2e-test-cachegroup
+spec:
+  secretRef:
+    name: juicefs-secret
+  backupDuration: 10m
+  waitingDeletedMaxDuration: 10m
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+  worker:
+    template:
+      nodeSelector:
+        juicefs.io/cg-worker: "true"
+      image: juicedata/mount:ee-5.4.4-d52f3e9
+      env:
+      - name: JFS_CACHE_REBALANCE_DELAY
+        value: 2m
+      cacheDirs:
+      - type: HostPath
+        path: /var/jfsCache-e2e-rebalance
+      dnsPolicy: ClusterFirstWithHostNet
+      hostNetwork: true
+      tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+      resources:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          cpu: 1
+          memory: 1Gi

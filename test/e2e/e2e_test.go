@@ -744,6 +744,50 @@ test -f %s/e2e
 			}
 			Eventually(verifyCgStatusUpToDate, 5*time.Minute, 3*time.Second).Should(Succeed())
 
+			By("preparing cache before adding a worker")
+			verifyWarmupFile := func() error {
+				cmd = exec.Command("kubectl", "exec", "-i", "-n",
+					namespace, "-c", common.WorkerContainerName, common.GenWorkerName("e2e-test-cachegroup", worker), "--",
+					"sh", "-c", "echo 1 > /mnt/jfs/cache-group-test.txt")
+				_, err = utils.Run(cmd)
+				if err != nil {
+					return err
+				}
+
+				// check block bytes
+				cmd = exec.Command("kubectl", "exec", "-i", "-n",
+					namespace, "-c", common.WorkerContainerName, common.GenWorkerName("e2e-test-cachegroup", worker), "--",
+					"sh", "-c", "cat /mnt/jfs/.stats | grep blockcache.bytes")
+				result, err := utils.Run(cmd)
+				if err != nil {
+					return fmt.Errorf("get block bytes failed, %+v", err)
+				}
+				var blockBytes int
+				_, err = fmt.Sscanf(strings.Trim(string(result), "\n"), "blockcache.bytes: %d", &blockBytes)
+				if err != nil {
+					return fmt.Errorf("failed to scan block bytes: %v", err)
+				}
+				if blockBytes == 0 {
+					return fmt.Errorf("block bytes is ")
+				}
+				return nil
+			}
+			Eventually(verifyWarmupFile, time.Minute, time.Second).Should(Succeed())
+
+			By("waiting for cache size to be reported")
+			Eventually(func() error {
+				cmd := exec.Command("kubectl", "get", "cachegroups.juicefs.io", cgName,
+					"-n", namespace, "-o", "jsonpath={.status.cacheSize}")
+				cacheSize, err := utils.Run(cmd)
+				if err != nil {
+					return err
+				}
+				if string(cacheSize) == "" || string(cacheSize) == "0B" {
+					return fmt.Errorf("cache group has no reported cache yet: %q", cacheSize)
+				}
+				return nil
+			}, 2*time.Minute, 3*time.Second).Should(Succeed())
+
 			cmd = exec.Command("kubectl", "label", "nodes", worker2, "juicefs.io/cg-worker=true", "--overwrite")
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
@@ -781,30 +825,6 @@ test -f %s/e2e
 			}
 			Eventually(verifyBackupWorkerSpec, time.Minute, time.Second).Should(Succeed())
 
-			verifyWarmupFile := func() error {
-				cmd = exec.Command("kubectl", "exec", "-i", "-n",
-					namespace, "-c", common.WorkerContainerName, common.GenWorkerName("e2e-test-cachegroup", worker), "--",
-					"sh", "-c", "echo 1 > /mnt/jfs/cache-group-test.txt")
-				_, err = utils.Run(cmd)
-
-				// check block bytes
-				cmd = exec.Command("kubectl", "exec", "-i", "-n",
-					namespace, "-c", common.WorkerContainerName, common.GenWorkerName("e2e-test-cachegroup", worker), "--",
-					"sh", "-c", "cat /mnt/jfs/.stats | grep blockcache.bytes")
-				result, err := utils.Run(cmd)
-				if err != nil {
-					return fmt.Errorf("get block bytes failed, %+v", err)
-				}
-				var blockBytes int
-				_, err = fmt.Sscanf(strings.Trim(string(result), "\n"), "blockcache.bytes: %d", &blockBytes)
-				if err != nil {
-					return fmt.Errorf("failed to scan block bytes: %v", err)
-				}
-				if blockBytes == 0 {
-					return fmt.Errorf("block bytes is ")
-				}
-				return nil
-			}
 			Eventually(verifyWarmupFile, time.Minute, time.Second).Should(Succeed())
 
 			cmd = exec.Command("kubectl", "label", "nodes", worker, "juicefs.io/cg-worker-")

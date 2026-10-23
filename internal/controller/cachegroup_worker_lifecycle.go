@@ -93,7 +93,7 @@ func (r *CacheGroupReconciler) syncWorkers(ctx context.Context, cg *juicefsiov1.
 	}
 	wg.Wait()
 	close(errCh)
-	var errors []error
+	errors := make([]error, 0, len(errCh))
 	for err := range errCh {
 		errors = append(errors, err)
 	}
@@ -217,7 +217,7 @@ func (r *CacheGroupReconciler) gracefulShutdownWorker(
 			log.FromContext(ctx).Error(err, "failed to restart worker smoothly during graceful shutdown, recreate it", "worker", worker.Name)
 		}
 	}
-	//recreate worker
+	// recreate worker
 	if err := r.deleteCacheGroupWorker(ctx, cg, worker, true); err != nil {
 		return false, err
 	}

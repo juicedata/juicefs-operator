@@ -32,8 +32,8 @@ func IsWorkerV2(worker corev1.Pod) bool {
 	return worker.Annotations[common.AnnoWorkerTemplate] == common.WorkerTemplateV2
 }
 
-func SupportsSmoothRestart(image string) bool {
-	return isEEImageAtLeast(image, common.MinSupportedSmoothRestartVersion)
+func SupportsRestartArgs(image string) bool {
+	return isEEImageAtLeast(image, common.MinSupportedRestartArgsVersion)
 }
 
 // CanAddWorker reports whether the cache size and rebalance window allow a new worker.
@@ -65,12 +65,12 @@ func ShouldAddJoinOption(cg *juicefsiov1.CacheGroup, actual *corev1.Pod, templat
 	if !joining {
 		return false
 	}
-	backupAt := MustParseTime(joinedAt)
-	if time.Since(backupAt) >= duration {
+	joinStartedAt := MustParseTime(joinedAt)
+	if time.Since(joinStartedAt) >= duration {
 		return false
 	}
 	// Every worker (re)start can postpone the group's rebalance.
-	checkAfter := backupAt
+	checkAfter := joinStartedAt
 	var stats juicefsiov1.CacheGroupWorkerStats
 	for _, s := range cg.Status.Stats {
 		if s.Name == actual.Name {

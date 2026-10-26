@@ -555,12 +555,12 @@ func (p *PodBuilder) genInitConfigVolumes() {
 	})
 }
 
-// NewCacheGroupWorker builds the worker. Workers of images supporting smooth restart read mount options
-// from the downward API, others inline them in the command.
+// NewCacheGroupWorker builds the worker. Images that support changing mount options during smooth restart
+// read the options from the downward API; others inline them in the command.
 func (p *PodBuilder) NewCacheGroupWorker(ctx context.Context, dryrun bool) *corev1.Pod {
 	p = p.clone()
 	p.addJoinOption = !dryrun && p.addJoinOption
-	return p.newWorker(ctx, dryrun, utils.SupportsSmoothRestart(p.spec.Image))
+	return p.newWorker(ctx, dryrun, utils.SupportsRestartArgs(p.spec.Image))
 }
 
 // V1WorkerHash returns the hash of the worker built with the v1 template, to compare with existing v1 workers.

@@ -92,10 +92,10 @@ const (
 	InitConfigVolumeKey  = "initconfig"
 	InitConfigMountPath  = "/etc/juicefs"
 
-	MinSupportedWarmupStatsVersion   = "5.2.11"
-	MinSupportedDecommissionVersion  = "5.4.4"
-	MinSupportedCommissionVersion    = "5.4.4"
-	MinSupportedSmoothRestartVersion = "5.4.4"
+	MinSupportedWarmupStatsVersion  = "5.2.11"
+	MinSupportedDecommissionVersion = "5.4.4"
+	MinSupportedCommissionVersion   = "5.4.4"
+	MinSupportedRestartArgsVersion  = "5.4.4"
 )
 
 var (

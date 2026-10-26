@@ -418,8 +418,7 @@ func (r *CacheGroupReconciler) calculateStatus(
 				break
 			}
 		}
-		// Join options are removed after backupDuration, so the batch is not rebuilt from annotations
-		// after this deadline. Without it, a member that never becomes ready blocks new workers forever.
+		// Bound how long the batch blocks new workers, even if join annotations remain.
 		deadline := batch.StartAt.Add(utils.GetBackupWorkerDuration(cg.Spec.BackupDuration))
 		if len(batch.Members) == 0 || finished {
 			batch = nil

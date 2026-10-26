@@ -90,17 +90,6 @@ func IsMountPointReady(ctx context.Context, pod corev1.Pod, mountPoint string) b
 	return true
 }
 
-func GetWorkerCacheBlocksBytes(ctx context.Context, pod corev1.Pod, mountPoint string) (int, error) {
-	stats, err := GetWorkerStats(ctx, pod, mountPoint)
-	if err != nil {
-		return 0, err
-	}
-	if stats.CacheBytes == nil {
-		return 0, nil
-	}
-	return int(*stats.CacheBytes), nil
-}
-
 func GetWorkerStats(ctx context.Context, pod corev1.Pod, mountPoint string) (juicefsiov1.CacheGroupWorkerStats, error) {
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()

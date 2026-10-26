@@ -271,7 +271,7 @@ func (r *CacheGroupReconciler) recordWorkerJoin(ctx context.Context, cg *juicefs
 		return
 	}
 	r.eventf(cg, corev1.EventTypeNormal, "WorkerJoinFinished", "Worker %s exited the temporary join phase, received %s",
-		expect.Name, utils.FormatCounter(stats.ReceiveBytes, ""))
+		expect.Name, utils.FormatCounter(stats.ReceiveBytes))
 }
 
 type workerUpdate int

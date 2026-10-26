@@ -122,6 +122,9 @@ func WorkerRebalanceDelay(worker *corev1.Pod) time.Duration {
 			}
 		}
 	}
+	if _, leaving := worker.Annotations[common.AnnoWaitingDeleteWorker]; leaving {
+		return 10 * time.Second
+	}
 	return common.DefaultRebalanceDelay
 }
 

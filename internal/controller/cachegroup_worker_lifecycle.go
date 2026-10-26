@@ -200,8 +200,9 @@ func (r *CacheGroupReconciler) gracefulShutdownWorker(
 	}
 
 	if migrating {
+		minIdle := max(common.MinLeaveWorkerDuration, utils.WorkerRebalanceDelay(worker)+common.RebalanceDelayMargin)
 		return sameWorkerProcess(stats.StartTime, currentStats.StartTime) &&
-			utils.WorkerCounterIdle(worker, stats, false, waitingAt, common.MinLeaveWorkerDuration), nil
+			utils.WorkerCounterIdle(worker, stats, false, waitingAt, minIdle), nil
 	}
 	leaving := worker.DeepCopy()
 	if utils.WorkerSupportsDecommission(*worker) {

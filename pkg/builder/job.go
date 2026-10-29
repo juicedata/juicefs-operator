@@ -322,7 +322,7 @@ func (j *JobBuilder) getWarmUpMountInfo() warmUpMountInfo {
 		workerCommand := j.worker.Spec.Containers[0].Command[2]
 		info.authCmd = strings.Split(workerCommand, "\n")[0]
 		var opts []string
-		info.volName, opts = utils.MustParseWorkerMountCmds(workerCommand)
+		info.volName, opts = utils.ParseWorkerMountInfo(*j.worker)
 		for _, opt := range opts {
 			part := strings.SplitN(opt, "=", 2)
 			if len(part) < 1 {

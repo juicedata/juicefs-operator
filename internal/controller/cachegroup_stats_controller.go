@@ -39,7 +39,6 @@ import (
 const (
 	workerStatsConcurrency = 10
 	workerStatsMinInterval = 30 * time.Second
-	workerStatsMaxAge      = 2 * time.Minute
 	// Tolerates uptime refresh lag and second precision of timestamps.
 	workerStartTimeTolerance = 5 * time.Second
 )
@@ -111,7 +110,7 @@ func nextWorkerStats(previous, sample juicefsiov1.CacheGroupWorkerStats, now met
 		return sample
 	}
 	interval := now.Sub(previous.LastSampleTime.Time)
-	if interval <= 0 || interval > workerStatsMaxAge {
+	if interval <= 0 || interval > common.WorkerStatsMaxAge {
 		return sample
 	}
 	rate := func(prevBytes, bytes *int64) *int64 {

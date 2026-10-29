@@ -95,25 +95,25 @@ type PodBuilder struct {
 	spec                 juicefsiov1.CacheGroupWorkerTemplate
 	secretData           map[string]string
 	initConfig           string
-	joining              bool
+	addJoinOption        bool
 	cacheDirsInContainer []string
 	cacheDeviceMountCmds []string
 }
 
-func NewPodBuilder(cg *juicefsiov1.CacheGroup, secret *corev1.Secret, node string, spec juicefsiov1.CacheGroupWorkerTemplate, joining bool) *PodBuilder {
+func NewPodBuilder(cg *juicefsiov1.CacheGroup, secret *corev1.Secret, node string, spec juicefsiov1.CacheGroupWorkerTemplate, addJoinOption bool) *PodBuilder {
 	secretData := utils.ParseSecret(secret)
 	initconfig := ""
 	if v, ok := secretData["initconfig"]; ok && v != "" {
 		initconfig = v
 	}
 	return &PodBuilder{
-		secretData: secretData,
-		volName:    strings.TrimSpace(secretData["name"]),
-		cg:         cg,
-		node:       node,
-		spec:       spec,
-		initConfig: initconfig,
-		joining:    joining,
+		secretData:    secretData,
+		volName:       strings.TrimSpace(secretData["name"]),
+		cg:            cg,
+		node:          node,
+		spec:          spec,
+		initConfig:    initconfig,
+		addJoinOption: addJoinOption,
 	}
 }
 
@@ -443,16 +443,8 @@ func nextConfigVolumeName(used map[string]struct{}, next *int) string {
 	}
 }
 
-func (p *PodBuilder) genCommands(ctx context.Context) []string {
-	authCmds := p.genAuthCmds(ctx)
+func (p *PodBuilder) genMountOpts(ctx context.Context) string {
 	cacheGroup := GenCacheGroupName(p.cg)
-	mountCmds := []string{
-		"exec",
-		common.JuiceFsMountBinary,
-		p.volName,
-		common.MountPoint,
-	}
-
 	opts := []string{
 		"foreground",
 		"no-update",
@@ -476,14 +468,36 @@ func (p *PodBuilder) genCommands(ctx context.Context) []string {
 		}
 	}
 	opts = append(opts, "cache-dir="+strings.Join(p.cacheDirsInContainer, ":"))
-	if p.joining {
-		if utils.CompareEEImageVersion(p.spec.Image, common.MinSupportedCommissionVersion) >= 0 {
-			opts = append(opts, "commission")
-		} else {
-			opts = append(opts, "group-backup")
-		}
+	return strings.Join(opts, ",")
+}
+
+func (p *PodBuilder) withJoinOption(opts string) string {
+	if !p.addJoinOption {
+		return opts
 	}
-	mountCmds = append(mountCmds, "-o", strings.Join(opts, ","))
+	if utils.CompareEEImageVersion(p.spec.Image, common.MinSupportedCommissionVersion) >= 0 {
+		return opts + ",commission"
+	}
+	return opts + ",group-backup"
+}
+
+func (p *PodBuilder) genCommands(ctx context.Context) []string {
+	return p.genShellCommands(ctx, "-o "+p.withJoinOption(p.genMountOpts(ctx)))
+}
+
+func (p *PodBuilder) genCommandsV2(ctx context.Context) []string {
+	return p.genShellCommands(ctx, fmt.Sprintf(`-o "$(cat %s/%s)"`, common.WorkerOptsMountPath, common.WorkerOptsFileName))
+}
+
+func (p *PodBuilder) genShellCommands(ctx context.Context, mountOptsArg string) []string {
+	authCmds := p.genAuthCmds(ctx)
+	mountCmds := []string{
+		"exec",
+		common.JuiceFsMountBinary,
+		p.volName,
+		common.MountPoint,
+		mountOptsArg,
+	}
 	commandLines := []string{strings.Join(authCmds, " ")}
 	commandLines = append(commandLines, p.cacheDeviceMountCmds...)
 	commandLines = append(commandLines, strings.Join(mountCmds, " "))
@@ -493,6 +507,27 @@ func (p *PodBuilder) genCommands(ctx context.Context) []string {
 		strings.Join(commandLines, "\n"),
 	}
 	return cmds
+}
+
+func addWorkerOptsVolume(worker *corev1.Pod) {
+	worker.Spec.Volumes = append(worker.Spec.Volumes, corev1.Volume{
+		Name: common.WorkerOptsVolumeName,
+		VolumeSource: corev1.VolumeSource{
+			DownwardAPI: &corev1.DownwardAPIVolumeSource{
+				Items: []corev1.DownwardAPIVolumeFile{{
+					Path: common.WorkerOptsFileName,
+					FieldRef: &corev1.ObjectFieldSelector{
+						FieldPath: "metadata.annotations['" + common.AnnoWorkerMountOpts + "']",
+					},
+				}},
+			},
+		},
+	})
+	worker.Spec.Containers[0].VolumeMounts = append(worker.Spec.Containers[0].VolumeMounts, corev1.VolumeMount{
+		Name:      common.WorkerOptsVolumeName,
+		MountPath: common.WorkerOptsMountPath,
+		ReadOnly:  true,
+	})
 }
 
 func (p *PodBuilder) genInitConfigVolumes() {
@@ -520,7 +555,27 @@ func (p *PodBuilder) genInitConfigVolumes() {
 	})
 }
 
+// NewCacheGroupWorker builds the worker. Images that support changing mount options during smooth restart
+// read the options from the downward API; others inline them in the command.
 func (p *PodBuilder) NewCacheGroupWorker(ctx context.Context, dryrun bool) *corev1.Pod {
+	p = p.clone()
+	p.addJoinOption = !dryrun && p.addJoinOption
+	return p.newWorker(ctx, dryrun, utils.SupportsRestartArgs(p.spec.Image))
+}
+
+// V1WorkerHash returns the hash of the worker built with the v1 template, to compare with existing v1 workers.
+func (p *PodBuilder) V1WorkerHash(ctx context.Context) string {
+	return p.clone().newWorker(ctx, false, false).Annotations[common.LabelWorkerHash]
+}
+
+// clone copies the builder, since building a worker modifies its spec.
+func (p *PodBuilder) clone() *PodBuilder {
+	c := *p
+	c.spec = *p.spec.DeepCopy()
+	return &c
+}
+
+func (p *PodBuilder) newWorker(ctx context.Context, dryrun bool, v2 bool) *corev1.Pod {
 	worker := newBasicPod(p.cg, p.node)
 	p.genInitConfigVolumes()
 	p.genCacheDirs()
@@ -597,14 +652,27 @@ func (p *PodBuilder) NewCacheGroupWorker(ctx context.Context, dryrun bool) *core
 		worker.Spec.Containers[0].Resources = common.DefaultResources
 	}
 	worker.Spec.Containers[0].Env = p.genEnvs(ctx)
-	worker.Spec.Containers[0].Command = p.genCommands(ctx)
+	var mountOpts string
+	if v2 {
+		mountOpts = p.genMountOpts(ctx)
+		worker.Annotations[common.AnnoWorkerTemplate] = common.WorkerTemplateV2
+		worker.Annotations[common.AnnoWorkerMountOpts] = mountOpts
+		addWorkerOptsVolume(worker)
+		worker.Spec.Containers[0].Command = p.genCommandsV2(ctx)
+	} else {
+		worker.Spec.Containers[0].Command = p.genCommands(ctx)
+	}
 
 	hash := utils.GenHash(worker)
 
 	// The following fields do not participate in the hash calculation.
 	worker.Labels[common.LabelManagedBy] = common.LabelManagedByValue
 	worker.Annotations[common.LabelWorkerHash] = hash
-	if p.joining {
+	if v2 {
+		// The join option is excluded from the hash, so that it can be removed by smooth restart.
+		worker.Annotations[common.AnnoWorkerMountOpts] = p.withJoinOption(mountOpts)
+	}
+	if p.addJoinOption {
 		backupAt := time.Now().Format(time.RFC3339)
 		worker.Annotations[common.AnnoBackupWorker] = backupAt
 	}
@@ -702,16 +770,23 @@ func UpdateWorkerGroupWeight(worker *corev1.Pod, weight int) {
 }
 
 func UpdateWorkerDecommission(worker *corev1.Pod) {
+	if utils.IsWorkerV2(*worker) {
+		worker.Annotations[common.AnnoWorkerMountOpts] = decommissionOpts(worker.Annotations[common.AnnoWorkerMountOpts])
+		return
+	}
 	commandLines := strings.Split(worker.Spec.Containers[0].Command[2], "\n")
-	opts := strings.Split(commandLines[len(commandLines)-1], ",")
-	opts = slices.DeleteFunc(opts, func(opt string) bool {
+	commandLines[len(commandLines)-1] = decommissionOpts(commandLines[len(commandLines)-1])
+	worker.Spec.Containers[0].Command[2] = strings.Join(commandLines, "\n")
+}
+
+func decommissionOpts(opts string) string {
+	fields := slices.DeleteFunc(strings.Split(opts, ","), func(opt string) bool {
 		name, _, _ := strings.Cut(opt, "=")
 		return name == "commission"
 	})
-	cmd := strings.Join(opts, ",")
+	cmd := strings.Join(fields, ",")
 	if !strings.Contains(cmd, ",decommission") {
 		cmd += ",decommission"
 	}
-	commandLines[len(commandLines)-1] = cmd
-	worker.Spec.Containers[0].Command[2] = strings.Join(commandLines, "\n")
+	return cmd
 }

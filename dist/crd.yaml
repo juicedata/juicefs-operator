@@ -4336,6 +4336,20 @@ spec:
               readyWorker:
                 format: int32
                 type: integer
+              rebalance:
+                properties:
+                  members:
+                    items:
+                      type: string
+                    type: array
+                    x-kubernetes-list-type: set
+                  startAt:
+                    format: date-time
+                    type: string
+                required:
+                - members
+                - startAt
+                type: object
               stats:
                 items:
                   properties:

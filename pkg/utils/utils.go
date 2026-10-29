@@ -193,3 +193,10 @@ func FormatBytes(b int64) string {
 	}
 	return fmt.Sprintf("%.1f%ciB", float64(b)/float64(div), "KMGTPE"[exp])
 }
+
+func FormatCounter(v *int64) string {
+	if v == nil {
+		return ""
+	}
+	return FormatBytes(*v)
+}

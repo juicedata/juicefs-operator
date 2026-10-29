@@ -86,22 +86,8 @@ func IsMountPointReady(ctx context.Context, pod corev1.Pod, mountPoint string) b
 		log.V(1).Info("mount point is not ready")
 		return false
 	}
-	log.Info("mount point is ready")
+	log.V(1).Info("mount point is ready")
 	return true
-}
-
-func GetWorkerCacheBlocksBytes(ctx context.Context, pod corev1.Pod, mountPoint string) (int, error) {
-	if !IsPodReady(pod) || !IsMountPointReady(ctx, pod, mountPoint) {
-		return 0, fmt.Errorf("pod %s is not ready yet", pod.Name)
-	}
-	stats, err := GetWorkerStats(ctx, pod, mountPoint)
-	if err != nil {
-		return 0, err
-	}
-	if stats.CacheBytes == nil {
-		return 0, nil
-	}
-	return int(*stats.CacheBytes), nil
 }
 
 func GetWorkerStats(ctx context.Context, pod corev1.Pod, mountPoint string) (juicefsiov1.CacheGroupWorkerStats, error) {
@@ -151,9 +137,12 @@ func parseWorkerStats(name, stdout string, now time.Time) (juicefsiov1.CacheGrou
 }
 
 func WorkerSupportsDecommission(pod corev1.Pod) bool {
-	image := pod.Spec.Containers[0].Image
+	return isEEImageAtLeast(pod.Spec.Containers[0].Image, common.MinSupportedDecommissionVersion)
+}
+
+func isEEImageAtLeast(image, version string) bool {
 	parts := strings.SplitN(image[strings.LastIndex(image, "/")+1:], ":", 2)
-	return len(parts) >= 2 && strings.Contains(parts[1], "ee-") && CompareEEImageVersion(image, common.MinSupportedDecommissionVersion) >= 0
+	return len(parts) >= 2 && strings.Contains(parts[1], "ee-") && CompareEEImageVersion(image, version) >= 0
 }
 
 func ParseUpdateStrategy(strategy *appsv1.DaemonSetUpdateStrategy, total int) (appsv1.DaemonSetUpdateStrategyType, int) {

@@ -63,8 +63,27 @@ const (
 	LabelSyncManagerValue   = "juicefs-sync-manager"
 	LabelCronSync           = "juicefs.io/cron-sync"
 
-	AnnoBackupWorker        = "juicefs.io/backup-worker"
+	AnnotationPrefix = "juicefs.io/"
+
+	// AnnoBackupWorker records the RFC3339 start time of the temporary join phase
+	// (commission or group-backup). The legacy key is retained for compatibility with existing Pods.
+	AnnoBackupWorker = "juicefs.io/backup-worker"
+	// AnnoWaitingDeleteWorker records the RFC3339 start time of cache migration before deletion
+	// (decommission or group-weight=0). The legacy key is retained for compatibility with existing Pods.
 	AnnoWaitingDeleteWorker = "juicefs.io/waiting-delete-worker"
+
+	// Worker template and mount options annotations for smooth restart
+	AnnoWorkerTemplate   = "juicefs.io/worker-template"
+	AnnoWorkerMountOpts  = "juicefs.io/worker-mount-opts"
+	WorkerTemplateV2     = "v2"
+	WorkerOptsVolumeName = "jfs-worker-opts"
+	WorkerOptsMountPath  = "/etc/juicefs-worker"
+	WorkerOptsFileName   = "mount-opts"
+
+	DefaultRebalanceDelay  = 10 * time.Minute
+	RebalanceDelayMargin   = time.Minute
+	WorkerStatsMaxAge      = 2 * time.Minute
+	MinLeaveWorkerDuration = time.Minute
 
 	LabelMaxLength       = 63
 	CronJobNameMaxLength = 52
@@ -74,8 +93,9 @@ const (
 	InitConfigMountPath  = "/etc/juicefs"
 
 	MinSupportedWarmupStatsVersion  = "5.2.11"
-	MinSupportedDecommissionVersion = "5.4.0"
-	MinSupportedCommissionVersion   = "5.4.3"
+	MinSupportedDecommissionVersion = "5.4.4"
+	MinSupportedCommissionVersion   = "5.4.4"
+	MinSupportedRestartArgsVersion  = "5.4.4"
 )
 
 var (
@@ -109,6 +129,8 @@ var (
 	MaxCGConcurrentReconciles     = 10
 
 	UpdateWarmupStatsInterval = 3 * time.Second
+
+	CacheGroupRebalanceIdleRate int64 = 1 << 20
 
 	WatchNamespaces = []string{}
 

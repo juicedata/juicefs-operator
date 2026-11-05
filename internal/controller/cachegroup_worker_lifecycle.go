@@ -195,14 +195,19 @@ func (r *CacheGroupReconciler) gracefulShutdownWorker(
 	if err != nil {
 		return false, err
 	}
-	if currentStats.CacheBytes == nil || *currentStats.CacheBytes <= 0 {
-		return true, nil
-	}
-
-	if migrating {
-		minIdle := max(common.MinLeaveWorkerDuration, utils.WorkerRebalanceDelay(worker)+common.RebalanceDelayMargin)
-		return sameWorkerProcess(stats.StartTime, currentStats.StartTime) &&
-			utils.WorkerCounterIdle(worker, stats, false, waitingAt, minIdle), nil
+	emptyCache := currentStats.CacheBytes != nil && *currentStats.CacheBytes <= 0
+	if migrating || emptyCache {
+		if !sameWorkerProcess(stats.StartTime, currentStats.StartTime) {
+			return false, nil
+		}
+		minIdle := common.MinLeaveWorkerDuration
+		if migrating {
+			minIdle = max(minIdle, utils.WorkerRebalanceDelay(worker)+common.RebalanceDelayMargin)
+		}
+		if emptyCache {
+			return time.Since(currentStats.StartTime.Time) >= minIdle, nil
+		}
+		return utils.WorkerCounterIdle(worker, stats, false, waitingAt, minIdle), nil
 	}
 	leaving := worker.DeepCopy()
 	if utils.WorkerSupportsDecommission(*worker) {

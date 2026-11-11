@@ -41,19 +41,22 @@ func (r *CacheGroupReconciler) syncWorkers(ctx context.Context, cg *juicefsiov1.
 	log := log.FromContext(ctx)
 	updateStrategyType, maxUnavailable := utils.ParseUpdateStrategy(cg.Spec.UpdateStrategy, len(expectStates))
 	workers := make(map[string]*corev1.Pod, len(actualWorkers))
-	numUnavailable := 0
 	for _, worker := range actualWorkers {
 		workers[worker.Name] = &worker
-		if worker.DeletionTimestamp != nil {
+	}
+	numUnavailable := 0
+	for node := range expectStates {
+		worker := workers[r.getPodName(cg, node)]
+		if worker == nil || worker.DeletionTimestamp != nil {
 			numUnavailable++
 			continue
 		}
-		if utils.IsPodReady(worker) {
+		if utils.IsPodReady(*worker) {
 			continue
 		}
 		numUnavailable++
 		if time.Since(worker.CreationTimestamp.Time) > time.Minute {
-			conditions := utils.FormatPodNotReadyConditions(worker)
+			conditions := utils.FormatPodNotReadyConditions(*worker)
 			log.Info("worker is not ready for more than 1 minute", "worker", worker.Name, "since", time.Since(worker.CreationTimestamp.Time).Round(time.Second).String(), "conditions", conditions)
 			r.eventf(cg, corev1.EventTypeWarning, "WorkerNotReady", "Worker %s is not ready: %s", worker.Name, strings.Join(conditions, "; "))
 		}

@@ -41,19 +41,22 @@ func (r *CacheGroupReconciler) syncWorkers(ctx context.Context, cg *juicefsiov1.
 	log := log.FromContext(ctx)
 	updateStrategyType, maxUnavailable := utils.ParseUpdateStrategy(cg.Spec.UpdateStrategy, len(expectStates))
 	workers := make(map[string]*corev1.Pod, len(actualWorkers))
-	numUnavailable := 0
 	for _, worker := range actualWorkers {
 		workers[worker.Name] = &worker
-		if worker.DeletionTimestamp != nil {
+	}
+	numUnavailable := 0
+	for node := range expectStates {
+		worker := workers[r.getPodName(cg, node)]
+		if worker == nil || worker.DeletionTimestamp != nil {
 			numUnavailable++
 			continue
 		}
-		if utils.IsPodReady(worker) {
+		if utils.IsPodReady(*worker) {
 			continue
 		}
 		numUnavailable++
 		if time.Since(worker.CreationTimestamp.Time) > time.Minute {
-			conditions := utils.FormatPodNotReadyConditions(worker)
+			conditions := utils.FormatPodNotReadyConditions(*worker)
 			log.Info("worker is not ready for more than 1 minute", "worker", worker.Name, "since", time.Since(worker.CreationTimestamp.Time).Round(time.Second).String(), "conditions", conditions)
 			r.eventf(cg, corev1.EventTypeWarning, "WorkerNotReady", "Worker %s is not ready: %s", worker.Name, strings.Join(conditions, "; "))
 		}
@@ -185,24 +188,30 @@ func (r *CacheGroupReconciler) gracefulShutdownWorker(
 		if time.Since(waitingAt) > utils.GetWaitingDeletedMaxDuration(cg.Spec.WaitingDeletedMaxDuration) {
 			return true, nil
 		}
-	} else if cg.Status.ReadyWorker <= 1 {
-		return true, nil
 	}
 	if !utils.IsPodReady(*worker) || !utils.IsMountPointReady(ctx, *worker, common.MountPoint) {
-		return !migrating, nil
+		return false, nil
+	}
+	if !migrating && cg.Status.ReadyWorker <= 1 {
+		return true, nil
 	}
 	currentStats, err := utils.GetWorkerStats(ctx, *worker, common.MountPoint)
 	if err != nil {
 		return false, err
 	}
-	if currentStats.CacheBytes == nil || *currentStats.CacheBytes <= 0 {
-		return true, nil
-	}
-
-	if migrating {
-		minIdle := max(common.MinLeaveWorkerDuration, utils.WorkerRebalanceDelay(worker)+common.RebalanceDelayMargin)
-		return sameWorkerProcess(stats.StartTime, currentStats.StartTime) &&
-			utils.WorkerCounterIdle(worker, stats, false, waitingAt, minIdle), nil
+	emptyCache := currentStats.CacheBytes != nil && *currentStats.CacheBytes <= 0
+	if migrating || emptyCache {
+		if !sameWorkerProcess(stats.StartTime, currentStats.StartTime) {
+			return false, nil
+		}
+		minIdle := common.MinLeaveWorkerDuration
+		if migrating {
+			minIdle = max(minIdle, utils.WorkerRebalanceDelay(worker)+common.RebalanceDelayMargin)
+		}
+		if emptyCache {
+			return time.Since(currentStats.StartTime.Time) >= minIdle, nil
+		}
+		return utils.WorkerCounterIdle(worker, stats, false, waitingAt, minIdle), nil
 	}
 	leaving := worker.DeepCopy()
 	if utils.WorkerSupportsDecommission(*worker) {

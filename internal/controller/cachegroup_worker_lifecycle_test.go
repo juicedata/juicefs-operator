@@ -67,8 +67,8 @@ func TestWorkerCounterIdle(t *testing.T) {
 		{name: "rate below idle rate", since: -5 * time.Minute, bytes: ptr(100), rate: slow, want: true},
 		{name: "rate at idle rate", since: -5 * time.Minute, bytes: ptr(100), rate: fast},
 		{name: "missing rate", since: -5 * time.Minute, bytes: ptr(100)},
-		{name: "zero bytes before minIdle", startAgo: 59 * time.Second, since: -5 * time.Minute, bytes: ptr(0), rate: ptr(0)},
-		{name: "zero bytes at minIdle", startAgo: time.Minute, since: -30 * time.Second, bytes: ptr(0), rate: ptr(0), want: true},
+		{name: "zero bytes before minIdle", startAgo: common.MinLeaveWorkerDuration - time.Second, since: -5 * time.Minute, bytes: ptr(0), rate: ptr(0)},
+		{name: "zero bytes at minIdle", startAgo: common.MinLeaveWorkerDuration, since: -30 * time.Second, bytes: ptr(0), rate: ptr(0), want: true},
 		{name: "zero bytes after a process restart", startAgo: 30 * time.Second, since: -30 * time.Minute, bytes: ptr(0), rate: ptr(0)},
 		{name: "missing start time", noStartTime: true, since: -5 * time.Minute, bytes: ptr(100), rate: slow},
 		{name: "stale sample", since: -10 * time.Minute, bytes: ptr(100), rate: slow, sampleAgo: common.WorkerStatsMaxAge + time.Second},
@@ -179,17 +179,16 @@ func TestRemoveRedundantWorkersKeepsMigratingWorker(t *testing.T) {
 	}{
 		{name: "migrating worker is kept", waitingAgo: time.Second},
 		{name: "migrating worker is deleted after timeout", waitingAgo: 2 * time.Hour, wantDeleted: true},
-		{name: "worker not migrating is deleted", wantDeleted: true},
+		{name: "worker not ready before migration is kept"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := context.Background()
 			worker := newLifecycleTestWorker(now)
 			worker.Spec.Containers = []corev1.Container{{Name: common.WorkerContainerName, Image: "juicedata/mount:ee-5.4.3"}}
+			worker.Status.Conditions = nil
 			if tt.waitingAgo > 0 {
 				worker.Annotations[common.AnnoWaitingDeleteWorker] = now.Add(-tt.waitingAgo).Format(time.RFC3339)
-				// A recreated leaving worker is not ready yet.
-				worker.Status.Conditions = nil
 			}
 			cg := &juicefsiov1.CacheGroup{
 				Spec:   juicefsiov1.CacheGroupSpec{Replicas: &replicas},

@@ -65,6 +65,14 @@ func init() {
 
 func run() {
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&zapOpts)))
+	if value := os.Getenv("CACHE_GROUP_MIN_LEAVE_WORKER_DURATION"); value != "" {
+		duration, err := time.ParseDuration(value)
+		if err != nil || duration <= 0 {
+			setupLog.Error(err, "CACHE_GROUP_MIN_LEAVE_WORKER_DURATION must be a positive duration", "value", value)
+			os.Exit(1)
+		}
+		common.MinLeaveWorkerDuration = duration
+	}
 	mgr, err := NewManager()
 	if err != nil {
 		setupLog.Error(err, "unable to create manager")

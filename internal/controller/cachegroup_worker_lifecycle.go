@@ -188,11 +188,12 @@ func (r *CacheGroupReconciler) gracefulShutdownWorker(
 		if time.Since(waitingAt) > utils.GetWaitingDeletedMaxDuration(cg.Spec.WaitingDeletedMaxDuration) {
 			return true, nil
 		}
-	} else if cg.Status.ReadyWorker <= 1 {
-		return true, nil
 	}
 	if !utils.IsPodReady(*worker) || !utils.IsMountPointReady(ctx, *worker, common.MountPoint) {
-		return !migrating, nil
+		return false, nil
+	}
+	if !migrating && cg.Status.ReadyWorker <= 1 {
+		return true, nil
 	}
 	currentStats, err := utils.GetWorkerStats(ctx, *worker, common.MountPoint)
 	if err != nil {

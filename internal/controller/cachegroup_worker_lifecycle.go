@@ -139,6 +139,7 @@ func (r *CacheGroupReconciler) removeRedundantWorkers(
 	expectStates map[string]juicefsiov1.CacheGroupWorkerTemplate,
 	actualWorks []corev1.Pod,
 	workerStats map[string]juicefsiov1.CacheGroupWorkerStats) error {
+	var errors []error
 	for _, worker := range actualWorks {
 		var workerKey string
 		if cg.Spec.Replicas != nil {
@@ -159,20 +160,22 @@ func (r *CacheGroupReconciler) removeRedundantWorkers(
 
 		canDelete, err := r.gracefulShutdownWorker(ctx, cg, &worker, workerStats[worker.Name])
 		if err != nil {
-			return err
+			errors = append(errors, err)
+			continue
 		}
 		if !canDelete {
 			continue
 		}
 		log.FromContext(ctx).Info("deleting redundant worker", "worker", worker.Name)
 		if err := r.deleteCacheGroupWorker(ctx, cg, &worker, false); err != nil {
-			return err
+			errors = append(errors, err)
+			continue
 		}
 		if err := r.cleanWorkerCache(ctx, cg, worker); err != nil {
-			return err
+			errors = append(errors, err)
 		}
 	}
-	return nil
+	return utilerrors.NewAggregate(errors)
 }
 
 // gracefulShutdownWorker migrates the cache of a redundant worker and returns whether it can be deleted.

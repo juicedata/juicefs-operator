@@ -152,9 +152,7 @@ func (r *CacheGroupReconciler) sync(ctx context.Context, cg *juicefsiov1.CacheGr
 
 	syncErr := r.syncWorkers(ctx, cg, secret, expectStates, actualWorkers, workerStats)
 	errors := []error{syncErr}
-	if syncErr == nil {
-		errors = append(errors, r.removeRedundantWorkers(ctx, cg, expectStates, actualWorkers, workerStats))
-	}
+	errors = append(errors, r.removeRedundantWorkers(ctx, cg, expectStates, actualWorkers, workerStats))
 
 	actualWorkers, err = r.listActualWorkers(ctx, cg)
 	if err != nil {

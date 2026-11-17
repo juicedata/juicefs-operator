@@ -184,36 +184,17 @@ func (r *CacheGroupReconciler) gracefulShutdownWorker(
 	cg *juicefsiov1.CacheGroup,
 	worker *corev1.Pod,
 	stats juicefsiov1.CacheGroupWorkerStats) (canDelete bool, err error) {
+	v, migrating := worker.Annotations[common.AnnoWaitingDeleteWorker]
 	var waitingAt time.Time
-	if v, ok := worker.Annotations[common.AnnoWaitingDeleteWorker]; ok {
+	if migrating {
 		waitingAt = utils.MustParseTime(v)
 		if time.Since(waitingAt) > utils.GetWaitingDeletedMaxDuration(cg.Spec.WaitingDeletedMaxDuration) {
 			return true, nil
 		}
-	} else {
-		waitingAt = time.Now()
-		marked := worker.DeepCopy()
-		if marked.Annotations == nil {
-			marked.Annotations = map[string]string{}
-		}
-		marked.Annotations[common.AnnoWaitingDeleteWorker] = waitingAt.Format(time.RFC3339)
-		if err := r.Patch(ctx, marked, client.MergeFrom(worker)); err != nil {
-			return false, err
-		}
-		*worker = *marked
 	}
 	if !utils.IsPodReady(*worker) || !utils.IsMountPointReady(ctx, *worker, common.MountPoint) {
 		return false, nil
 	}
-	leaving := worker.DeepCopy()
-	if utils.WorkerSupportsDecommission(*worker) {
-		builder.UpdateWorkerDecommission(leaving)
-	} else {
-		builder.UpdateWorkerGroupWeight(leaving, 0)
-	}
-	// the worker is migrating if it already runs with the leaving options
-	migrating := leaving.Annotations[common.AnnoWorkerMountOpts] == worker.Annotations[common.AnnoWorkerMountOpts] &&
-		slices.Equal(leaving.Spec.Containers[0].Command, worker.Spec.Containers[0].Command)
 	if !migrating && cg.Status.ReadyWorker <= 1 {
 		return true, nil
 	}
@@ -235,6 +216,13 @@ func (r *CacheGroupReconciler) gracefulShutdownWorker(
 		}
 		return utils.WorkerCounterIdle(worker, stats, false, waitingAt, minIdle), nil
 	}
+	leaving := worker.DeepCopy()
+	if utils.WorkerSupportsDecommission(*worker) {
+		builder.UpdateWorkerDecommission(leaving)
+	} else {
+		builder.UpdateWorkerGroupWeight(leaving, 0)
+	}
+	leaving.Annotations[common.AnnoWaitingDeleteWorker] = time.Now().Format(time.RFC3339)
 	if utils.IsWorkerV2(*worker) {
 		if err := r.smoothRestartWorker(ctx, cg, worker, leaving); err == nil {
 			return false, nil

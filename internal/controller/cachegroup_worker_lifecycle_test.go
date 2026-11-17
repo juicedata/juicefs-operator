@@ -179,7 +179,7 @@ func TestRemoveRedundantWorkersKeepsMigratingWorker(t *testing.T) {
 	}{
 		{name: "migrating worker is kept", waitingAgo: time.Second},
 		{name: "migrating worker is deleted after timeout", waitingAgo: 2 * time.Hour, wantDeleted: true},
-		{name: "worker not ready before migration is kept and marked"},
+		{name: "worker not ready before migration is kept"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -199,13 +199,9 @@ func TestRemoveRedundantWorkersKeepsMigratingWorker(t *testing.T) {
 			if err := r.removeRedundantWorkers(ctx, cg, map[string]juicefsiov1.CacheGroupWorkerTemplate{}, []corev1.Pod{*worker}, nil); err != nil {
 				t.Fatal(err)
 			}
-			got := &corev1.Pod{}
-			err := r.Get(ctx, client.ObjectKeyFromObject(worker), got)
+			err := r.Get(ctx, client.ObjectKeyFromObject(worker), &corev1.Pod{})
 			if deleted := apierrors.IsNotFound(err); deleted != tt.wantDeleted {
 				t.Fatalf("worker deleted = %v (err: %v), want %v", deleted, err, tt.wantDeleted)
-			}
-			if _, marked := got.Annotations[common.AnnoWaitingDeleteWorker]; !tt.wantDeleted && !marked {
-				t.Fatalf("kept worker is not marked with %s", common.AnnoWaitingDeleteWorker)
 			}
 		})
 	}

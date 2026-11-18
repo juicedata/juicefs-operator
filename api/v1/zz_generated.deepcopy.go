@@ -375,13 +375,6 @@ func (in *CacheGroupWorkerTemplate) DeepCopyInto(out *CacheGroupWorkerTemplate) 
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
 	}
-	if in.EnvFrom != nil {
-		in, out := &in.EnvFrom, &out.EnvFrom
-		*out = make([]corev1.EnvFromSource, len(*in))
-		for i := range *in {
-			(*in)[i].DeepCopyInto(&(*out)[i])
-		}
-	}
 	if in.Resources != nil {
 		in, out := &in.Resources, &out.Resources
 		*out = new(corev1.ResourceRequirements)
@@ -444,52 +437,6 @@ func (in *CacheGroupWorkerTemplate) DeepCopyInto(out *CacheGroupWorkerTemplate) 
 	if in.EnableServiceLinks != nil {
 		in, out := &in.EnableServiceLinks, &out.EnableServiceLinks
 		*out = new(bool)
-		**out = **in
-	}
-	if in.TerminationGracePeriodSeconds != nil {
-		in, out := &in.TerminationGracePeriodSeconds, &out.TerminationGracePeriodSeconds
-		*out = new(int64)
-		**out = **in
-	}
-	if in.DNSConfig != nil {
-		in, out := &in.DNSConfig, &out.DNSConfig
-		*out = new(corev1.PodDNSConfig)
-		(*in).DeepCopyInto(*out)
-	}
-	if in.AutomountServiceAccountToken != nil {
-		in, out := &in.AutomountServiceAccountToken, &out.AutomountServiceAccountToken
-		*out = new(bool)
-		**out = **in
-	}
-	if in.HostAliases != nil {
-		in, out := &in.HostAliases, &out.HostAliases
-		*out = make([]corev1.HostAlias, len(*in))
-		for i := range *in {
-			(*in)[i].DeepCopyInto(&(*out)[i])
-		}
-	}
-	if in.PodSecurityContext != nil {
-		in, out := &in.PodSecurityContext, &out.PodSecurityContext
-		*out = new(corev1.PodSecurityContext)
-		(*in).DeepCopyInto(*out)
-	}
-	if in.TopologySpreadConstraints != nil {
-		in, out := &in.TopologySpreadConstraints, &out.TopologySpreadConstraints
-		*out = make([]corev1.TopologySpreadConstraint, len(*in))
-		for i := range *in {
-			(*in)[i].DeepCopyInto(&(*out)[i])
-		}
-	}
-	if in.InitContainers != nil {
-		in, out := &in.InitContainers, &out.InitContainers
-		*out = make([]corev1.Container, len(*in))
-		for i := range *in {
-			(*in)[i].DeepCopyInto(&(*out)[i])
-		}
-	}
-	if in.RuntimeClassName != nil {
-		in, out := &in.RuntimeClassName, &out.RuntimeClassName
-		*out = new(string)
 		**out = **in
 	}
 	if in.Opts != nil {

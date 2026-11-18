@@ -76,7 +76,6 @@ type CacheGroupWorkerTemplate struct {
 	ServiceAccountName string              `json:"serviceAccountName,omitempty"`
 	HostNetwork        *bool               `json:"hostNetwork,omitempty"`
 	SchedulerName      string              `json:"schedulerName,omitempty"`
-	PriorityClassName  string              `json:"priorityClassName,omitempty"`
 	Tolerations        []corev1.Toleration `json:"tolerations,omitempty"`
 	CacheDirs          []CacheDir          `json:"cacheDirs,omitempty"`
 	// Container image.
@@ -94,8 +93,7 @@ type CacheGroupWorkerTemplate struct {
 	ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy,omitempty"`
 	// List of environment variables to set in the container.
 	// +optional
-	Env     []corev1.EnvVar        `json:"env,omitempty"`
-	EnvFrom []corev1.EnvFromSource `json:"envFrom,omitempty"`
+	Env []corev1.EnvVar `json:"env,omitempty"`
 	// Compute Resources required by this container.
 	// More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
 	// +optional
@@ -156,15 +154,6 @@ type CacheGroupWorkerTemplate struct {
 	// Optional: Defaults to true.
 	// +optional
 	EnableServiceLinks *bool `json:"enableServiceLinks,omitempty"`
-
-	TerminationGracePeriodSeconds *int64                            `json:"terminationGracePeriodSeconds,omitempty"`
-	DNSConfig                     *corev1.PodDNSConfig              `json:"dnsConfig,omitempty"`
-	AutomountServiceAccountToken  *bool                             `json:"automountServiceAccountToken,omitempty"`
-	HostAliases                   []corev1.HostAlias                `json:"hostAliases,omitempty"`
-	PodSecurityContext            *corev1.PodSecurityContext        `json:"podSecurityContext,omitempty"`
-	TopologySpreadConstraints     []corev1.TopologySpreadConstraint `json:"topologySpreadConstraints,omitempty"`
-	InitContainers                []corev1.Container                `json:"initContainers,omitempty"`
-	RuntimeClassName              *string                           `json:"runtimeClassName,omitempty"`
 
 	Opts []string `json:"opts,omitempty"`
 }

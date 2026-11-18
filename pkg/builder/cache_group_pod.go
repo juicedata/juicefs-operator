@@ -613,8 +613,17 @@ func (p *PodBuilder) newWorker(ctx context.Context, dryrun bool, v2 bool) *corev
 	maps.Copy(worker.Annotations, spec.Annotations)
 	worker.Spec.Tolerations = spec.Tolerations
 	worker.Spec.SchedulerName = spec.SchedulerName
+	worker.Spec.PriorityClassName = spec.PriorityClassName
 	worker.Spec.ServiceAccountName = spec.ServiceAccountName
 	worker.Spec.EnableServiceLinks = spec.EnableServiceLinks
+	worker.Spec.TerminationGracePeriodSeconds = spec.TerminationGracePeriodSeconds
+	worker.Spec.DNSConfig = spec.DNSConfig
+	worker.Spec.AutomountServiceAccountToken = spec.AutomountServiceAccountToken
+	worker.Spec.HostAliases = spec.HostAliases
+	worker.Spec.SecurityContext = spec.PodSecurityContext
+	worker.Spec.TopologySpreadConstraints = spec.TopologySpreadConstraints
+	worker.Spec.InitContainers = spec.InitContainers
+	worker.Spec.RuntimeClassName = spec.RuntimeClassName
 	worker.Spec.Volumes = spec.Volumes
 	worker.Spec.Containers[0].Image = spec.Image
 	worker.Spec.Containers[0].ImagePullPolicy = spec.ImagePullPolicy
@@ -652,6 +661,7 @@ func (p *PodBuilder) newWorker(ctx context.Context, dryrun bool, v2 bool) *corev
 		worker.Spec.Containers[0].Resources = common.DefaultResources
 	}
 	worker.Spec.Containers[0].Env = p.genEnvs(ctx)
+	worker.Spec.Containers[0].EnvFrom = spec.EnvFrom
 	var mountOpts string
 	if v2 {
 		mountOpts = p.genMountOpts(ctx)
@@ -707,6 +717,9 @@ func MergeCacheGroupWorkerTemplate(template *juicefsiov1.CacheGroupWorkerTemplat
 	if overwrite.SchedulerName != "" {
 		template.SchedulerName = overwrite.SchedulerName
 	}
+	if overwrite.PriorityClassName != "" {
+		template.PriorityClassName = overwrite.PriorityClassName
+	}
 	if overwrite.Tolerations != nil {
 		template.Tolerations = overwrite.Tolerations
 	}
@@ -715,6 +728,9 @@ func MergeCacheGroupWorkerTemplate(template *juicefsiov1.CacheGroupWorkerTemplat
 	}
 	if overwrite.Env != nil {
 		template.Env = overwrite.Env
+	}
+	if overwrite.EnvFrom != nil {
+		template.EnvFrom = overwrite.EnvFrom
 	}
 	if overwrite.Resources != nil {
 		template.Resources = overwrite.Resources
@@ -754,6 +770,30 @@ func MergeCacheGroupWorkerTemplate(template *juicefsiov1.CacheGroupWorkerTemplat
 	}
 	if overwrite.Affinity != nil {
 		template.Affinity = overwrite.Affinity
+	}
+	if overwrite.TerminationGracePeriodSeconds != nil {
+		template.TerminationGracePeriodSeconds = overwrite.TerminationGracePeriodSeconds
+	}
+	if overwrite.DNSConfig != nil {
+		template.DNSConfig = overwrite.DNSConfig
+	}
+	if overwrite.AutomountServiceAccountToken != nil {
+		template.AutomountServiceAccountToken = overwrite.AutomountServiceAccountToken
+	}
+	if overwrite.HostAliases != nil {
+		template.HostAliases = overwrite.HostAliases
+	}
+	if overwrite.PodSecurityContext != nil {
+		template.PodSecurityContext = overwrite.PodSecurityContext
+	}
+	if overwrite.TopologySpreadConstraints != nil {
+		template.TopologySpreadConstraints = overwrite.TopologySpreadConstraints
+	}
+	if overwrite.InitContainers != nil {
+		template.InitContainers = overwrite.InitContainers
+	}
+	if overwrite.RuntimeClassName != nil {
+		template.RuntimeClassName = overwrite.RuntimeClassName
 	}
 }
 

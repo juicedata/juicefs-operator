@@ -27,6 +27,7 @@ const (
 	KindCaCheGroup = "CacheGroup"
 	KindSync       = "Sync"
 	KindWarmUp     = "WarmUp"
+	KindWebDAV     = "WebDAV"
 
 	// CacheGroupContainerName is the name of cache group worker container
 	WorkerContainerName     = "juicefs-cg-worker"
@@ -62,6 +63,8 @@ const (
 	LabelSyncWorkerValue    = "juicefs-sync-worker"
 	LabelSyncManagerValue   = "juicefs-sync-manager"
 	LabelCronSync           = "juicefs.io/cron-sync"
+	LabelWebDAV             = "juicefs.io/webdav"
+	LabelWebDAVValue        = "juicefs-webdav"
 
 	AnnotationPrefix = "juicefs.io/"
 
@@ -127,6 +130,7 @@ var (
 	MaxSyncConcurrentReconciles   = 10
 	MaxWarmupConcurrentReconciles = 10
 	MaxCGConcurrentReconciles     = 10
+	MaxWebDAVConcurrentReconciles = 10
 
 	UpdateWarmupStatsInterval = 3 * time.Second
 
@@ -160,4 +164,8 @@ func GenSyncManagerName(syncJobName string) string {
 
 func GenPVCName(templateName, nodeName string) string {
 	return fmt.Sprintf("%s-%s", templateName, nodeName)
+}
+
+func GenWebDAVName(webdavName string) string {
+	return fmt.Sprintf("juicefs-webdav-%s", webdavName)
 }

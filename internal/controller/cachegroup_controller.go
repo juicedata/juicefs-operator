@@ -63,7 +63,7 @@ type CacheGroupReconciler struct {
 // +kubebuilder:rbac:groups=juicefs.io,resources=cachegroups/finalizers,verbs=update
 // +kubebuilder:rbac:groups="",resources=nodes,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;delete;create;watch;patch
-// +kubebuilder:rbac:groups="",resources=pods/exec,verbs=create
+// +kubebuilder:rbac:groups="",resources=pods/exec,verbs=create;get
 // +kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=create;delete;get;list;update;watch
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
@@ -152,9 +152,7 @@ func (r *CacheGroupReconciler) sync(ctx context.Context, cg *juicefsiov1.CacheGr
 
 	syncErr := r.syncWorkers(ctx, cg, secret, expectStates, actualWorkers, workerStats)
 	errors := []error{syncErr}
-	if syncErr == nil {
-		errors = append(errors, r.removeRedundantWorkers(ctx, cg, expectStates, actualWorkers, workerStats))
-	}
+	errors = append(errors, r.removeRedundantWorkers(ctx, cg, expectStates, actualWorkers, workerStats))
 
 	actualWorkers, err = r.listActualWorkers(ctx, cg)
 	if err != nil {

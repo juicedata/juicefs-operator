@@ -19,6 +19,7 @@ import (
 	"reflect"
 
 	juicefsiov1 "github.com/juicedata/juicefs-operator/api/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/workqueue"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -49,9 +50,9 @@ func (r *CacheGroupReconciler) enqueueRequestForNode() handler.EventHandler {
 			}
 		},
 		UpdateFunc: func(ctx context.Context, e event.TypedUpdateEvent[client.Object], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
-			old, new := e.ObjectOld, e.ObjectNew
-			if !reflect.DeepEqual(old.GetLabels(), new.GetLabels()) {
-				log.FromContext(ctx).V(1).Info("enqueueRequestForNode: watching node labels change, enqueue all cache groups")
+			old, new := e.ObjectOld.(*corev1.Node), e.ObjectNew.(*corev1.Node)
+			if !reflect.DeepEqual(old.Labels, new.Labels) || !reflect.DeepEqual(old.Spec.Taints, new.Spec.Taints) {
+				log.FromContext(ctx).V(1).Info("enqueueRequestForNode: watching node labels or taints change, enqueue all cache groups")
 				cgs, err := r.ListAllCgs(ctx)
 				if err == nil {
 					for _, cg := range cgs {

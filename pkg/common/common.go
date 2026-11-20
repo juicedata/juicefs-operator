@@ -80,10 +80,9 @@ const (
 	WorkerOptsMountPath  = "/etc/juicefs-worker"
 	WorkerOptsFileName   = "mount-opts"
 
-	DefaultRebalanceDelay  = 10 * time.Minute
-	RebalanceDelayMargin   = time.Minute
-	WorkerStatsMaxAge      = 2 * time.Minute
-	MinLeaveWorkerDuration = time.Minute
+	DefaultRebalanceDelay = 10 * time.Minute
+	RebalanceDelayMargin  = time.Minute
+	WorkerStatsMaxAge     = 2 * time.Minute
 
 	LabelMaxLength       = 63
 	CronJobNameMaxLength = 52
@@ -123,6 +122,7 @@ var (
 
 	DefaultBackupWorkerDuration = 1 * time.Hour
 	DefaultWaitingMaxDuration   = 1 * time.Hour
+	MinLeaveWorkerDuration      = 2 * time.Minute
 
 	MaxSyncConcurrentReconciles   = 10
 	MaxWarmupConcurrentReconciles = 10

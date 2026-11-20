@@ -17,8 +17,10 @@ package utils
 import (
 	"bytes"
 	"context"
+	"net/http"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/util/httpstream"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/remotecommand"
 	"k8s.io/kubectl/pkg/scheme"
@@ -52,9 +54,21 @@ func ExecInPod(ctx context.Context, namespace, name, container string, cmd []str
 		TTY:       false,
 	}, scheme.ParameterCodec)
 
-	exec, err := remotecommand.NewSPDYExecutor(config, "POST", req.URL())
+	spdyExecutor, err := remotecommand.NewSPDYExecutor(config, http.MethodPost, req.URL())
 	if err != nil {
 		log.Error(err, "failed to create SPDY executor")
+		return "", "", err
+	}
+
+	websocketExecutor, err := remotecommand.NewWebSocketExecutor(config, http.MethodGet, req.URL().String())
+	if err != nil {
+		log.Error(err, "failed to create WebSocket executor")
+		return "", "", err
+	}
+	exec, err := remotecommand.NewFallbackExecutor(websocketExecutor, spdyExecutor, func(err error) bool {
+		return httpstream.IsUpgradeFailure(err) || httpstream.IsHTTPSProxyError(err)
+	})
+	if err != nil {
 		return "", "", err
 	}
 

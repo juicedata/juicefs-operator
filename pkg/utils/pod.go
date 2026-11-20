@@ -156,7 +156,7 @@ func ParseUpdateStrategy(strategy *appsv1.DaemonSetUpdateStrategy, total int) (a
 
 	if strategy.Type == appsv1.RollingUpdateDaemonSetStrategyType {
 		if strategy.RollingUpdate != nil && strategy.RollingUpdate.MaxUnavailable != nil {
-			maxUnavailable, err := intstr.GetScaledValueFromIntOrPercent(strategy.RollingUpdate.MaxUnavailable, total, false)
+			maxUnavailable, err := intstr.GetScaledValueFromIntOrPercent(strategy.RollingUpdate.MaxUnavailable, total, true)
 			if err != nil {
 				return appsv1.RollingUpdateDaemonSetStrategyType, 1
 			}
